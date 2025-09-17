@@ -1,0 +1,15 @@
+version: "3.8"
+services:
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    container_name: lavalink
+    environment:
+      - SERVER_PORT=2333
+      - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
+    volumes:
+      - ./application.yml:/opt/Lavalink/application.yml:ro
+      # Optional: mount a YouTube cookies file for age-restricted playback
+      # - ./youtube-cookies.txt:/opt/Lavalink/youtube-cookies.txt:ro
+    ports:
+      - "2333:2333"
+    restart: unless-stopped
