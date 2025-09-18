@@ -1,9 +1,14 @@
 const { EmbedBuilder } = require("discord.js");
 const { formatDuration } = require("./utils");
+const { LoopType } = require("../global");
 
 module.exports = { 
-    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, position) {
-        const progress = position ?? '0:00';
+    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, position, loop) {
+        const loopLabel =
+            loop === 'TRACK' || loop === LoopType.TRACK ? 'Track'
+            : loop === 'QUEUE' || loop === LoopType.QUEUE ? 'Queue'
+            : 'None';
+        
         return new EmbedBuilder()
             .setColor('#1DB954')
             .setAuthor({ name: '🎶 Now Playing', iconURL: 'https://cdn.discordapp.com/emojis/741605543046807626.gif' })
@@ -13,7 +18,7 @@ module.exports = {
             .addFields(
                 { name: '🎤 Artist', value: artist ?? 'Unknown', inline: true },
                 { name: '⏱ Duration', value: duration ?? 'Unknown', inline: true },
-                { name: '▶️ Progress', value: progress, inline: true },
+                { name: '🔁 Loop', value: loopLabel, inline: true },
                 )
             .setFooter({
                 text: `Requested by ${requesterTag ?? 'Unknown'}`,

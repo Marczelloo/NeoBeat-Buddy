@@ -30,6 +30,7 @@ function getServerData(guildId)
             commandChannel: null,
             nowPlayingMessage: null,
             nowPlayingMessageId: null,
+            nowPlayingLoopMode: 'NONE',
         })
     }
 

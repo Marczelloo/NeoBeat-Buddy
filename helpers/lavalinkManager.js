@@ -95,4 +95,36 @@ async function lavalinkSkip(guildId) {
   return true;
 }
 
-module.exports = { createPoru, lavalinkPlay, lavalinkStop, lavalinkPause, lavalinkResume, lavalinkSkip };
+function getPlayer(guildId) { return poru?.players.get(guildId) ?? null; }
+
+async function lavalinkSeekToStart(guildId) 
+{
+  const player = getPlayer(guildId);
+  if(!player?.currentTrack) return false;
+  await player.seekTo(0);
+  return true;
+}
+
+async function lavalinkToggleLoop(guildId) {
+  const player = getPlayer(guildId);
+  if (!player) return 'NONE';
+
+  const next =
+    player.loop === 'NONE' ? 'TRACK' :
+    player.loop === 'TRACK' ? 'QUEUE' :
+    'NONE';
+    
+  player.loop = next;
+  await player.setLoop(next);
+  return next;
+}
+
+async function lavalinkShuffle(guildId)
+{
+  const player = getPlayer(guildId);
+  if(!player || player.queue.length === 0) return false;
+  player.queue.shuffle();
+  return true;
+}
+
+module.exports = { createPoru, lavalinkPlay, lavalinkStop, lavalinkPause, lavalinkResume, lavalinkSkip, lavalinkSeekToStart, lavalinkToggleLoop, lavalinkShuffle };

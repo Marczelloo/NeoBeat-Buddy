@@ -6,6 +6,7 @@ const { playerEmbed } = require('../helpers/embeds');
 const { ActionRowBuilder } = require('discord.js');
 const { rewindButton, pauseButton, resumeButton, skipButton, loopButton, shuffleButton } = require('../helpers/buttons');
 const { formatDuration } = require('../helpers/utils');
+const { buildControlRows } = require('../helpers/buttons');
 
 
 module.exports = {
@@ -50,17 +51,17 @@ module.exports = {
                     track.info.requesterTag ?? 'Unknown',
                     track.info.requesterAvatar ?? null,
                     track.info.isStream ? 'Live' : formatDuration(track.info.length),
-                    track.info.isStream ? 'Live' : '0:00'
-                );
-                const row = new ActionRowBuilder().addComponents(
-                    rewindButton(false),
-                    pauseButton(false),
-                    resumeButton(true),
-                    skipButton(false),
-                    loopButton(false),
+                    track.info.isStream ? 'Live' : '0:00',
+                    player.loop ?? 'NONE'
                 );
 
-                const newMessage = await channel.send({ embeds: [embed], components: [row] });
+                const controls = buildControlRows({
+                    paused: player.isPaused,
+                    loopMode: player.loop ?? 'NONE',
+                });
+                // const row = new ActionRowBuilder().addComponents(
+
+                const newMessage = await channel.send({ embeds: [embed], components: controls });
 
                 server.nowPlayingMessage = newMessage.id;
                 server.nowPlayingChannel = channel.id;
@@ -70,23 +71,25 @@ module.exports = {
            });
 
             poru.on('trackEnd', async (player) => {
-                const guildId = player.guildId;
-                const messageId = getServerData(guildId)?.nowPlayingMessage;
+                const server = getServerData(player.guildIdd);
+                const channelId = server?.nowPlayingChannel;
+                const messageId = server?.nowPlayingMessage;
+                if (!channelId || !messageId) return;
 
-                if(!messageId) return;
+                try
+                {
+                    const channel = await client.channels.fetch(channelId);
+                    const message = await channel.messages.fetch(messageId);
 
-                const channel = await client.channels.fetch(player.textChannel);
-                await channel.messages.edit(messageId, {
-                    components: [
-                        new ActionRowBuilder().addComponents(
-                            rewindButton(true),
-                            pauseButton(true),  
-                            resumeButton(true),
-                            skipButton(true),
-                            loopButton(true),
-                        ),
-                    ],
-                })
+                    const controls = buildControlRows({ paused: false, loopMode: player.loop ?? 'NONE', disabled: true });
+
+                    await message.edit({ components: controls });
+                }
+                catch(error)
+                {
+                    if(error.code !== 10008) throw error;
+                    Log.error('Failed to disable buttons on track end', error);
+                }
             })
 
             poru.on('queueEnd', async (player) => {

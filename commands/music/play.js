@@ -1,11 +1,11 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { ActionRowBuilder } = require('discord.js');
-const { setGlobalVariable } = require('../../global.js');
+const { setGlobalVariable, getServerData } = require('../../global.js');
 const { errorEmbed, playerEmbed } = require('../../helpers/embeds');
 const Log = require('../../helpers/logs/log');
 const { lavalinkPlay } = require('../../helpers/lavalinkManager');
 const { songEmbed } = require('../../helpers/embeds.js');
-const { skipButton, rewindButton, loopButton, shuffleButton, pauseButton, resumeButton } = require('../../helpers/buttons.js');
+const { skipButton, rewindButton, loopButton, shuffleButton, pauseButton, resumeButton, buildControlRows } = require('../../helpers/buttons.js');
 const { formatDuration } = require('../../helpers/utils.js');
 
 module.exports = {
@@ -33,14 +33,6 @@ module.exports = {
 
             try
             {
-                const controlsRow = new ActionRowBuilder().addComponents(
-                    rewindButton(false),
-                    pauseButton(false),
-                    resumeButton(true),
-                    skipButton(false),
-                    loopButton(false),
-                );
-
                 const { track, player, startImmediately } = await lavalinkPlay({
                     guildId: interaction.guild.id,
                     voiceId: voiceChannel.id,
@@ -48,10 +40,13 @@ module.exports = {
                     query: query,
                 })
 
+                const controls = buildControlRows({ paused: false, loopMode: player.loop ?? 'NONE'})
+
                 const requester = interaction.user;
                 track.info.requesterId = requester.id;
                 track.info.requesterTag = requester.tag;
                 track.info.requesterAvatar = requester.displayAvatarURL({ size: 256 });
+                track.info.loop = getServerData(interaction.guild.id, 'loop') || 'Off';
 
                 await interaction.editReply({ embeds: [songEmbed(track.info)]});
 
@@ -66,9 +61,10 @@ module.exports = {
                         track.info.requesterTag,
                         track.info.requesterAvatar,
                         track.info.isStream ? 'Live' : formatDuration(track.info.length),
-                        track.info.isStream ? 'Live' : '0:00'
+                        track.info.isStream ? 'Live' : '0:00',
+                        track.info.loop
                     );
-                    const message = await interaction.followUp({ embeds: [nowPlayingEmbed], components: [controlsRow] });
+                    const message = await interaction.followUp({ embeds: [nowPlayingEmbed], components: controls });
                     
                     setGlobalVariable(interaction.guild.id, 'nowPlayingMessage', message.id);
                     setGlobalVariable(interaction.guild.id, 'nowPlayingChannel', interaction.channel.id);
