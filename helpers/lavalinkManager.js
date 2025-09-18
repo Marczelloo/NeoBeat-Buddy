@@ -51,13 +51,29 @@ async function lavalinkPlay({ guildId, voiceId, textId, query }) {
   const res = await poru.resolve({ query: isUrl ? q : q });
   if (!res || !res.tracks || res.tracks.length === 0) throw new Error("No results found");
 
-  const track = res.tracks[0];
-  track.info.requester = textId;
-  await player.queue.add(track);
+  let tracksToAdd = [];
+  let nowPlaying = res.tracks[0];
+
+  if(res.loadType === 'playlist')
+  {
+    const selectedIndex = res.playlistInfo?.selectedTrack ?? 0;
+    nowPlaying = res.tracks[selectedIndex] ?? res.tracks[0];
+    tracksToAdd = res.tracks;
+  }
+  else
+  {
+    tracksToAdd = [nowPlaying]
+  }
+
+  for(const track of tracksToAdd)
+  {
+    track.info.requester = textId;
+    await player.queue.add(track);
+  }
 
   if(shouldStart) await player.play();
 
-  return { track, player, startImmediately: shouldStart };
+  return { track: nowPlaying, player, startImmediately: shouldStart };
 }
 
 async function lavalinkStop(guildId) {
@@ -113,7 +129,7 @@ async function lavalinkToggleLoop(guildId) {
     player.loop === 'NONE' ? 'TRACK' :
     player.loop === 'TRACK' ? 'QUEUE' :
     'NONE';
-    
+
   player.loop = next;
   await player.setLoop(next);
   return next;

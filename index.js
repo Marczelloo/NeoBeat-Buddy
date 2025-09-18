@@ -75,7 +75,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 	if (oldState.member.user.id === client.user.id && newState.channelId === null) {
 		Log.info('Bot left the voice channel:', oldState.channel, newState.guild.name, newState.guild.id);
 		const guild = newState.guild;
-		vcLeaveReset(guild.id);
+		//vcLeaveReset(guild.id);
 	}
 });
 
