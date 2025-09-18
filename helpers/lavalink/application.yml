@@ -14,6 +14,7 @@ lavalink:
       http: true
       local: false
     bufferDurationMs: 400
+    resamplingQuality: HIGH
     frameBufferDurationMs: 1000
     trackStuckThresholdMs: 10000
     useSeekGhosting: true

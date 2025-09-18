@@ -27,8 +27,13 @@ function getServerData(guildId)
             loop: LoopType.NONE,
             shuffle: false,
             volume: 100,
+            commandChannel: null,
+            nowPlayingMessage: null,
+            nowPlayingMessageId: null,
         })
     }
+
+    return serverData.get(guildId);
 }
 
 function setGlobalVariable(guildId, propertyName, value)

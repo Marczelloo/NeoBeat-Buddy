@@ -40,18 +40,59 @@ async function ensurePlayer(guildId, voiceId, textId) {
 
 async function lavalinkPlay({ guildId, voiceId, textId, query }) {
   const player = await ensurePlayer(guildId, voiceId, textId);
+  const shouldStart = !player.isPlaying && !player.currentTrack;
+
   let q = String(query || '').trim();
   const isUrl = /^(https?:\/\/)/i.test(q);
-  // Avoid double ytsearch: prefixes; Poru defaultPlatform already handles titles
   if (!isUrl && q.toLowerCase().startsWith('ytsearch:')) {
     q = q.slice('ytsearch:'.length);
   }
+
   const res = await poru.resolve({ query: isUrl ? q : q });
   if (!res || !res.tracks || res.tracks.length === 0) throw new Error("No results found");
+
   const track = res.tracks[0];
+  track.info.requester = textId;
   await player.queue.add(track);
-  if (!player.isPlaying && !player.currentTrack) await player.play();
-  return track;
+
+  if(shouldStart) await player.play();
+
+  return { track, player, startImmediately: shouldStart };
 }
 
-module.exports = { createPoru, lavalinkPlay };
+async function lavalinkStop(guildId) {
+  const player = poru.players.get(guildId);
+  if(!player) return false;
+  player.queue.clear();
+  await player.destroy();
+  return true;
+}
+
+async function lavalinkPause(guildId) {
+  const player = poru.players.get(guildId);
+  if (player && !player.isPaused) {
+    await player.pause(true);
+    return true;
+  }
+  return false;
+}
+
+async function lavalinkResume(guildId) {
+  const player = poru.players.get(guildId);
+  if (player && player.isPaused) {
+    await player.pause(false);
+    return true;
+  }
+
+  return false;
+}
+
+async function lavalinkSkip(guildId) {
+  const player = poru.players.get(guildId);
+  if (!player || (!player.currentTrack && player.queue.length === 0)) return false;
+
+  await player.skip();
+  return true;
+}
+
+module.exports = { createPoru, lavalinkPlay, lavalinkStop, lavalinkPause, lavalinkResume, lavalinkSkip };
