@@ -8,7 +8,7 @@
     "dev": "nodemon index.js",
     "start": "node index.js",
     "deploy": "node deploy-commands.js",
-    "redeploy": "cd helpers/lavalink && docker compose down && docker compose up -d lavalink --force-recreate && docker compose logs -f lavalink"
+    "redeploy": "cd helpers/lavalink && docker compose --env-file ../../.env down && docker compose --env-file ../../.env up -d lavalink --force-recreate && docker compose --env-file ../../.env logs -f lavalink"
 
   },
   "keywords": [],

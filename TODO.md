@@ -1,6 +1,6 @@
 ## FUNCTIONALITIES
 - [x] play age restricted songs
-- [] fix issue when playing age restricted songs and one fails then some songs are skipped 
+- [x] fix issue when playing age restricted songs and one fails then some songs are skipped 
 - [] disconnecting after inactivity (when nothing is playing and queue is empty)
 - [] seek, shuffle, loop (shuffle and loop functionality already in buttons) command
 - [] autoplay (automatically searches for next song based on current one)
