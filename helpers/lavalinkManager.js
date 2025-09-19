@@ -1,5 +1,6 @@
 const { Poru, Node, Track } = require("poru");
 const Log = require("./logs/log");
+const { errorEmbed } = require("./embeds");
 
 let poru = null;
 
@@ -25,7 +26,16 @@ function createPoru(client) {
 
   poru.on("nodeConnect", (node) => Log.success(`Lavalink node connected ${node.name}`));
   poru.on("nodeError", (node, err) => Log.error(`Lavalink node error ${node.name}`, err));
-  poru.on("trackError", (player, track, err) => Log.error("Lavalink track error", { err: err?.message, title: track?.info?.title }));
+  poru.on('trackError', async (player, track, err) => {
+    Log.error('Lavalink track error', err);
+    const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
+    if (channel) {
+        await channel.send({
+            embeds: [errorEmbed('Track unavailable', 'YouTube blocked this track (age-restricted or region-locked).')],
+        });
+    }
+    if (player.queue.length) player.skip();
+});
   poru.on("trackEnd", (player, track, reason) => Log.info("Lavalink track ended", reason));
   poru.on("queueEnd", (player) => Log.info("Lavalink queue end"));
 

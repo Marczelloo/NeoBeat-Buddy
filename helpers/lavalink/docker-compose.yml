@@ -1,5 +1,7 @@
 services:
   lavalink:
+    env_file:
+      - ../.env
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: lavalink
     environment:
@@ -7,11 +9,13 @@ services:
       - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
+      - YOUTUBE_PO_TOKEN=${YOUTUBE_PO_TOKEN}
+      - YOUTUBE_VISITOR_DATA=${YOUTUBE_VISITOR_DATA}
+      - YOUTUBE_REFRESH_TOKEN=${YOUTUBE_REFRESH_TOKEN}
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
       - ./plugins:/opt/Lavalink/plugins
-      # Optional: mount a YouTube cookies file for age-restricted playback
-      # - ./youtube-cookies.txt:/opt/Lavalink/youtube-cookies.txt:ro
+      - ./youtube-cookies.txt:/opt/Lavalink/youtube-cookies.txt:ro
     ports:
       - "2333:2333"
     restart: unless-stopped

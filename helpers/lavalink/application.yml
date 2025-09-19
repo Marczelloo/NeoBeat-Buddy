@@ -2,6 +2,12 @@ server:
   port: ${SERVER_PORT:2333}
   address: 0.0.0.0
 
+dev:
+  lavalink:
+    youtube:
+      http:
+        YouTubeOAuth2Handler: "INFO"
+
 lavalink:
   server:
     password: ${LAVALINK_SERVER_PASSWORD:youshallnotpass}
@@ -18,11 +24,6 @@ lavalink:
     frameBufferDurationMs: 1000
     trackStuckThresholdMs: 10000
     useSeekGhosting: true
-    youtubeConfig:
-      # Optional cookie file for NSFW videos (mount in docker-compose)
-      # cookie: /opt/Lavalink/youtube-cookies.txt
-      # Prefer Android client; tends to be more stable for searches/streaming
-      clients: [ ANDROID ]
   plugins:
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.5"
       repository: "https://maven.lavalink.dev/releases"
@@ -49,6 +50,16 @@ plugins:
       - ANDROID_VR
       - WEB
       - WEBEMBEDDED
+      - TV
+      - TVHTML5EMBEDDED
+    cookies:
+      file: /opt/Lavalink/youtube-cookies.txt
+    pot:
+      token: ${YOUTUBE_PO_TOKEN:}
+      visitorData: ${YOUTUBE_VISITOR_DATA:}
+    oauth:
+      enabled: true
+      refreshToken: ${YOUTUBE_REFRESH_TOKEN:}  # inside the container
   lavasrc:
     sources:
       spotify: true

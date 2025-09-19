@@ -1,16 +1,18 @@
 {
-  "name": "Neo Beat Buddy",
-  "version": "1.0.0",
-  "description": "",
+  "name": "neo-beat-buddy",
+  "version": "0.0.5",
+  "description": "A Discord music bot",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "deploy": "node deploy-commands.js"
+    "deploy": "node deploy-commands.js",
+    "redeploy": "cd helpers/lavalink && docker compose down && docker compose up -d lavalink --force-recreate && docker compose logs -f lavalink"
+
   },
   "keywords": [],
-  "author": "",
+  "author": "Marczelloo",
   "license": "ISC",
   "packageManager": "pnpm@10.15.0",
   "dependencies": {

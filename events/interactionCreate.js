@@ -3,12 +3,23 @@ const Log = require('../helpers/logs/log');
 const { createPoru } = require('../helpers/lavalinkManager');
 const { getClient } = require('../global');
 const { handleControlButtons } = require('../helpers/buttons');
+const queueCommand = require('../commands/music/queue');
 
 module.exports = {
     name: Events.InteractionCreate,
     async execute(interaction){
 		if(interaction.isButton())
 		{
+			if(interaction.customId.startsWith('queue|'))
+			{
+				if(typeof queueCommand.handlePaginationButtons === 'function')
+				{
+					await queueCommand.handlePaginationButtons(interaction);
+				}	
+
+				return;
+			}
+
 			const poru = createPoru(getClient());
 			const player = poru.players.get(interaction.guild.id);
 			if(!player) return interaction.reply({ content: 'No music is being played on this server.', ephemeral: true });
