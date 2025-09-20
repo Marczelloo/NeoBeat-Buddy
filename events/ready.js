@@ -43,16 +43,23 @@ module.exports = {
                     }
                 }
 
+                const info = player.currentTrack.info || {};
+                const duration = info.isStream ? 'Live' : formatDuration(info.length ?? 0);
+                const position = info.isStream ? 'Live' : formatDuration(player.position ?? 0);
+                const artwork = info.artworkUrl ?? info.image ?? 'https://i.imgur.com/3g7nmJC.png';
+
+
                 const embed = playerEmbed(
-                    track.info.title,
-                    track.info.uri,
-                    track.info.artworkUrl ?? track.info.image ?? 'https://i.imgur.com/3g7nmJC.png',
-                    track.info.author ?? 'Unknown',
-                    track.info.requesterTag ?? 'Unknown',
-                    track.info.requesterAvatar ?? null,
-                    track.info.isStream ? 'Live' : formatDuration(track.info.length),
+                    info.title,
+                    info.uri,
+                    artwork,
+                    info.author ?? 'Unknown',
+                    info.requesterTag ?? 'Unknown',
+                    info.requesterAvatar ?? null,
+                    duration,
+                    position,
+                    info.loop,
                     player.volume,
-                    player.loop ?? 'NONE'
                 );
 
                 const controls = buildControlRows({

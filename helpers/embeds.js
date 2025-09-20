@@ -2,29 +2,49 @@ const { EmbedBuilder } = require("discord.js");
 const { formatDuration } = require("./utils");
 const { LoopType } = require("../global");
 
+const ICONS = {
+  artist: '🎙️',
+  duration: '⏱️',
+  loop: '🔁',
+  volume: '🔊',
+  source: '📡',
+  requested: '🙏',
+};
+
+const bold = (label, value) => `**${label}** ${value ?? '—'}`;
+
 module.exports = { 
-    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, volume, loop) {
+    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, position, loop, volume = 100) {
         const loopLabel =
-            loop === 'TRACK' || loop === LoopType.TRACK ? 'Track'
-            : loop === 'QUEUE' || loop === LoopType.QUEUE ? 'Queue'
-            : 'None';
-        
+        loop === 'TRACK' || loop === LoopType.TRACK ? 'Track'
+        : loop === 'QUEUE' || loop === LoopType.QUEUE ? 'Queue'
+        : 'None';
+
+        const infoLeft = [
+        `${ICONS.artist} ${bold('Artist', artist ?? 'Unknown')}`,
+        `${ICONS.duration} ${bold('Duration', duration ?? 'Unknown')}`,
+        ].join('\n');
+
+        const infoRight = [
+        `${ICONS.loop} ${bold('Loop', loopLabel)}`,
+        `${ICONS.volume} ${bold('Volume', volume)}`,
+        ].join('\n');
+
         return new EmbedBuilder()
-            .setColor('#1DB954')
-            .setAuthor({ name: '🎶 Now Playing', iconURL: 'https://cdn.discordapp.com/emojis/741605543046807626.gif' })
-            .setTitle(title)
-            .setURL(url)
-            .setThumbnail(image ?? 'https://i.imgur.com/3g7nmJC.png')
-            .addFields(
-                { name: '🎤 Artist', value: artist ?? 'Unknown', inline: true },
-                { name: '⏱ Duration', value: duration ?? 'Unknown', inline: true },
-                { name: '🔁 Loop', value: loopLabel, inline: true },
-                { name: '🔊 Volume', value: `${volume ?? 100}`, inline: true }
-                )
-            .setFooter({
-                text: `Requested by ${requesterTag ?? 'Unknown'}`,
-                iconURL: requesterAvatar ?? undefined,
-            });
+        .setColor('#1DB954')
+        .setAuthor({ name: '🎧 Now Playing', iconURL: 'https://cdn.discordapp.com/emojis/741605543046807626.gif' })
+        .setTitle(title)
+        .setURL(url)
+        .setThumbnail(image ?? 'https://i.imgur.com/3g7nmJC.png')
+        .setDescription(position && duration ? `\`${position}\` / \`${duration}\`` : null)
+        .addFields(
+            { name: '\u200b', value: infoLeft, inline: true },
+            { name: '\u200b', value: infoRight, inline: true },
+        )
+        .setFooter({
+            text: `Requested by ${requesterTag ?? 'Unknown'}`,
+            iconURL: requesterAvatar ?? undefined,
+        });
     },
     successEmbed: function(title, description) {
         return new EmbedBuilder()
@@ -53,27 +73,32 @@ module.exports = {
             })
             .setTimestamp();
     },
-    songEmbed: function(trackInfo) {
+    songEmbed(trackInfo) {
         const duration = trackInfo.isStream
-            ? 'Live'
-            : Number.isFinite(trackInfo.length)
-            ? formatDuration(trackInfo.length)
-            : 'Unknown';
+        ? 'Live'
+        : Number.isFinite(trackInfo.length)
+        ? formatDuration(trackInfo.length)
+        : 'Unknown';
+
         const requester =
-            trackInfo.requesterId ? `<@${trackInfo.requesterId}>` :
-            trackInfo.requesterTag ?? 'Unknown';
+        trackInfo.requesterId ? `<@${trackInfo.requesterId}>`
+        : trackInfo.requesterTag ?? 'Unknown';
+
+        const details = [
+        `${ICONS.duration} ${bold('Duration', duration)}`,
+        `${ICONS.source} ${bold('Source', (trackInfo.sourceName ?? 'Unknown').replace(/^./, c => c.toUpperCase()))}`,
+        `${ICONS.requested} ${bold('Requested', requester)}`,
+        ].join('\n');
 
         return new EmbedBuilder()
-            .setColor('#7289da')
-            .setAuthor({ name: '🎵 Added to Queue', iconURL: 'https://cdn.discordapp.com/emojis/853314041004015616.png' })
-            .setDescription(`**[${trackInfo.title}](${trackInfo.uri})**\n*${trackInfo.author ?? 'Unknown'}*`)
-            .setThumbnail(trackInfo.artworkUrl ?? trackInfo.image ?? 'https://i.imgur.com/3g7nmJC.png')
-            .addFields(
-                { name: '⏱ Duration', value: `\`${duration}\``, inline: true },
-                { name: '📦 Source', value: (trackInfo.sourceName ?? 'Unknown').replace(/^./, (c) => c.toUpperCase()), inline: true },
-                { name: '👤 Requested by', value: requester, inline: true },
-            )
-            .setFooter({ text: 'Neo Beat Buddy • Queue system' })
-            .setTimestamp();
-    }
+        .setColor('#7289da')
+        .setAuthor({ name: '🎶 Added to Queue', iconURL: 'https://cdn.discordapp.com/emojis/853314041004015616.png' })
+        .setTitle(trackInfo.title)
+        .setURL(trackInfo.uri)
+        .setDescription(trackInfo.author ? `*${trackInfo.author}*` : null)
+        .setThumbnail(trackInfo.artworkUrl ?? trackInfo.image ?? 'https://i.imgur.com/3g7nmJC.png')
+        .addFields({ name: '\u200b', value: details })
+        .setFooter({ text: 'Neo Beat Buddy • Queue system' })
+        .setTimestamp();
+    },
 }

@@ -52,17 +52,21 @@ module.exports = {
 
                 if(startImmediately)
                 {
-                    const artwork = track.info.artworkUrl ?? track.info.image ?? 'https://i.imgur.com/3g7nmJC.png';
+                    const info = player.currentTrack.info || {};
+                    const duration = info.isStream ? 'Live' : formatDuration(info.length ?? 0);
+                    const position = info.isStream ? 'Live' : formatDuration(player.position ?? 0);
+                    const artwork = info.artworkUrl ?? info.image ?? 'https://i.imgur.com/3g7nmJC.png';
                     const nowPlayingEmbed = playerEmbed(
-                        track.info.title,
-                        track.info.uri,
+                        info.title,
+                        info.uri,
                         artwork,
-                        track.info.author ?? 'Unknown',
-                        track.info.requesterTag,
-                        track.info.requesterAvatar,
-                        track.info.isStream ? 'Live' : formatDuration(track.info.length),
-                        player.volume,
-                        track.info.loop
+                        info.author ?? 'Unknown',
+                        info.requesterTag,
+                        info.requesterAvatar,
+                        duration,
+                        position,
+                        info.loop,
+                        player.volume
                     );
                     const message = await interaction.followUp({ embeds: [nowPlayingEmbed], components: controls });
                     

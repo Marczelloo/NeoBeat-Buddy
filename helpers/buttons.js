@@ -142,16 +142,21 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
     if (player.currentTrack)
     {
         const info = player.currentTrack.info || {};
+        const duration = info.isStream ? 'Live' : formatDuration(info.length ?? 0);
+        const position = info.isStream ? 'Live' : formatDuration(player.position ?? 0);
+        const artwork = info.artworkUrl ?? info.image ?? 'https://i.imgur.com/3g7nmJC.png';
+        
         embed = playerEmbed(
             info.title,
             info.uri,
-            info.artworkUrl ?? info.image ?? 'https://i.imgur.com/3g7nmJC.png',
+            artwork,
             info.author ?? 'Unknown',
             info.requesterTag ?? 'Unknown',
             info.requesterAvatar ?? null,
-            info.isStream ? 'Live' : formatDuration(info.length ?? 0),
-            player.volume,
+            duration,
+            position,
             loopMode,
+            player.volume,
         );
     }
 
