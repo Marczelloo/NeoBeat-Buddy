@@ -150,7 +150,7 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
             info.requesterTag ?? 'Unknown',
             info.requesterAvatar ?? null,
             info.isStream ? 'Live' : formatDuration(info.length ?? 0),
-            info.isStream ? 'Live' : formatDuration(player.position ?? 0),
+            player.volume,
             loopMode,
         );
     }

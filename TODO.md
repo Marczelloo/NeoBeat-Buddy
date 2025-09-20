@@ -6,9 +6,9 @@
 - [x] fix check for user to be in voice channel to be in the same as bot
 - [x] update player after using commands and not buttons
 - [x] seek, shuffle, loop (shuffle and loop functionality already in buttons) command
-- [] fix adding youtube mix playlists, only first song is accurate from list
-- [] clearQueue command
-- [] volume command
+- [-] fix adding youtube mix playlists, only first song is accurate from list (cant fix this cause how youtube api works and how lavalink reads these playlists)
+- [x] clearQueue command
+- [x] volume command
 - [] autoplay (automatically searches for next song based on current one)
 - [] 24/7 command
 - [] live equalizer

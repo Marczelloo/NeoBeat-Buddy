@@ -3,7 +3,7 @@ const { formatDuration } = require("./utils");
 const { LoopType } = require("../global");
 
 module.exports = { 
-    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, position, loop) {
+    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, volume, loop) {
         const loopLabel =
             loop === 'TRACK' || loop === LoopType.TRACK ? 'Track'
             : loop === 'QUEUE' || loop === LoopType.QUEUE ? 'Queue'
@@ -19,6 +19,7 @@ module.exports = {
                 { name: '🎤 Artist', value: artist ?? 'Unknown', inline: true },
                 { name: '⏱ Duration', value: duration ?? 'Unknown', inline: true },
                 { name: '🔁 Loop', value: loopLabel, inline: true },
+                { name: '🔊 Volume', value: `${volume ?? 100}`, inline: true }
                 )
             .setFooter({
                 text: `Requested by ${requesterTag ?? 'Unknown'}`,

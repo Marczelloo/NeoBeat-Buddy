@@ -298,9 +298,24 @@ function createPoru(client) {
 }
 
 async function ensurePlayer(guildId, voiceId, textId) {
-  const p = poru.players.get(guildId);
-  if (p) return p;
-  return poru.createConnection({ guildId, voiceChannel: voiceId, textChannel: textId, deaf: true });
+  let player = poru.players.get(guildId);
+  
+  if (player) return player;
+
+  player = await poru.createConnection({
+    guildId,
+    voiceChannel: voiceId,
+    textChannel: textId,
+    deaf: true,
+  });
+
+  const defaultVolume = Number(process.env.DEFAULT_VOLUME ?? 50);
+  const target = Number.isFinite(defaultVolume) ? Math.max(0, Math.min(defaultVolume, 1000)) : 50;
+
+  await player.setVolume(target);
+  player.volume = target;
+
+  return player;
 }
 
 async function lavalinkPlay({ guildId, voiceId, textId, query }) {
@@ -458,25 +473,22 @@ async function lavalinkClearQueue(guildId)
   return true;
 }
 
-async function lavalinkSetVolume(guildId, volume)
+async function lavalinkSetVolume(guildId, volume) 
 {
   const player = getPlayer(guildId);
 
-  if (!player) return false;
-
-  player.volume = volume;
-  await player.setVolume(volume);
-  clearInactivityTimer(guildId, "setVolume");
-  return true;
-}
-
-async function lavalinkGetVolume(guildId)
-{
-  const player = getPlayer(guildId);
-  
   if (!player) return null;
 
-  return player.volume;
+  const clamped = Math.max(0, Math.min(volume, 100));
+  await player.setVolume(clamped);
+  player.volume = clamped;
+  return clamped;
+}
+
+async function lavalinkGetVolume(guildId) 
+{
+  const player = getPlayer(guildId);
+  return player ? player.volume ?? 100 : null;
 }
 
 async function lavalinkSeekTo(guildId, positionMs)

@@ -51,7 +51,7 @@ module.exports = {
                     track.info.requesterTag ?? 'Unknown',
                     track.info.requesterAvatar ?? null,
                     track.info.isStream ? 'Live' : formatDuration(track.info.length),
-                    track.info.isStream ? 'Live' : '0:00',
+                    player.volume,
                     player.loop ?? 'NONE'
                 );
 

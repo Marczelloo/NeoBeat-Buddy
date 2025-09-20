@@ -61,7 +61,7 @@ module.exports = {
                         track.info.requesterTag,
                         track.info.requesterAvatar,
                         track.info.isStream ? 'Live' : formatDuration(track.info.length),
-                        track.info.isStream ? 'Live' : '0:00',
+                        player.volume,
                         track.info.loop
                     );
                     const message = await interaction.followUp({ embeds: [nowPlayingEmbed], components: controls });
