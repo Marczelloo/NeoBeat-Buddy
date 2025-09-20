@@ -1,16 +1,16 @@
 const { SlashCommandBuilder } = require('discord.js');
 const Log = require('../../helpers/logs/log');
 const { errorEmbed, successEmbed } = require('../../helpers/embeds');
-const { lavalinkClearQueue } = require('../../helpers/lavalinkManager');
+const { lavalinkShuffle } = require('../../helpers/lavalinkManager');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('clearqueue')
-        .setDescription('Clear the current queue'),
+        .setName('shuffle')
+        .setDescription('Shuffle the current queue'),
 
-    async execute(interaction)
+    async execute(interaction)  
     {
-        Log.info(`/clearqueue command used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+        Log.info(`/shuffle command used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
 
         await interaction.deferReply({ ephemeral: true });
 
@@ -22,10 +22,11 @@ module.exports = {
         if (botVoiceChannel && voiceChannel.id !== botVoiceChannel.id)
             return interaction.editReply({ embeds: [errorEmbed('You must be in the same voice channel as the bot to use this command.')] });
 
-        const cleared = await lavalinkClearQueue(interaction.guild.id);
-        if (cleared) 
-            return interaction.editReply({ embeds: [successEmbed('🗑️ Queue cleared.')] })
-        else
-            return interaction.editReply({ embeds: [errorEmbed('The queue is already empty.')] });
+        const shuffled = await lavalinkShuffle(interaction.guild.id);
+        if(shuffled) 
+            return interaction.editReply({ embeds: [successEmbed('🔀 Queue shuffled.')] })
+        else 
+            return interaction.editReply({ embeds: [errorEmbed('The queue is empty.')] });
     }
 }
+    

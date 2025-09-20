@@ -23,15 +23,19 @@ function buildQueueEmbed(player, page, totalPages, requesterId)
 {
     const lines = [];
 
-    if(player.isPlayinhg && player.currentTrack)
+    const isActivelyPlaying = Boolean(player.currentTrack) && (player.isPlaying || player.queue.length > 0);
+
+    if(isActivelyPlaying)
     {
         const now = player.currentTrack.info;
         const duration = now.isStream ? 'Live' : formatDuration(now.length);
         lines.push(`**Now Playing:** [${now.title}](${now.uri}) · \`${duration}\` · requested by <@${now.requesterId ?? requesterId}>`);
+        lines.push(''); // Empty line for spacing
     }
     else
     {
         lines.push('**Not playing anything right now.**');
+        lines.push(''); // Empty line for spacing
     }
 
     const start = page * ITEMS_PER_PAGE;
@@ -104,7 +108,12 @@ module.exports = {
             await interaction.deferReply({ ephemeral: true });
 
             const voiceChannel = interaction.member.voice.channel;
-            if (!voiceChannel) return interaction.editReply({ embeds: [errorEmbed('You must be in a voice channel to use this command.')] });
+            if (!voiceChannel) 
+                return interaction.editReply({ embeds: [errorEmbed('You must be in a voice channel to use this command.')] });
+            
+            const botVoiceChannel = interaction.guild.members.me.voice.channel;
+            if (botVoiceChannel && voiceChannel.id !== botVoiceChannel.id)
+                return interaction.editReply({ embeds: [errorEmbed('You must be in the same voice channel as the bot to use this command.')] });
 
             const poru = createPoru(interaction.client);
             const player = poru.players.get(interaction.guild.id);

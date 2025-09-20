@@ -15,7 +15,12 @@ module.exports = {
             await interaction.deferReply({ ephemeral: true });
 
             const voiceChannel = interaction.member.voice.channel;
-            if (!voiceChannel) return interaction.editReply({ embeds: [errorEmbed('You must be in a voice channel to use this command.')] });
+            if (!voiceChannel) 
+                return interaction.editReply({ embeds: [errorEmbed('You must be in a voice channel to use this command.')] });
+
+            const botVoiceChannel = interaction.guild.members.me.voice.channel;
+            if (botVoiceChannel && voiceChannel.id !== botVoiceChannel.id)
+                return interaction.editReply({ embeds: [errorEmbed('You must be in the same voice channel as the bot to use this command.')] });
 
             const skipped = await lavalinkSkip(interaction.guild.id);
             if (skipped) 

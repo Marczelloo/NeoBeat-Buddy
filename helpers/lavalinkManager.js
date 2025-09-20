@@ -419,15 +419,18 @@ async function lavalinkSeekToStart(guildId)
   return true;
 }
 
-async function lavalinkToggleLoop(guildId) {
+async function lavalinkToggleLoop(guildId, next = null) {
   const player = getPlayer(guildId);
   
   if (!player) return 'NONE';
 
-  const next =
-    player.loop === 'NONE' ? 'TRACK' :
-    player.loop === 'TRACK' ? 'QUEUE' :
-    'NONE';
+  if (!next)
+  {
+    next =
+      player.loop === 'NONE' ? 'TRACK' :
+      player.loop === 'TRACK' ? 'QUEUE' :
+      'NONE';
+  }
 
   player.loop = next;
   await player.setLoop(next);
@@ -446,4 +449,55 @@ async function lavalinkShuffle(guildId)
   return true;
 }
 
-module.exports = { createPoru, lavalinkPlay, lavalinkStop, lavalinkPause, lavalinkResume, lavalinkSkip, lavalinkSeekToStart, lavalinkToggleLoop, lavalinkShuffle };
+async function lavalinkClearQueue(guildId)
+{
+  const player = getPlayer(guildId);
+
+  if(!player || player.queue.length === 0) return false;
+
+  player.queue.clear();
+  clearInactivityTimer(guildId, "clearQueue");
+  return true;
+}
+
+async function lavalinkSetVolume(guildId, volume)
+{
+  const player = getPlayer(guildId);
+
+  if (!player) return false;
+
+  player.volume = volume;
+  await player.setVolume(volume);
+  clearInactivityTimer(guildId, "setVolume");
+  return true;
+}
+
+async function lavalinkGetVolume(guildId)
+{
+  const player = getPlayer(guildId);
+  
+  if (!player) return null;
+
+  return player.volume;
+}
+
+async function lavalinkSeekTo(guildId, positionMs)
+{
+  const player = getPlayer(guildId);
+
+  if (!player || !player.currentTrack) return false;
+
+  await player.seekTo(positionMs);
+  clearInactivityTimer(guildId, "seekTo");
+  return true;
+}
+
+async function lavalinkGetDuration(guildId)
+{
+  const player = getPlayer(guildId);
+  if (!player || !player.currentTrack) return null;
+
+  return player.currentTrack.info.length || null;
+}
+
+module.exports = { createPoru, lavalinkPlay, lavalinkStop, lavalinkPause, lavalinkResume, lavalinkSkip, lavalinkSeekToStart, lavalinkToggleLoop, lavalinkShuffle, lavalinkSetVolume, lavalinkGetVolume, lavalinkSeekTo, lavalinkClearQueue, lavalinkGetDuration };

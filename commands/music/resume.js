@@ -16,6 +16,10 @@ module.exports = {
 
             const voiceChannel = interaction.member.voice.channel;
             if (!voiceChannel) return interaction.editReply({ embeds: [errorEmbed('You must be in a voice channel to use this command.')] });
+            
+            const botVoiceChannel = interaction.guild.members.me.voice.channel;
+            if (botVoiceChannel && voiceChannel.id !== botVoiceChannel.id)
+                return interaction.editReply({ embeds: [errorEmbed('You must be in the same voice channel as the bot to use this command.')] });
 
             const resumed = await lavalinkResume(interaction.guild.id);
             if (resumed) 
