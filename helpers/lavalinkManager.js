@@ -10,6 +10,55 @@ const describeTrack = (track) => {
 };
 
 const MAX_FALLBACK_ATTEMPTS = 1;
+const INACTIVITY_TIMEOUT_MS = Number(process.env.INACTIVITY_TIMEOUT_MS ?? 5 * 1000);
+const inactivityTimers = new Map();
+
+const clearInactivityTimer = (guildId, reason = "unspecified") => {
+  const timer = inactivityTimers.get(guildId);
+  if (!timer) return;
+  
+  clearTimeout(timer);
+  inactivityTimers.delete(guildId);
+  Log.info("Cleared inactivity timer", "", `guild=${guildId}`, `reason=${reason}`);
+};
+
+const scheduleInactivityDisconnect = (player, reason = "queueEnd") => {
+  if (!INACTIVITY_TIMEOUT_MS || INACTIVITY_TIMEOUT_MS <= 0) return;
+  clearInactivityTimer(player.guildId);
+  const timeout = setTimeout(async () => {
+    inactivityTimers.delete(player.guildId);
+    try
+    {
+      const current = poru?.players.get(player.guildId);
+      
+      if(!current) return;
+      if(current.isPlaying || current.queue.length > 0)
+      {
+        Log.info("Skipped inactivity disconnect (player active", "", `guild=${player.guildId}`);
+        return;
+      }
+
+      Log.info("Disconnecting due to inactivity", "", `guild=${player.guildId}`, `reason=${reason}`);
+      const channel = await poru.client.channels.fetch(current.textChannel).catch(() => null);
+
+      if(channel)
+      {
+        await channel.send("Disconnecting due to inactivity. Start playing a new track too bring me back.").catch(() => null);  
+      }
+
+      await current.destroy();
+    }
+    catch(error)
+    {
+      const summary = error instanceof Error ? error.message : inspect(error, { depth: 1 });
+      Log.error("Failed to disconnect after inactivity", "", `guild=${player.guildId}`, `error=${summary}`);
+    }
+  }, INACTIVITY_TIMEOUT_MS);
+
+  timeout.unref?.();
+  inactivityTimers.set(player.guildId, timeout);
+  Log.info("Scheduled inactivity disconnect", "", `guild=${player.guildId}`, `timeoutMs=${INACTIVITY_TIMEOUT_MS}`, `reason=${reason}`);
+}
 
 const copyRequesterMetadata = (source = {}, target = {}) => {
   ["requester", "requesterId", "requesterTag", "requesterAvatar", "loop"].forEach((key) => {
@@ -141,6 +190,7 @@ function createPoru(client) {
   });
 
   poru.on("nodeConnect", (node) => Log.success(`Lavalink node connected ${node.name}`));
+
   poru.on("trackError", async (player, track, err) => {
     const errorSummary = err instanceof Error ? err.message : inspect(err, { depth: 1 });
     Log.error(
@@ -179,6 +229,7 @@ function createPoru(client) {
       );
     }
   });
+
   poru.on("trackError", async (player, track, err) => {
     const errorSummary = err instanceof Error ? err.message : inspect(err, { depth: 1 });
     Log.error(
@@ -206,7 +257,10 @@ function createPoru(client) {
       );
     }
   });
+
   poru.on("trackStart", (player, track) => {
+    clearInactivityTimer(player.guildId, "trackStart");
+
     Log.info(
       "Lavalink track started",
       "",
@@ -215,6 +269,7 @@ function createPoru(client) {
       `queueLength=${player.queue.length}`
     );
   });
+
   poru.on("trackEnd", (player, track, reason) => {
     const reasonSummary = typeof reason === "string" ? reason : inspect(reason, { depth: 1 });
     const nextTrack = player.currentTrack ? describeTrack(player.currentTrack) : "none";
@@ -227,8 +282,17 @@ function createPoru(client) {
       `queueLength=${player.queue.length}`,
       `next=${nextTrack}`
     );
+    if(!player.currentTrack && player.queue.length === 0)
+    {
+      scheduleInactivityDisconnect(player, "trackEnd");
+    }
+
   });
-  poru.on("queueEnd", (player) => Log.info("Lavalink queue end"));
+
+  poru.on("queueEnd", (player) => {
+    Log.info("Lavalink queue end", "", `guild=${player.guildId}`);
+    scheduleInactivityDisconnect(player, "queueEnd");
+  });
 
   return poru;
 }
@@ -286,31 +350,44 @@ async function lavalinkPlay({ guildId, voiceId, textId, query }) {
   );
 
   if(shouldStart) await player.play();
+  clearInactivityTimer(guildId, "playRequest");
 
   return { track: nowPlaying, player, startImmediately: shouldStart };
 }
 
 async function lavalinkStop(guildId) {
   const player = poru.players.get(guildId);
+  
   if(!player) return false;
+  
   player.queue.clear();
   await player.destroy();
+  clearInactivityTimer(guildId, "stopCommand");
+
   return true;
 }
 
 async function lavalinkPause(guildId) {
   const player = poru.players.get(guildId);
-  if (player && !player.isPaused) {
+ 
+  if (player && !player.isPaused) 
+  {
     await player.pause(true);
+    clearInactivityTimer(guildId, "pauseCommand");
     return true;
   }
+  
   return false;
 }
 
 async function lavalinkResume(guildId) {
   const player = poru.players.get(guildId);
-  if (player && player.isPaused) {
+ 
+
+  if (player && player.isPaused) 
+  {
     await player.pause(false);
+    clearInactivityTimer(guildId, "resumeCommand");
     return true;
   }
 
@@ -322,6 +399,10 @@ async function lavalinkSkip(guildId) {
   if (!player || (!player.currentTrack && player.queue.length === 0)) return false;
 
   await player.skip();
+  if(!player.currentTrack && player.queue.length === 0)
+  {
+    scheduleInactivityDisconnect(player, "skipEmpty");
+  }
   return true;
 }
 
@@ -330,13 +411,17 @@ function getPlayer(guildId) { return poru?.players.get(guildId) ?? null; }
 async function lavalinkSeekToStart(guildId) 
 {
   const player = getPlayer(guildId);
+  
   if(!player?.currentTrack) return false;
+  
   await player.seekTo(0);
+  clearInactivityTimer(guildId, "seekToStart");
   return true;
 }
 
 async function lavalinkToggleLoop(guildId) {
   const player = getPlayer(guildId);
+  
   if (!player) return 'NONE';
 
   const next =
@@ -346,14 +431,18 @@ async function lavalinkToggleLoop(guildId) {
 
   player.loop = next;
   await player.setLoop(next);
+  clearInactivityTimer(guildId, "toggleLoop");
   return next;
 }
 
 async function lavalinkShuffle(guildId)
 {
   const player = getPlayer(guildId);
+  
   if(!player || player.queue.length === 0) return false;
+  
   player.queue.shuffle();
+  clearInactivityTimer(guildId, "shuffle");
   return true;
 }
 

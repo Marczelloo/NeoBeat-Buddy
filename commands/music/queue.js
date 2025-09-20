@@ -23,11 +23,15 @@ function buildQueueEmbed(player, page, totalPages, requesterId)
 {
     const lines = [];
 
-    if(player.currentTrack)
+    if(player.isPlayinhg && player.currentTrack)
     {
         const now = player.currentTrack.info;
         const duration = now.isStream ? 'Live' : formatDuration(now.length);
         lines.push(`**Now Playing:** [${now.title}](${now.uri}) · \`${duration}\` · requested by <@${now.requesterId ?? requesterId}>`);
+    }
+    else
+    {
+        lines.push('**Not playing anything right now.**');
     }
 
     const start = page * ITEMS_PER_PAGE;
@@ -104,7 +108,8 @@ module.exports = {
 
             const poru = createPoru(interaction.client);
             const player = poru.players.get(interaction.guild.id);
-            if (!player || (!player.currentTrack && player.queue.length === 0)) {
+            if (!player || (!player.isPlaying && player.queue.length === 0)) 
+            {
                 return interaction.editReply({ embeds: [errorEmbed('The queue is empty.')] });
             }
 
