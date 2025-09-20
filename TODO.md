@@ -4,8 +4,8 @@
 - [x] disconnecting after inactivity (when nothing is playing and queue is empty)
 - [x] fix displaying queue, always does not show what is currently playing
 - [x] fix check for user to be in voice channel to be in the same as bot
-- [] update player after using commands and not buttons
-- [] seek, shuffle, loop (shuffle and loop functionality already in buttons) command
+- [x] update player after using commands and not buttons
+- [x] seek, shuffle, loop (shuffle and loop functionality already in buttons) command
 - [] fix adding youtube mix playlists, only first song is accurate from list
 - [] clearQueue command
 - [] volume command

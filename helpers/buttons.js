@@ -8,6 +8,7 @@ const {
   lavalinkSeekToStart,
   lavalinkToggleLoop,
   lavalinkShuffle,
+  createPoru,
 } = require('./lavalinkManager');
 const { playerEmbed } = require('./embeds');
 
@@ -112,43 +113,62 @@ async function handleControlButtons(interaction, player)
             return interaction.reply({ content: 'Unknown button.', ephemeral: true });
     }
 
+    const loopToDisplay = loopMode ?? (player.loop ?? 'NONE');
+    const playerSnapshot = createPoru(interaction.client).players.get(guildId) ?? player;
+
+    await refreshNowPlayingMessage(
+      interaction.client,
+      guildId,
+      playerSnapshot,
+      loopToDisplay
+    );
+}
+
+async function refreshNowPlayingMessage(client, guildId, playerOverride = null, loopOverride)
+{
     const server = getServerData(guildId);
-
-    if (!server.nowPlayingChannel || !server.nowPlayingMessage) return;
-
     const channelId = server.nowPlayingChannel;
     const messageId = server.nowPlayingMessage;
+
     if (!channelId || !messageId) return;
 
-   const channel = await interaction.client.channels.fetch(server.nowPlayingChannel);
+    const player = playerOverride ?? createPoru(client).players.get(guildId);
+    if (!player) return;
 
-    try {
-        const message = await channel.messages.fetch(server.nowPlayingMessage);
-        const controls = buildControlRows({ paused: player.isPaused, loopMode, disabled: false });
+    const loopMode = loopOverride ?? (player.loop ?? 'NONE');
+    const controls = buildControlRows({ paused: player.isPaused, loopMode, disabled: !player.currentTrack });
 
-        const embed = player.currentTrack
-            ? playerEmbed(
-                player.currentTrack.info.title,
-                player.currentTrack.info.uri,
-                player.currentTrack.info.artworkUrl ?? player.currentTrack.info.image ?? 'https://i.imgur.com/3g7nmJC.png',
-                player.currentTrack.info.author ?? 'Unknown',
-                player.currentTrack.info.requesterTag ?? 'Unknown',
-                player.currentTrack.info.requesterAvatar ?? null,
-                player.currentTrack.info.isStream ? 'Live' : formatDuration(player.currentTrack.info.length ?? 0),
-                player.currentTrack.info.isStream ? 'Live' : formatDuration(player.position ?? 0),
-                loopMode,
-            )
-            : null;
-
-        const payload = { components: controls };
-        if (embed) payload.embeds = [embed];
-
-        await message.edit(payload);
-    } 
-    catch (error) 
+    let embed = null;
+    if (player.currentTrack)
     {
-        if (error.code !== 10008) throw error; // ignore unknown-message race
+        const info = player.currentTrack.info || {};
+        embed = playerEmbed(
+            info.title,
+            info.uri,
+            info.artworkUrl ?? info.image ?? 'https://i.imgur.com/3g7nmJC.png',
+            info.author ?? 'Unknown',
+            info.requesterTag ?? 'Unknown',
+            info.requesterAvatar ?? null,
+            info.isStream ? 'Live' : formatDuration(info.length ?? 0),
+            info.isStream ? 'Live' : formatDuration(player.position ?? 0),
+            loopMode,
+        );
     }
+
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if(!channel) return;
+
+    const message = await channel.messages.fetch(messageId).catch((err) => {
+        if (err?.code === 10008) return null
+        throw err;
+    })
+
+    if(!message) return;
+
+    const payload = { components: controls };
+    if (embed) payload.embeds = [embed];
+
+    await message.edit(payload);
 }
 
 module.exports = {
@@ -159,5 +179,6 @@ module.exports = {
     loopButton,
     shuffleButton,
     buildControlRows,
-    handleControlButtons
+    handleControlButtons,
+    refreshNowPlayingMessage
 }

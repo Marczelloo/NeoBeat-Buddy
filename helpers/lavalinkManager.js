@@ -10,7 +10,7 @@ const describeTrack = (track) => {
 };
 
 const MAX_FALLBACK_ATTEMPTS = 1;
-const INACTIVITY_TIMEOUT_MS = Number(process.env.INACTIVITY_TIMEOUT_MS ?? 5 * 1000);
+const INACTIVITY_TIMEOUT_MS = Number(process.env.INACTIVITY_TIMEOUT_MS ?? 5 * 60 * 1000);
 const inactivityTimers = new Map();
 
 const clearInactivityTimer = (guildId, reason = "unspecified") => {
@@ -419,22 +419,20 @@ async function lavalinkSeekToStart(guildId)
   return true;
 }
 
-async function lavalinkToggleLoop(guildId, next = null) {
+async function lavalinkToggleLoop(guildId, mode) {
   const player = getPlayer(guildId);
   
-  if (!player) return 'NONE';
+  if (!player) return null;
 
-  if (!next)
-  {
-    next =
-      player.loop === 'NONE' ? 'TRACK' :
-      player.loop === 'TRACK' ? 'QUEUE' :
-      'NONE';
-  }
+  const next = mode && ['NONE','TRACK','QUEUE'].includes(mode)
+    ? mode
+    : player.loop === 'NONE' ? 'TRACK'
+    : player.loop === 'TRACK' ? 'QUEUE'
+    : 'NONE';
 
   player.loop = next;
   await player.setLoop(next);
-  clearInactivityTimer(guildId, "toggleLoop");
+  clearInactivityTimer(guildId, 'toggleLoop');
   return next;
 }
 

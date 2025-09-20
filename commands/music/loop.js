@@ -1,7 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
 const Log = require('../../helpers/logs/log');
 const { errorEmbed, successEmbed } = require('../../helpers/embeds');
-const { lavalinkToggleLoop } = require('../../helpers/lavalinkManager');
+const { lavalinkToggleLoop, createPoru } = require('../../helpers/lavalinkManager');
+const { refreshNowPlayingMessage } = require('../../helpers/buttons');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -34,15 +35,14 @@ module.exports = {
 
         const mode = interaction.options.getString('mode');
 
-        let looped;
+        const loopMode = await lavalinkToggleLoop(interaction.guild.id, mode);
 
-        if(mode)
-            looped = await lavalinkToggleLoop(interaction.guild.id, mode);
-        else
-            looped = await lavalinkToggleLoop(interaction.guild.id);
-
-        if(looped) 
-            return interaction.editReply({ embeds: [successEmbed(`🔁 Loop mode set to **${looped}**.`)] }) ;
+        if(loopMode) 
+        {
+            const player = createPoru(interaction.guild.id).players.get(interaction.guild.id);
+            await refreshNowPlayingMessage(interaction.client, interaction.guild.id, player);
+            return interaction.editReply({ embeds: [successEmbed(`🔁 Loop mode set to **${loopMode}**.`)] }) ;
+        }
         else
             return interaction.editReply({ embeds: [errorEmbed('No music is currently playing.')] });
 

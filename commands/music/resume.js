@@ -1,7 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
 const Log = require('../../helpers/logs/log');
 const { errorEmbed, successEmbed } = require('../../helpers/embeds');
-const { lavalinkResume } = require('../../helpers/lavalinkManager');
+const { lavalinkResume, createPoru } = require('../../helpers/lavalinkManager');
+const { refreshNowPlayingMessage } = require('../../helpers/buttons');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -23,7 +24,11 @@ module.exports = {
 
             const resumed = await lavalinkResume(interaction.guild.id);
             if (resumed) 
+            {
+                const player = createPoru(interaction.guild.id).players.get(interaction.guild.id);
+                await refreshNowPlayingMessage(interaction.client, interaction.guild.id, player);
                 return interaction.editReply({ embeds: [successEmbed('▶️ Music resumed.')] });
+            }
             else 
                 return interaction.editReply({ embeds: [errorEmbed('No music is currently paused.')] });
         }
