@@ -11,7 +11,17 @@ const describeTrack = (track) => {
 
 const MAX_FALLBACK_ATTEMPTS = 1;
 const INACTIVITY_TIMEOUT_MS = Number(process.env.INACTIVITY_TIMEOUT_MS ?? 5 * 60 * 1000);
+
 const inactivityTimers = new Map();
+const playbackState = new Map();
+
+let refreshNowPlayingMessageCached = null;
+const getRefreshHelper = () => {
+  if (!refreshNowPlayingMessageCached) {
+    ({ refreshNowPlayingMessage: refreshNowPlayingMessageCached } = require("./buttons"));
+  }
+  return refreshNowPlayingMessageCached;
+};
 
 const clearInactivityTimer = (guildId, reason = "unspecified") => {
   const timer = inactivityTimers.get(guildId);
@@ -167,6 +177,57 @@ async function tryQueueFallbackTrack(player, failedTrack) {
   return null;
 }
 
+const PROGRESS_UPDATE_INTERVAL_MS = Number(process.env.PROGRESS_UPDATE_INTERVAL_MS ?? 10_000);
+
+const clearProgressInterval = (guildId) => {
+  const state = playbackState.get(guildId);
+  if (!state?.interval) return;
+  clearInterval(state.interval);
+  state.interval = null;
+  playbackState.set(guildId, state);
+};
+
+const scheduleProgressUpdates = (player) => {
+  if (!PROGRESS_UPDATE_INTERVAL_MS || PROGRESS_UPDATE_INTERVAL_MS <= 0) return;
+
+  clearProgressInterval(player.guildId);
+
+  const interval = setInterval(async () => {
+    const state = playbackState.get(player.guildId);
+    if (!state || !player.isPlaying || !player.currentTrack) return;
+
+    const info = player.currentTrack.info || {};
+    const length = info.length ?? Infinity;
+
+    const now = Date.now();
+    const lastPos = state.lastPosition ?? 0;
+    const lastTs = state.lastTimestamp ?? now;
+    const elapsed = Math.max(0, now - lastTs);
+    const estimated = Math.min(length, lastPos + (player.isPaused ? 0 : elapsed));
+
+    state.lastPosition = estimated;
+    state.lastTimestamp = now;
+    playbackState.set(player.guildId, state);
+
+    try 
+    {
+      const refresh = getRefreshHelper();
+      if (!refresh) return;
+
+      await refresh(player.poru.client, player.guildId, player, undefined, estimated);
+    } 
+    catch (err) 
+    {
+      clearProgressInterval(player.guildId); // stop if message vanished
+    }
+  }, PROGRESS_UPDATE_INTERVAL_MS);
+
+  interval.unref?.();
+  const state = playbackState.get(player.guildId) ?? {};
+  state.interval = interval;
+  playbackState.set(player.guildId, state);
+};
+
 let poru = null;
 
 function createPoru(client) {
@@ -260,6 +321,7 @@ function createPoru(client) {
 
   poru.on("trackStart", (player, track) => {
     clearInactivityTimer(player.guildId, "trackStart");
+    scheduleProgressUpdates(player);
 
     Log.info(
       "Lavalink track started",
@@ -282,6 +344,9 @@ function createPoru(client) {
       `queueLength=${player.queue.length}`,
       `next=${nextTrack}`
     );
+
+    clearProgressInterval(player.guildId);
+
     if(!player.currentTrack && player.queue.length === 0)
     {
       scheduleInactivityDisconnect(player, "trackEnd");
@@ -292,7 +357,15 @@ function createPoru(client) {
   poru.on("queueEnd", (player) => {
     Log.info("Lavalink queue end", "", `guild=${player.guildId}`);
     scheduleInactivityDisconnect(player, "queueEnd");
+    clearProgressInterval(player.guildId);
   });
+
+  poru.on("playerUpdate", (player) => {
+    const state = playbackState.get(player.guildId) ?? {};
+    state.lastPosition = player.position ?? 0;
+    state.lastTimestamp = Date.now();
+    playbackState.set(player.guildId, state);
+  })
 
   return poru;
 }
@@ -378,6 +451,7 @@ async function lavalinkStop(guildId) {
   player.queue.clear();
   await player.destroy();
   clearInactivityTimer(guildId, "stopCommand");
+  clearProgressInterval(guildId);
 
   return true;
 }

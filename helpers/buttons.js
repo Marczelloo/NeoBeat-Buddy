@@ -124,7 +124,7 @@ async function handleControlButtons(interaction, player)
     );
 }
 
-async function refreshNowPlayingMessage(client, guildId, playerOverride = null, loopOverride)
+async function refreshNowPlayingMessage(client, guildId, playerOverride = null, loopOverride, positionOverride)
 {
     const server = getServerData(guildId);
     const channelId = server.nowPlayingChannel;
@@ -142,9 +142,10 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
     if (player.currentTrack)
     {
         const info = player.currentTrack.info || {};
-        const duration = info.isStream ? 'Live' : formatDuration(info.length ?? 0);
-        const position = info.isStream ? 'Live' : formatDuration(player.position ?? 0);
         const artwork = info.artworkUrl ?? info.image ?? 'https://i.imgur.com/3g7nmJC.png';
+        const elapsedMs = positionOverride ?? player.position ?? 0;
+        const durationLabel = info.isStream ? 'Live' : formatDuration(info.length ?? 0);
+        const positionLabel = info.isStream ? 'Live' : formatDuration(elapsedMs);
         
         embed = playerEmbed(
             info.title,
@@ -153,8 +154,8 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
             info.author ?? 'Unknown',
             info.requesterTag ?? 'Unknown',
             info.requesterAvatar ?? null,
-            duration,
-            position,
+            durationLabel,
+            positionLabel,
             loopMode,
             player.volume,
         );

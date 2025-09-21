@@ -13,7 +13,7 @@
 - [] 24/7 command
 - [] live equalizer
 - [] lyrics for current song (if possible make them synced with song)
-- [] progress of song
+- [x] progress of song
 - [] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )
 - [] create docker file and compose lavalink and bot
 - [] create help command with descriptions and select form for additional info (possibly per categories or usage of specific command)
