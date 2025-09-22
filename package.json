@@ -1,6 +1,6 @@
 {
   "name": "neo-beat-buddy",
-  "version": "0.0.5",
+  "version": "0.0.14",
   "description": "A Discord music bot",
   "main": "index.js",
   "scripts": {

@@ -68,10 +68,36 @@ module.exports = {
                         info.loop,
                         player.volume
                     );
-                    const message = await interaction.followUp({ embeds: [nowPlayingEmbed], components: controls });
-                    
+
+                    const payload = { embeds: [nowPlayingEmbed], components: controls };
+                    const server = getServerData(interaction.guild.id);
+                    const channelId = server.nowPlayingChannel;
+                    const messageId = server.nowPlayingMessage;
+
+                    let message = null;
+                    if (channelId && messageId)
+                    {
+                        const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+                        if (channel)
+                        {
+                            message = await channel.messages.fetch(messageId).catch((err) => {
+                                if (err?.code === 10008) return null;
+                                return null;
+                            });
+                        }
+                    }
+
+                    if (message)
+                    {
+                        await message.edit(payload);
+                    }
+                    else
+                    {
+                        message = await interaction.followUp(payload);
+                    }
+
                     setGlobalVariable(interaction.guild.id, 'nowPlayingMessage', message.id);
-                    setGlobalVariable(interaction.guild.id, 'nowPlayingChannel', interaction.channel.id);
+                    setGlobalVariable(interaction.guild.id, 'nowPlayingChannel', message.channelId ?? interaction.channel.id);
                 }
             }   
             catch(error)
