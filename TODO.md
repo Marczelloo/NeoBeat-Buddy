@@ -23,7 +23,7 @@
 - [x] fix check for user to be in voice channel to be in the same as bot
 - [x] fix issue when queue is empty (last song from queue stops playing) and u want to play song its only added to the queue but its not starting playing (confirmed issue)
 - [x] fix after using stop command and playing somethign there are sent two players in message channel
-- [] fix seekTo command (when song duration in 2:57 and i seek to 2:30 track ends and plays next one from queue)
+- [x] fix seekTo command (when song duration in 2:57 and i seek to 2:30 track ends and plays next one from queue)
 
 ## OTHER
 - [] clean lavalinkManager and move helpers to other files

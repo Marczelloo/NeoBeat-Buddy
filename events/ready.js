@@ -14,7 +14,7 @@ module.exports = {
     once: true,
     async execute(client) {
         Log.success(`Logged in as ${client.user.tag}`);
-        client.user.setActivity(`/help for more information`);
+        client.user.setActivity(`/help`);
     
         try 
         {

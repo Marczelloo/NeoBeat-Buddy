@@ -702,9 +702,20 @@ async function lavalinkSeekTo(guildId, positionMs)
 {
   const player = getPlayer(guildId);
 
-  if (!player || !player.currentTrack) return false;
+  if (!player?.currentTrack) return false;
 
-  await player.seekTo(positionMs);
+  const rawLength = player.currentTrack.info?.length;
+  const maxLength = Number.isFinite(Number(rawLength)) ? Number(rawLength) : Number.POSITIVE_INFINITY;
+  const clamped = Math.max(0, Math.min(positionMs, maxLength));
+
+  await player.node.rest.updatePlayer({ guildId, data: { position: clamped } });
+  player.position = clamped;
+
+  const state = ensurePlaybackState(guildId);
+  state.lastPosition = clamped;
+  state.lastTimestamp = Date.now();
+  playbackState.set(guildId, state);
+
   clearInactivityTimer(guildId, "seekTo");
   return true;
 }
