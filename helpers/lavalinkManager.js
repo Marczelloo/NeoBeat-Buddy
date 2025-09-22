@@ -2,6 +2,7 @@ const { Poru, Node, Track } = require("poru");
 const Log = require("./logs/log");
 const { errorEmbed } = require("./embeds");
 const { inspect } = require("util");
+const { info } = require("console");
 
 const describeTrack = (track) => {
   if (!track) return "unknown";
@@ -14,6 +15,40 @@ const INACTIVITY_TIMEOUT_MS = Number(process.env.INACTIVITY_TIMEOUT_MS ?? 5 * 60
 
 const inactivityTimers = new Map();
 const playbackState = new Map();
+const TRACK_HISTORY_LIMIT = Number(process.env.TRACK_HISTORY_LIMIT ?? 20);
+
+const ensurePlaybackState = (guildId) => {
+  const state = playbackState.get(guildId) || {};
+
+  if(!state.history) state.history = [];
+
+  playbackState.set(guildId, state);
+  return state;
+}
+
+const cloneTrack = (track) => {
+  if(!track) return null;
+
+  return {
+    ...track,
+    info: { ...(track.info || {}) },
+    pluginInfo: track.pluginInfo ? { ...(track.pluginInfo) } : undefined,
+    userData: track.userData ? { ...(track.userData) } : undefined,
+  }
+}
+
+const pushTrackHistory = (guildId, track) => {
+  if(!track.track) return;
+
+  const state = ensurePlaybackState(guildId);
+  const history = state.history;
+  history.push(cloneTrack(track));
+
+  if(TRACK_HISTORY_LIMIT > 0 && history.length > TRACK_HISTORY_LIMIT)
+  {
+    history.splice(0, history.length - TRACK_HISTORY_LIMIT);
+  }
+}
 
 let refreshNowPlayingMessageCached = null;
 const getRefreshHelper = () => {
@@ -57,6 +92,7 @@ const scheduleInactivityDisconnect = (player, reason = "queueEnd") => {
       }
 
       await current.destroy();
+      playbackState.delete(player.guildId);
     }
     catch(error)
     {
@@ -323,6 +359,12 @@ function createPoru(client) {
     clearInactivityTimer(player.guildId, "trackStart");
     scheduleProgressUpdates(player);
 
+    const state = ensurePlaybackState(player.guildId);
+    state.currentTrack = cloneTrack(track);
+    state.lastPosition = 0;
+    state.lastTimestamp = Date.now();
+    playbackState.set(player.guildId, state);
+
     Log.info(
       "Lavalink track started",
       "",
@@ -352,10 +394,43 @@ function createPoru(client) {
       scheduleInactivityDisconnect(player, "trackEnd");
     }
 
+    const state = ensurePlaybackState(player.guildId);
+    const reasonCode = typeof reason === "string" ? reason : reason?.reason ?? null;
+
+    if(track?.track && reasonCode !== "replaced" && reasonCode !== "load_failed")
+    {
+      pushTrackHistory(player.guildId, track);
+    }
+
+    state.currentTrack = null;
+    playbackState.set(player.guildId, state);
+
+    if(player.queue.length === 0)
+    {
+      player.currentTrack = null;
+      player.isPlaying = false;
+      player.position = 0;
+    }
+
+    if(!player.currentTrack && player.queue.length === 0)
+    {
+      scheduleInactivityDisconnect(player, "trackEndEmpty");
+    }
+
   });
 
   poru.on("queueEnd", (player) => {
     Log.info("Lavalink queue end", "", `guild=${player.guildId}`);
+
+    const state = ensurePlaybackState(player.guildId);
+    state.currentTrack = null;
+    playbackState.set(player.guildId, state);
+
+    player.currentTrack = null;
+    player.isPlaying = false;
+    player.isPaused = false;
+    player.position = 0;
+
     scheduleInactivityDisconnect(player, "queueEnd");
     clearProgressInterval(player.guildId);
   });
@@ -384,7 +459,7 @@ async function ensurePlayer(guildId, voiceId, textId) {
 
   const defaultVolume = Number(process.env.DEFAULT_VOLUME ?? 50);
   const target = Number.isFinite(defaultVolume) ? Math.max(0, Math.min(defaultVolume, 1000)) : 50;
-
+  
   await player.setVolume(target);
   player.volume = target;
 
@@ -393,7 +468,7 @@ async function ensurePlayer(guildId, voiceId, textId) {
 
 async function lavalinkPlay({ guildId, voiceId, textId, query }) {
   const player = await ensurePlayer(guildId, voiceId, textId);
-  const shouldStart = !player.isPlaying && !player.currentTrack;
+  let startImmediately = false;
 
   let q = String(query || '').trim();
   const isUrl = /^(https?:\/\/)/i.test(q);
@@ -428,21 +503,36 @@ async function lavalinkPlay({ guildId, voiceId, textId, query }) {
     await player.queue.add(track);
   }
 
+  const currentDescription = player.currentTrack ? describeTrack(player.currentTrack) : 'none';
+  Log.info(
+    "Playback state check",
+    "",
+    `guild=${guildId}`,
+    `isPlaying=${player.isPlaying}`,
+    `isPaused=${player.isPaused}`,
+    `current=${currentDescription}`,
+    `queueLength=${player.queue.length}`
+  );
+
+  if(!player.currentTrack && player.queue.length > 0)
+  {
+    await player.play();
+    startImmediately = true;
+  }
+
   Log.info(
     "Queue updated",
     "",
     `guild=${guildId}`,
     `tracksAdded=${tracksToAdd.length}`,
-    `startImmediately=${shouldStart}`,
+    `startImmediately=${startImmediately}`,
     `queueLength=${player.queue.length}`
   );
 
-  if(shouldStart) await player.play();
   clearInactivityTimer(guildId, "playRequest");
 
-  return { track: nowPlaying, player, startImmediately: shouldStart };
+  return { track: nowPlaying, player, startImmediately };
 }
-
 async function lavalinkStop(guildId) {
   const player = poru.players.get(guildId);
   
@@ -452,6 +542,8 @@ async function lavalinkStop(guildId) {
   await player.destroy();
   clearInactivityTimer(guildId, "stopCommand");
   clearProgressInterval(guildId);
+  playbackState.delete(guildId);
+
 
   return true;
 }
@@ -495,18 +587,59 @@ async function lavalinkSkip(guildId) {
   return true;
 }
 
-function getPlayer(guildId) { return poru?.players.get(guildId) ?? null; }
-
-async function lavalinkSeekToStart(guildId) 
+async function lavalinkPrevious(guildId)
 {
   const player = getPlayer(guildId);
-  
-  if(!player?.currentTrack) return false;
-  
-  await player.seekTo(0);
-  clearInactivityTimer(guildId, "seekToStart");
-  return true;
+  if(!player) return { status: "no_player" };
+
+  const state = ensurePlaybackState(guildId);
+  const history = state.history ?? [];
+
+  if(history.length === 0)
+  {
+    if(player.currentTrack)
+    {
+      await player.seekTo(0);
+      clearInactivityTimer(guildId, "previousRestart");
+      return { status: "restart", track: cloneTrack(player.currentTrack) };
+    }
+
+    return { status: "empty"};
+  }
+
+  const previous = history.pop();
+  const currentClone = cloneTrack(player.currentTrack);
+
+  if(currentClone?.track)
+  {
+    player.queue.unshift(currentClone);
+  }
+
+  clearProgressInterval(guildId);
+
+  await player.node.rest.updatePlayer({
+    guildId,
+    data: { track: { encoded: previous.track}, position: 0 }
+  })
+
+  player.currentTrack = cloneTrack(previous);
+  player.isPlaying = true;
+  player.isPaused = false;
+  player.position = 0;
+
+  state.history = history;
+  state.currentTrack = cloneTrack(previous);
+  state.lastPosition = 0;
+  state.lastTimestamp = Date.now();
+  playbackState.set(guildId, state);
+
+  clearInactivityTimer(guildId, "previousCommand");
+  scheduleProgressUpdates(player);
+
+  return { status: "previous", track: previous };
 }
+
+function getPlayer(guildId) { return poru?.players.get(guildId) ?? null; }
 
 async function lavalinkToggleLoop(guildId, mode) {
   const player = getPlayer(guildId);
@@ -584,4 +717,21 @@ async function lavalinkGetDuration(guildId)
   return player.currentTrack.info.length || null;
 }
 
-module.exports = { createPoru, lavalinkPlay, lavalinkStop, lavalinkPause, lavalinkResume, lavalinkSkip, lavalinkSeekToStart, lavalinkToggleLoop, lavalinkShuffle, lavalinkSetVolume, lavalinkGetVolume, lavalinkSeekTo, lavalinkClearQueue, lavalinkGetDuration };
+module.exports = { 
+  createPoru, 
+  lavalinkPlay, 
+  lavalinkStop, 
+  lavalinkPause, 
+  lavalinkResume, 
+  lavalinkSkip, 
+  lavalinkToggleLoop, 
+  lavalinkShuffle, 
+  lavalinkSetVolume, 
+  lavalinkGetVolume, 
+  lavalinkSeekTo, 
+  lavalinkClearQueue, 
+  lavalinkGetDuration,
+  lavalinkPrevious,};
+
+
+

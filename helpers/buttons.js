@@ -5,10 +5,10 @@ const {
   lavalinkPause,
   lavalinkResume,
   lavalinkSkip,
-  lavalinkSeekToStart,
   lavalinkToggleLoop,
   lavalinkShuffle,
   createPoru,
+  lavalinkPrevious,
 } = require('./lavalinkManager');
 const { playerEmbed } = require('./embeds');
 
@@ -98,9 +98,24 @@ async function handleControlButtons(interaction, player)
             await lavalinkSkip(guildId);
             return;
             break;
-        case 'rewind-button':
-            await lavalinkSeekToStart(guildId);
+        case 'rewind-button': {
+            const result = await lavalinkPrevious(guildId);
+
+            if (result?.status === 'no-player') 
+            {
+                await interaction.followUp({ content: 'Nothing is playing right now.', flags: MessageFlags.Ephemeral });
+                return;
+            }
+            
+            if (result?.status === 'empty') 
+            {
+                await interaction.followUp({ content: 'No previous track in history yet.', flags: MessageFlags.Ephemeral });
+                return;
+            }
+            
+            needsEmbedRefresh = true;
             break;
+        }
         case 'loop-button':
             loopMode = await lavalinkToggleLoop(guildId);
             needsEmbedRefresh = true;
@@ -164,8 +179,15 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if(!channel) return;
 
-    const message = await channel.messages.fetch(messageId).catch((err) => {
-        if (err?.code === 10008) return null
+    const message = await channel.messages
+    .fetch(messageId)
+    .catch((err) => {
+        if (err?.code === 10008) 
+        {
+            server.nowPlayingMessage = null;
+            return null;
+        }
+
         throw err;
     })
 
@@ -174,7 +196,20 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
     const payload = { components: controls };
     if (embed) payload.embeds = [embed];
 
-    await message.edit(payload);
+    try
+    {
+        await message.edit(payload);
+    }
+    catch(err)
+    {
+        if(err?.code === 10008)
+        {
+            server.nowPlayingMessage = null;
+            server.nowPlayingChannel = null;
+            return;
+        }
+        throw err;
+    }
 }
 
 module.exports = {
