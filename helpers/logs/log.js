@@ -1,5 +1,6 @@
-const path = require("path");
 const fs = require('fs');
+const path = require("path");
+
 const fsp = fs.promises;
 
 const LogTextColor =  {
@@ -262,7 +263,7 @@ class Log {
 
    static saveLogsToFile(log) {
       if (process.env.LOG_TO_FILE === '0') return;
-      const logWithoutFormatting = log.replace(/\x1b\[\d+m/g, '');
+      const logWithoutFormatting = log.replace(/\d+m/g, '');
       const logsPath = path.resolve(__dirname, "../../logs/logs.txt");
       const logsFolder = path.dirname(logsPath);
       // Fire-and-forget async; avoid blocking the event loop

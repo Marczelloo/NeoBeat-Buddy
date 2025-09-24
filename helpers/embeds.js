@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require("discord.js");
-const { formatDuration } = require("./utils");
 const { LoopType } = require("../global");
+const { formatDuration } = require("./utils");
 
 const ICONS = {
   artist: '🎙️',

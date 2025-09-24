@@ -1,9 +1,9 @@
 const { Events } = require('discord.js');
-const Log = require('../helpers/logs/log');
-const { createPoru } = require('../helpers/lavalinkManager');
+const queueCommand = require('../commands/music/queue');
 const { getClient } = require('../global');
 const { handleControlButtons } = require('../helpers/buttons');
-const queueCommand = require('../commands/music/queue');
+const { createPoru } = require('../helpers/lavalink/index');
+const Log = require('../helpers/logs/log');
 
 module.exports = {
     name: Events.InteractionCreate,

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
-const { lavalinkSetEqualizer, lavalinkResetFilters } = require("../../helpers/lavalinkManager");
+const { errorEmbed } = require("../../helpers/embeds");
+const { lavalinkSetEqualizer, lavalinkResetFilters } = require("../../helpers/lavalink/index");
 const Log = require("../../helpers/logs/log");
 
 const PRESET_CHOICES = [

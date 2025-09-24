@@ -1,11 +1,12 @@
 require('dotenv').config();
 
-const { Client, Collection, GatewayIntentBits } = require('discord.js');
-const token = process.env.DISCORD_TOKEN;
-const { setGlobalVariable, setClient } = require('./global.js');
-const { createPoru } = require('./helpers/lavalinkManager');
 const fs = require('fs');
 const path = require('path');
+const { Client, Collection, GatewayIntentBits } = require('discord.js');
+
+const token = process.env.DISCORD_TOKEN;
+const { setClient } = require('./global.js');
+const { createPoru } = require('./helpers/lavalink/index.js')
 const Log = require('./helpers/logs/log.js');
 
 Log.info('Token:', token ? 'Loaded' : 'Not Found');
@@ -74,7 +75,7 @@ for(const file of eventsFiles){
 client.on('voiceStateUpdate', (oldState, newState) => {
 	if (oldState.member.user.id === client.user.id && newState.channelId === null) {
 		Log.info('Bot left the voice channel:', oldState.channel, newState.guild.name, newState.guild.id);
-		const guild = newState.guild;
+		//const guild = newState.guild;
 		//vcLeaveReset(guild.id);
 	}
 });

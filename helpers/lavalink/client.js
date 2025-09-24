@@ -1,0 +1,193 @@
+const { inspect } = require("util");
+const { Poru } = require("poru");
+const { errorEmbed } = require("../embeds");
+const Log = require("../logs/log");
+const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
+const { ensurePlaybackState, cloneTrack, pushTrackHistory, playbackState } = require("./state");
+const { clearInactivityTimer, scheduleInactivityDisconnect, clearProgressInterval, scheduleProgressUpdates } = require("./timers");
+
+let poru = null;
+
+function createPoru(client) {
+  if (poru) return poru;
+  const nodes = [
+    {
+      name: process.env.LAVALINK_NAME || "local",
+      host: process.env.LAVALINK_HOST || "127.0.0.1",
+      port: Number(process.env.LAVALINK_PORT || 2333),
+      password: process.env.LAVALINK_PASSWORD || "youshallnotpass",
+      secure: process.env.LAVALINK_SECURE === "1",
+    },
+  ];
+
+  poru = new Poru(client, nodes, {
+    library: "discord.js",
+    defaultPlatform: "ytsearch",
+    reconnectTries: 5,
+    resumeKey: process.env.LAVALINK_RESUME_KEY || undefined,
+    resumeTimeout: 60,
+  });
+
+  poru.on("nodeConnect", (node) => Log.success(`Lavalink node connected ${node.name}`));
+
+  poru.on("trackError", async (player, track, err) => {
+    const errorSummary = err instanceof Error ? err.message : inspect(err, { depth: 1 });
+    Log.error(
+      "Lavalink track error",
+      "",
+      `guild=${player.guildId}`,
+      `track=${describeTrack(track)}`,
+      `queueLength=${player.queue.length}`,
+      `error=${errorSummary}`
+    );
+
+    const fallbackTrack = await tryQueueFallbackTrack   (player, track);
+    const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
+
+    if (fallbackTrack) {
+      if (channel) {
+        await channel.send({
+          embeds: [errorEmbed(
+            "Trying alternate source",
+            `The YouTube stream failed, so I'm retrying with an alternate source for **${fallbackTrack.info.title || fallbackTrack.info.identifier || "this track"}**.`
+          )],
+        }).catch(() => null);
+      }
+    } else if (channel) {
+      await channel.send({
+        embeds: [errorEmbed("Track unavailable", "YouTube blocked this track (age-restricted or region-locked).")],
+      }).catch(() => null);
+    }
+
+    if (!fallbackTrack && player.queue.length) {
+      Log.warning(
+        "Waiting for Lavalink auto-skip after error",
+        "",
+        `guild=${player.guildId}`,
+        `queueLength=${player.queue.length}`
+      );
+    }
+  });
+
+  poru.on("trackError", async (player, track, err) => {
+    const errorSummary = err instanceof Error ? err.message : inspect(err, { depth: 1 });
+    Log.error(
+      "Lavalink track error",
+      "",
+      `guild=${player.guildId}`,
+      `track=${describeTrack(track)}`,
+      `queueLength=${player.queue.length}`,
+      `error=${errorSummary}`
+    );
+
+    const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
+    if (channel) {
+      await channel.send({
+        embeds: [errorEmbed("Track unavailable", "YouTube blocked this track (age-restricted or region-locked).")],
+      });
+    }
+
+    if (player.queue.length) {
+      Log.warning(
+        "Waiting for Lavalink auto-skip after error",
+        "",
+        `guild=${player.guildId}`,
+        `queueLength=${player.queue.length}`
+      );
+    }
+  });
+
+  poru.on("trackStart", (player, track) => {
+    clearInactivityTimer(player.guildId, "trackStart");
+    scheduleProgressUpdates(player);
+
+    const state = ensurePlaybackState(player.guildId);
+    state.currentTrack = cloneTrack(track);
+    state.lastPosition = 0;
+    state.lastTimestamp = Date.now();
+    playbackState.set(player.guildId, state);
+
+    Log.info(
+      "Lavalink track started",
+      "",
+      `guild=${player.guildId}`,
+      `track=${describeTrack(track)}`,
+      `queueLength=${player.queue.length}`
+    );
+  });
+
+  poru.on("trackEnd", (player, track, reason) => {
+    const reasonSummary = typeof reason === "string" ? reason : inspect(reason, { depth: 1 });
+    const nextTrack = player.currentTrack ? describeTrack(player.currentTrack) : "none";
+    Log.info(
+      "Lavalink track ended",
+      "",
+      `guild=${player.guildId}`,
+      `track=${describeTrack(track)}`,
+      `reason=${reasonSummary}`,
+      `queueLength=${player.queue.length}`,
+      `next=${nextTrack}`
+    );
+
+    clearProgressInterval(player.guildId);
+
+    if(!player.currentTrack && player.queue.length === 0)
+    {
+      scheduleInactivityDisconnect(player, "trackEnd");
+    }
+
+    const state = ensurePlaybackState(player.guildId);
+    const reasonCode = typeof reason === "string" ? reason : reason?.reason ?? null;
+
+    if(track?.track && reasonCode !== "replaced" && reasonCode !== "load_failed")
+    {
+      pushTrackHistory(player.guildId, track);
+    }
+
+    state.currentTrack = null;
+    playbackState.set(player.guildId, state);
+
+    if(player.queue.length === 0)
+    {
+      player.currentTrack = null;
+      player.isPlaying = false;
+      player.position = 0;
+    }
+
+    if(!player.currentTrack && player.queue.length === 0)
+    {
+      scheduleInactivityDisconnect(player, "trackEndEmpty");
+    }
+
+  });
+
+  poru.on("queueEnd", (player) => {
+    Log.info("Lavalink queue end", "", `guild=${player.guildId}`);
+
+    const state = ensurePlaybackState(player.guildId);
+    state.currentTrack = null;
+    playbackState.set(player.guildId, state);
+
+    player.currentTrack = null;
+    player.isPlaying = false;
+    player.isPaused = false;
+    player.position = 0;
+
+    scheduleInactivityDisconnect(player, "queueEnd");
+    clearProgressInterval(player.guildId);
+  });
+
+  poru.on("playerUpdate", (player) => {
+    const state = playbackState.get(player.guildId) ?? {};
+    state.lastPosition = player.position ?? 0;
+    state.lastTimestamp = Date.now();
+    playbackState.set(player.guildId, state);
+  })
+
+  return poru;
+}
+
+module.exports = {
+  createPoru,
+  get poru() { return poru; },
+};

@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const Log = require('../../helpers/logs/log');
-const { createPoru } = require('../../helpers/lavalinkManager');
 const { errorEmbed } = require('../../helpers/embeds');
+const { createPoru } = require('../../helpers/lavalink/index');
+const Log = require('../../helpers/logs/log');
 const { formatDuration } = require('../../helpers/utils');
 
 const ITEMS_PER_PAGE = 20;

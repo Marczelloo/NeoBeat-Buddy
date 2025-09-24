@@ -1,16 +1,16 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
 const { getServerData } = require('../global');
-const { formatDuration } = require('./utils');
-const {
-  lavalinkPause,
-  lavalinkResume,
-  lavalinkSkip,
-  lavalinkToggleLoop,
-  lavalinkShuffle,
-  createPoru,
-  lavalinkPrevious,
-} = require('./lavalinkManager');
 const { playerEmbed } = require('./embeds');
+const {
+    lavalinkPause,
+    lavalinkResume,
+    lavalinkSkip,
+    lavalinkToggleLoop,
+    lavalinkShuffle,
+    createPoru,
+    lavalinkPrevious,
+} = require('./lavalink/index');
+const { formatDuration } = require('./utils');
 
 const LOOP_EMOJI = '1198248581304418396';
 const SHUFFLE_EMOJI = '1198248578146115605';
@@ -82,7 +82,6 @@ async function handleControlButtons(interaction, player)
 {
     const guildId = interaction.guildId;
     let loopMode = player.loop ?? 'NONE';
-    let needsEmbedRefresh = false;
 
     await interaction.deferUpdate();
 
@@ -96,7 +95,6 @@ async function handleControlButtons(interaction, player)
             break;
         case 'skip-button':
             await lavalinkSkip(guildId);
-            return;
             break;
         case 'rewind-button': {
             const result = await lavalinkPrevious(guildId);
@@ -113,12 +111,10 @@ async function handleControlButtons(interaction, player)
                 return;
             }
             
-            needsEmbedRefresh = true;
             break;
         }
         case 'loop-button':
             loopMode = await lavalinkToggleLoop(guildId);
-            needsEmbedRefresh = true;
             break;
         case 'shuffle-button':
             await lavalinkShuffle(guildId);

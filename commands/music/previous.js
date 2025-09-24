@@ -1,7 +1,7 @@
 const { SlashCommandBuilder  } = require('discord.js');
-const { lavalinkPrevious } = require('../../helpers/lavalinkManager');
-const Log = require('../../helpers/logs/log');
 const { errorEmbed } = require('../../helpers/embeds');
+const { lavalinkPrevious } = require('../../helpers/lavalink/index');
+const Log = require('../../helpers/logs/log');
 
 module.exports = {
     data: new SlashCommandBuilder()

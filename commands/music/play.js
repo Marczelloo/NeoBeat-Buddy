@@ -1,11 +1,10 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { ActionRowBuilder } = require('discord.js');
 const { setGlobalVariable, getServerData } = require('../../global.js');
+const { buildControlRows } = require('../../helpers/buttons.js');
 const { errorEmbed, playerEmbed } = require('../../helpers/embeds');
-const Log = require('../../helpers/logs/log');
-const { lavalinkPlay } = require('../../helpers/lavalinkManager');
 const { songEmbed } = require('../../helpers/embeds.js');
-const { skipButton, rewindButton, loopButton, shuffleButton, pauseButton, resumeButton, buildControlRows } = require('../../helpers/buttons.js');
+const { lavalinkPlay } = require('../../helpers/lavalink/index');
+const Log = require('../../helpers/logs/log');
 const { formatDuration } = require('../../helpers/utils.js');
 
 module.exports = {

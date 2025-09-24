@@ -26,10 +26,10 @@
 - [x] fix seekTo command (when song duration in 2:57 and i seek to 2:30 track ends and plays next one from queue)
 
 ## OTHER
-- [] clean lavalinkManager and move helpers to other files !!!!
+- [x] clean lavalinkManager and move helpers to other files !!!!
+- [x] (lavalink | rest of the files to be checked) move components/function to helpers folder/modules
 - [] add more logging and improve track logs
 - [] create docker file and compose lavalink and bot
-- [] move components/function to helpers folder/modules
 - [] cleanup code
 - [] create website for bot 
 

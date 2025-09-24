@@ -1,6 +1,6 @@
 {
   "name": "neo-beat-buddy",
-  "version": "0.0.15",
+  "version": "0.0.17",
   "description": "A Discord music bot",
   "main": "index.js",
   "scripts": {
@@ -8,8 +8,9 @@
     "dev": "nodemon index.js",
     "start": "node index.js",
     "deploy": "node deploy-commands.js",
-    "redeploy": "cd helpers/lavalink && docker compose --env-file ../../.env down && docker compose --env-file ../../.env up -d lavalink --force-recreate && docker compose --env-file ../../.env logs -f lavalink"
-
+    "redeploy": "cd helpers/lavalink && docker compose --env-file ../../.env down && docker compose --env-file ../../.env up -d lavalink --force-recreate && docker compose --env-file ../../.env logs -f lavalink",
+    "lint": "eslint . --ext .js,.cjs,.mjs",
+    "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix"
   },
   "keywords": [],
   "author": "Marczelloo",
@@ -21,5 +22,13 @@
     "dotenv": "^17.2.2",
     "poru": "^5.2.0",
     "shoukaku": "^4.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "eslint": "^9.36.0",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-n": "^17.23.1",
+    "eslint-plugin-unused-imports": "^4.2.0",
+    "globals": "^16.4.0"
   }
 }

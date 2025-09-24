@@ -1,9 +1,10 @@
 require('dotenv').config();
-const { REST, Routes } = require('discord.js');
+
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
 const fs = require('node:fs');
 const path = require('node:path');
+const { REST, Routes } = require('discord.js');
 const Log = require('./helpers/logs/log');
 
 const commands = [];

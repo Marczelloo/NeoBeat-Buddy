@@ -40,7 +40,6 @@ module.exports = {
     async execute(interaction) {
         const user = await interaction.options.getUser('user');
         const nickname = await interaction.guild.members.fetch(user.id);
-        const banner = user.fetch(user.banner);
         let flags = user.flags.toArray();
         if (flags.length === 0) {
             flags = "This user doesn't have any flags.";
@@ -49,7 +48,7 @@ module.exports = {
         }
 
         let statusString;
-        const status = interaction.guild.members.cache.filter(member => {
+        interaction.guild.members.cache.filter(member => {
             if(member.user.id === user.id){
                 statusString = member.presence.status;
                 statusString.toString();

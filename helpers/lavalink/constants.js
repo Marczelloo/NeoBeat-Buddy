@@ -1,0 +1,59 @@
+const MAX_FALLBACK_ATTEMPTS = 1;
+const INACTIVITY_TIMEOUT_MS = Number(process.env.INACTIVITY_TIMEOUT_MS ?? 5 * 60 * 1000);
+const TRACK_HISTORY_LIMIT = Number(process.env.TRACK_HISTORY_LIMIT ?? 20);
+const PROGRESS_UPDATE_INTERVAL_MS = Number(process.env.PROGRESS_UPDATE_INTERVAL_MS ?? 10_000);
+const EQUALIZER_PRESETS = {
+  flat: [],
+  bass: [
+    { band: 0, gain: 0.25 }, { band: 1, gain: 0.20 }, { band: 2, gain: 0.15 },
+    { band: 3, gain: 0.10 }, { band: 4, gain: 0.05 }
+  ],
+  treble: [
+    { band: 9, gain: 0.05 }, { band: 10, gain: 0.10 }, { band: 11, gain: 0.15 },
+    { band: 12, gain: 0.20 }, { band: 13, gain: 0.25 }, { band: 14, gain: 0.30 }
+  ],
+  nightcore: [
+    { band: 0, gain: 0.05 }, { band: 1, gain: 0.05 }, { band: 2, gain: 0.05 },
+    { band: 3, gain: 0.05 }, { band: 4, gain: 0.05 }, { band: 5, gain: -0.05 }
+  ],
+  pop: [
+    { band: 0, gain: -0.05 }, { band: 1, gain: 0.10 }, { band: 2, gain: 0.15 },
+    { band: 3, gain: 0.20 }, { band: 4, gain: 0.12 }, { band: 5, gain: -0.05 },
+    { band: 6, gain: -0.10 }, { band: 9, gain: 0.08 }, { band: 10, gain: 0.12 }
+  ],
+  edm: [
+    { band: 0, gain: 0.22 }, { band: 1, gain: 0.20 }, { band: 2, gain: 0.18 },
+    { band: 5, gain: -0.08 }, { band: 7, gain: -0.10 }, { band: 9, gain: 0.15 },
+    { band: 10, gain: 0.20 }, { band: 11, gain: 0.22 }, { band: 12, gain: 0.18 }
+  ],
+  rock: [
+    { band: 0, gain: 0.18 }, { band: 1, gain: 0.12 }, { band: 3, gain: -0.06 },
+    { band: 4, gain: -0.10 }, { band: 5, gain: 0.05 }, { band: 7, gain: 0.12 },
+    { band: 8, gain: 0.15 }, { band: 10, gain: 0.15 }, { band: 11, gain: 0.12 }
+  ],
+  vocal: [
+    { band: 0, gain: -0.15 }, { band: 1, gain: -0.12 }, { band: 3, gain: 0.08 },
+    { band: 4, gain: 0.12 }, { band: 5, gain: 0.15 }, { band: 6, gain: 0.18 },
+    { band: 7, gain: 0.20 }, { band: 9, gain: 0.10 }
+  ],
+  podcast: [
+    { band: 0, gain: -0.20 }, { band: 1, gain: -0.15 }, { band: 2, gain: -0.08 },
+    { band: 4, gain: 0.10 }, { band: 5, gain: 0.12 }, { band: 6, gain: 0.15 }
+  ],
+  bassboost: [
+    { band: 0, gain: 0.30 }, { band: 1, gain: 0.25 }, { band: 2, gain: 0.20 },
+    { band: 3, gain: 0.12 }, { band: 4, gain: 0.08 }
+  ],
+  lofi: [
+    { band: 0, gain: 0.10 }, { band: 1, gain: 0.05 }, { band: 5, gain: -0.12 },
+    { band: 6, gain: -0.18 }, { band: 8, gain: -0.10 }, { band: 10, gain: 0.05 }
+  ]
+};
+
+module.exports = {
+    MAX_FALLBACK_ATTEMPTS,
+    INACTIVITY_TIMEOUT_MS,
+    TRACK_HISTORY_LIMIT,
+    EQUALIZER_PRESETS,
+    PROGRESS_UPDATE_INTERVAL_MS
+};
