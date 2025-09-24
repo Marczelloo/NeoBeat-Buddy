@@ -2,7 +2,7 @@ const { Poru, Node, Track } = require("poru");
 const Log = require("./logs/log");
 const { errorEmbed } = require("./embeds");
 const { inspect } = require("util");
-const { info } = require("console");
+const { info, clear } = require("console");
 
 const describeTrack = (track) => {
   if (!track) return "unknown";
@@ -16,6 +16,55 @@ const INACTIVITY_TIMEOUT_MS = Number(process.env.INACTIVITY_TIMEOUT_MS ?? 5 * 60
 const inactivityTimers = new Map();
 const playbackState = new Map();
 const TRACK_HISTORY_LIMIT = Number(process.env.TRACK_HISTORY_LIMIT ?? 20);
+const equalizerState = new Map();
+
+const EQUALIZER_PRESETS = {
+  flat: [],
+  bass: [
+    { band: 0, gain: 0.25 }, { band: 1, gain: 0.20 }, { band: 2, gain: 0.15 },
+    { band: 3, gain: 0.10 }, { band: 4, gain: 0.05 }
+  ],
+  treble: [
+    { band: 9, gain: 0.05 }, { band: 10, gain: 0.10 }, { band: 11, gain: 0.15 },
+    { band: 12, gain: 0.20 }, { band: 13, gain: 0.25 }, { band: 14, gain: 0.30 }
+  ],
+  nightcore: [
+    { band: 0, gain: 0.05 }, { band: 1, gain: 0.05 }, { band: 2, gain: 0.05 },
+    { band: 3, gain: 0.05 }, { band: 4, gain: 0.05 }, { band: 5, gain: -0.05 }
+  ],
+  pop: [
+    { band: 0, gain: -0.05 }, { band: 1, gain: 0.10 }, { band: 2, gain: 0.15 },
+    { band: 3, gain: 0.20 }, { band: 4, gain: 0.12 }, { band: 5, gain: -0.05 },
+    { band: 6, gain: -0.10 }, { band: 9, gain: 0.08 }, { band: 10, gain: 0.12 }
+  ],
+  edm: [
+    { band: 0, gain: 0.22 }, { band: 1, gain: 0.20 }, { band: 2, gain: 0.18 },
+    { band: 5, gain: -0.08 }, { band: 7, gain: -0.10 }, { band: 9, gain: 0.15 },
+    { band: 10, gain: 0.20 }, { band: 11, gain: 0.22 }, { band: 12, gain: 0.18 }
+  ],
+  rock: [
+    { band: 0, gain: 0.18 }, { band: 1, gain: 0.12 }, { band: 3, gain: -0.06 },
+    { band: 4, gain: -0.10 }, { band: 5, gain: 0.05 }, { band: 7, gain: 0.12 },
+    { band: 8, gain: 0.15 }, { band: 10, gain: 0.15 }, { band: 11, gain: 0.12 }
+  ],
+  vocal: [
+    { band: 0, gain: -0.15 }, { band: 1, gain: -0.12 }, { band: 3, gain: 0.08 },
+    { band: 4, gain: 0.12 }, { band: 5, gain: 0.15 }, { band: 6, gain: 0.18 },
+    { band: 7, gain: 0.20 }, { band: 9, gain: 0.10 }
+  ],
+  podcast: [
+    { band: 0, gain: -0.20 }, { band: 1, gain: -0.15 }, { band: 2, gain: -0.08 },
+    { band: 4, gain: 0.10 }, { band: 5, gain: 0.12 }, { band: 6, gain: 0.15 }
+  ],
+  bassboost: [
+    { band: 0, gain: 0.30 }, { band: 1, gain: 0.25 }, { band: 2, gain: 0.20 },
+    { band: 3, gain: 0.12 }, { band: 4, gain: 0.08 }
+  ],
+  lofi: [
+    { band: 0, gain: 0.10 }, { band: 1, gain: 0.05 }, { band: 5, gain: -0.12 },
+    { band: 6, gain: -0.18 }, { band: 8, gain: -0.10 }, { band: 10, gain: 0.05 }
+  ]
+};
 
 const ensurePlaybackState = (guildId) => {
   const state = playbackState.get(guildId) || {};
@@ -728,6 +777,67 @@ async function lavalinkGetDuration(guildId)
   return player.currentTrack.info.length || null;
 }
 
+async function lavalinkSetEqualizer(guildId, presetOrBands)
+{
+  const player = getPlayer(guildId);
+
+  if(!player) return { status: "no_player" };
+
+  const normalize = (bands = []) =>
+    bands
+      .filter(Boolean)
+      .map(({ band, gain }) => ({
+        band: Number(band),
+        gain: Math.max(-0.25, Math.min(1, Number(gain)))
+      }))
+      .filter((b) => Number.isInteger(b.band) && b.band >= 0 && b.band <= 14);
+
+  const bands = Array.isArray(presetOrBands)
+    ? normalize(presetOrBands)
+    : normalize(EQUALIZER_PRESETS[presetOrBands?.toLowerCase()] ?? []);
+
+  if(!bands.length && presetOrBands && !EQUALIZER_PRESETS[presetOrBands?.toLowerCase()]) return { status: "invalid_preset" };
+
+  const current = equalizerState.get(guildId) ?? {};
+  const nextFilters = {
+    ...current,
+    equalizer: bands
+  }
+
+  await player.node.rest.updatePlayer({
+    guildId,
+    data: { filters: nextFilters }
+  })
+
+  equalizerState.set(guildId, nextFilters);
+  player.filters = nextFilters;
+  clearInactivityTimer(guildId, "setEqualizer");
+
+  return { status: "ok", filters: nextFilters };
+}
+
+async function lavalinkResetFilters(guildId)
+{
+  const player = getPlayer(guildId);
+
+  if(!player) return { status: "no_player" };
+
+  const baseline = { ...(player.filters ?? {}) };
+  delete baseline.equalizer;
+
+  await player.node.rest.updatePlayer({
+    guildId,
+    data: { filters: { ...baseline, equalizer: [] } }
+  });
+
+  equalizerState.set(guildId, { ...baseline, equalizer: []} );
+  player.filters = { ...baseline, equalizer: [] };
+  clearInactivityTimer(guildId, "resetFilters");
+
+  return { status: "ok" };
+  
+}
+
 module.exports = { 
   createPoru, 
   lavalinkPlay, 
@@ -742,7 +852,10 @@ module.exports = {
   lavalinkSeekTo, 
   lavalinkClearQueue, 
   lavalinkGetDuration,
-  lavalinkPrevious,};
+  lavalinkPrevious,
+  lavalinkSetEqualizer,
+  lavalinkResetFilters,
+};
 
 
 
