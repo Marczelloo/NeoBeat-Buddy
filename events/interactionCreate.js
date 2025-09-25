@@ -1,5 +1,6 @@
 const { Events } = require('discord.js');
 const queueCommand = require('../commands/music/queue');
+const helpCommand = require('../commands/utility/help');
 const { getClient } = require('../global');
 const { handleControlButtons } = require('../helpers/buttons');
 const { createPoru } = require('../helpers/lavalink/index');
@@ -8,6 +9,15 @@ const Log = require('../helpers/logs/log');
 module.exports = {
     name: Events.InteractionCreate,
     async execute(interaction){
+		if (interaction.isStringSelectMenu()) {
+			if (interaction.customId === 'help-category' && typeof helpCommand.handleCategorySelect === 'function') 
+			{
+				await helpCommand.handleCategorySelect(interaction);
+			}
+      		
+			return;
+    	}
+
 		if(interaction.isButton())
 		{
 			if(interaction.customId.startsWith('queue|'))

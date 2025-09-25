@@ -1,17 +1,22 @@
 {
   "name": "neo-beat-buddy",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "A Discord music bot",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon index.js",
     "start": "node index.js",
+    "start:dev": "dotenv -e .env.dev -- pnpm start",
+    "start:prod": "dotenv -e .env.prod -- pnpm start",
+    "docker:prod": "docker compose up -d --build",
     "deploy": "node deploy-commands.js",
-    "redeploy": "cd helpers/lavalink && docker compose --env-file ../../.env down && docker compose --env-file ../../.env up -d lavalink --force-recreate && docker compose --env-file ../../.env logs -f lavalink",
+    "deploy:dev": "dotenv -e .env.dev -- node deploy-commands.js",
+    "deploy:prod": "dotenv -e .env.prod -- node deploy-commands.js",
+    "lavalink:dev": "docker compose -f helpers/lavalink/docker-compose.yml up -d",
+    "lavalink:dev:down": "docker compose -f helpers/lavalink/docker-compose.yml down",
     "lint": "eslint . --ext .js,.cjs,.mjs",
     "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix"
   },
+
   "keywords": [],
   "author": "Marczelloo",
   "license": "ISC",
@@ -25,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "dotenv-cli": "^10.0.0",
     "eslint": "^9.36.0",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-n": "^17.23.1",

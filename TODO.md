@@ -29,7 +29,7 @@
 - [x] clean lavalinkManager and move helpers to other files !!!!
 - [x] (lavalink | rest of the files to be checked) move components/function to helpers folder/modules
 - [] add more logging and improve track logs
-- [] create docker file and compose lavalink and bot
+- [x] create docker file and compose lavalink and bot
 - [] cleanup code
 - [] create website for bot 
 

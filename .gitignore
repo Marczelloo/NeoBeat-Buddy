@@ -1,5 +1,7 @@
 node_modules
 .env
+.env.dev
+.env.prod
 *.tar
 /logs
 helpers/lavalink/youtube-cookies.txt
