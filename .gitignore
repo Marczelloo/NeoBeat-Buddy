@@ -5,3 +5,4 @@ node_modules
 *.tar
 /logs
 helpers/lavalink/youtube-cookies.txt
+*.txt

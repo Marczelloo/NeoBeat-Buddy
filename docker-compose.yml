@@ -20,17 +20,15 @@ services:
       - "2333:2333"
     restart: unless-stopped
     healthcheck:
-      test: [
-        "CMD-SHELL",
-        "curl -sf -H \"Authorization: ${LAVALINK_SERVER_PASSWORD:-youshallnotpass}\" http://localhost:2333/version || exit 1"
-      ]
+      test:
+        - "CMD-SHELL"
+        - "curl -sf -H \"Authorization: ${LAVALINK_SERVER_PASSWORD:-youshallnotpass}\" http://localhost:2333/version || exit 1"
       interval: 15s
       timeout: 5s
       retries: 5
 
   bot:
-    build: .
-    container_name: neo-bot
+    image: marczelloo/neo-beat-buddy:latest
     depends_on:
       lavalink:
         condition: service_healthy

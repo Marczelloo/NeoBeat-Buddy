@@ -8,6 +8,7 @@
     "start:dev": "dotenv -e .env.dev -- pnpm start",
     "start:prod": "dotenv -e .env.prod -- pnpm start",
     "docker:prod": "docker compose up -d --build",
+    "docker:build": "docker buildx build --platform linux/arm64 -t marczelloo/neo-beat-buddy:latest --push .",
     "deploy": "node deploy-commands.js",
     "deploy:dev": "dotenv -e .env.dev -- node deploy-commands.js",
     "deploy:prod": "dotenv -e .env.prod -- node deploy-commands.js",
