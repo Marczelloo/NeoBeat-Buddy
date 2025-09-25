@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getServerData, setGlobalVariable } = require('../../global');
 const { errorEmbed, successEmbed } = require('../../helpers/embeds');
+const { getGuildState, updateGuildState } = require('../../helpers/guildState.js');
 const { lavalinkStop } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
 
@@ -26,7 +26,7 @@ module.exports = {
         const stopped = await lavalinkStop(interaction.guild.id);
         if (stopped)
         {
-            const server = getServerData(interaction.guild.id);
+            const server = getGuildState(interaction.guild.id);
             const channelId = server.nowPlayingChannel;
             const messageId = server.nowPlayingMessage;
 
@@ -47,8 +47,10 @@ module.exports = {
                 }
             }
 
-            setGlobalVariable(interaction.guild.id, 'nowPlayingMessage', null);
-            setGlobalVariable(interaction.guild.id, 'nowPlayingChannel', null);
+            updateGuildState(interaction.guild.id, {
+                nowPlayingMessage: null,
+                nowPlayingChannel: null,
+            });
 
             return interaction.editReply({ embeds: [successEmbed('Music stopped and queue cleared.')] });
         }

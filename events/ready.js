@@ -1,7 +1,7 @@
 const { Events } = require('discord.js');
-const { getServerData } = require('../global');
 const { buildControlRows } = require('../helpers/buttons');
 const { playerEmbed } = require('../helpers/embeds');
+const { getGuildState } = require('../helpers/guildState.js');
 const { createPoru } = require('../helpers/lavalink/index');
 const Log = require('../helpers/logs/log');
 const { formatDuration } = require('../helpers/utils');
@@ -20,7 +20,7 @@ module.exports = {
             poru.init(client);
 
             poru.on('trackStart', async (player, track) => {
-                const server = getServerData(player.guildId);
+                const server = getGuildState(player.guildId);
 
                 const oldMessageId = server?.nowPlayingMessage;
                 const channelId = server?.nowPlayingChannel;
@@ -76,7 +76,7 @@ module.exports = {
            });
 
             poru.on('trackEnd', async (player) => {
-                const server = getServerData(player.guildIdd);
+                const server = getGuildState(player.guildId);
                 const channelId = server?.nowPlayingChannel;
                 const messageId = server?.nowPlayingMessage;
                 if (!channelId || !messageId) return;
@@ -98,7 +98,7 @@ module.exports = {
             })
 
             poru.on('queueEnd', async (player) => {
-                const server = getServerData(player.guildId);
+                const server = getGuildState(player.guildId);
                 const messageId = server?.nowPlayingMessage;
                 const channelId = server?.nowPlayingChannel;
 

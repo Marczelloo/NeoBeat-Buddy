@@ -1,8 +1,8 @@
 const { Events } = require('discord.js');
 const queueCommand = require('../commands/music/queue');
 const helpCommand = require('../commands/utility/help');
-const { getClient } = require('../global');
 const { handleControlButtons } = require('../helpers/buttons');
+const { getClient } = require('../helpers/clientRegistry');
 const { createPoru } = require('../helpers/lavalink/index');
 const Log = require('../helpers/logs/log');
 

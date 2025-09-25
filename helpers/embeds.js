@@ -1,5 +1,4 @@
 const { EmbedBuilder } = require("discord.js");
-const { LoopType } = require("../global");
 const { formatDuration } = require("./utils");
 
 const ICONS = {
@@ -16,8 +15,8 @@ const bold = (label, value) => `**${label}** ${value ?? '—'}`;
 module.exports = { 
     playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, position, loop, volume = 100) {
         const loopLabel =
-        loop === 'TRACK' || loop === LoopType.TRACK ? 'Track'
-        : loop === 'QUEUE' || loop === LoopType.QUEUE ? 'Queue'
+        loop === 'TRACK' ? 'Track'
+        : loop === 'QUEUE' ? 'Queue'
         : 'None';
 
         const infoLeft = [

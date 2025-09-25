@@ -1,8 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { setGlobalVariable, getServerData } = require('../../global.js');
 const { buildControlRows } = require('../../helpers/buttons.js');
 const { errorEmbed, playerEmbed } = require('../../helpers/embeds');
 const { songEmbed } = require('../../helpers/embeds.js');
+const { getGuildState, updateGuildState } = require('../../helpers/guildState.js');
 const { lavalinkPlay } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
 const { formatDuration } = require('../../helpers/utils.js');
@@ -45,7 +45,7 @@ module.exports = {
                 track.info.requesterId = requester.id;
                 track.info.requesterTag = requester.tag;
                 track.info.requesterAvatar = requester.displayAvatarURL({ size: 256 });
-                track.info.loop = getServerData(interaction.guild.id, 'loop') || 'Off';
+                track.info.loop = player.loop ?? 'NONE';
 
                 await interaction.editReply({ embeds: [songEmbed(track.info)]});
 
@@ -69,7 +69,7 @@ module.exports = {
                     );
 
                     const payload = { embeds: [nowPlayingEmbed], components: controls };
-                    const server = getServerData(interaction.guild.id);
+                    const server = getGuildState(interaction.guild.id);
                     const channelId = server.nowPlayingChannel;
                     const messageId = server.nowPlayingMessage;
 
@@ -95,8 +95,10 @@ module.exports = {
                         message = await interaction.followUp(payload);
                     }
 
-                    setGlobalVariable(interaction.guild.id, 'nowPlayingMessage', message.id);
-                    setGlobalVariable(interaction.guild.id, 'nowPlayingChannel', message.channelId ?? interaction.channel.id);
+                    updateGuildState(interaction.guild.id,{
+                        nowPlayingMessage: message.id,
+                        nowPlayingChannel: message.channelId ?? interaction.channel.id
+                    });
                 }
             }   
             catch(error)

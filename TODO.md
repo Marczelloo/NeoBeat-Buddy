@@ -24,12 +24,14 @@
 - [x] fix issue when queue is empty (last song from queue stops playing) and u want to play song its only added to the queue but its not starting playing (confirmed issue)
 - [x] fix after using stop command and playing somethign there are sent two players in message channel
 - [x] fix seekTo command (when song duration in 2:57 and i seek to 2:30 track ends and plays next one from queue)
+- [] fix fallback query when there is no queue (add to queue but since there arent any songs it will try to play it on another /play command)
 
 ## OTHER
 - [x] clean lavalinkManager and move helpers to other files !!!!
 - [x] (lavalink | rest of the files to be checked) move components/function to helpers folder/modules
-- [] add more logging and improve track logs
 - [x] create docker file and compose lavalink and bot
+- [x] remove global.js since lavalink poru/lavalink maintain most of these functions and migrate the needed ones 
+- [] add more logging and improve track logs
 - [] cleanup code
 - [] create website for bot 
 

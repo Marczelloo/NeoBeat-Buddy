@@ -5,7 +5,7 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits } = require('discord.js');
 
 const token = process.env.DISCORD_TOKEN;
-const { setClient } = require('./global.js');
+const { setClient } = require('./helpers/clientRegistry.js');
 const { createPoru } = require('./helpers/lavalink/index.js')
 const Log = require('./helpers/logs/log.js');
 

@@ -1,6 +1,6 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
-const { getServerData } = require('../global');
 const { playerEmbed } = require('./embeds');
+const { getGuildState } = require('./guildState');
 const {
     lavalinkPause,
     lavalinkResume,
@@ -137,7 +137,7 @@ async function handleControlButtons(interaction, player)
 
 async function refreshNowPlayingMessage(client, guildId, playerOverride = null, loopOverride, positionOverride)
 {
-    const server = getServerData(guildId);
+    const server = getGuildState(guildId);
     const channelId = server.nowPlayingChannel;
     const messageId = server.nowPlayingMessage;
 
