@@ -8,6 +8,7 @@
 - [x] true previous button functionality and command
 - [x] live equalizer
 - [] lyrics for current song (if possible make them synced with song)
+- [] improve info when adding playlist to queue (embed with playlist name and number of songs etc.)
 - [] autoplay (automatically searches for next song based on current one)
 - [] 24/7 command
 - [x] progress of song
@@ -34,6 +35,7 @@
 - [x] create docker file and compose lavalink and bot
 - [x] remove global.js since lavalink poru/lavalink maintain most of these functions and migrate the needed ones 
 - [] add more logging and improve track logs
+- [] cleanup help command and sepperate it into smaller chunks
 - [] cleanup code
 - [] create website for bot 
 
