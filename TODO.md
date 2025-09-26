@@ -25,6 +25,8 @@
 - [x] fix after using stop command and playing somethign there are sent two players in message channel
 - [x] fix seekTo command (when song duration in 2:57 and i seek to 2:30 track ends and plays next one from queue)
 - [] fix fallback query when there is no queue (add to queue but since there arent any songs it will try to play it on another /play command)
+- [] fix double player message on pi after adding one song to queue and it stopping playing and then adding another song to queue
+- [] fix after changing channel region bot freezes and is not playing anything, not throwing error any, responding to commands but not doing anything related to playing
 
 ## OTHER
 - [x] clean lavalinkManager and move helpers to other files !!!!

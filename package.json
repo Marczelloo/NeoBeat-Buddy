@@ -12,7 +12,7 @@
     "deploy": "node deploy-commands.js",
     "deploy:dev": "dotenv -e .env.dev -- node deploy-commands.js",
     "deploy:prod": "dotenv -e .env.prod -- node deploy-commands.js",
-    "lavalink:dev": "docker compose -f helpers/lavalink/docker-compose.yml up -d",
+    "lavalink:dev": "docker compose -f helpers/lavalink/docker-compose.yml --env-file .env.dev up -d",
     "lavalink:dev:down": "docker compose -f helpers/lavalink/docker-compose.yml down",
     "lint": "eslint . --ext .js,.cjs,.mjs",
     "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix"

@@ -1,7 +1,7 @@
 services:
   lavalink:
     env_file:
-      -  ../../.env
+      - ../../.env.dev
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: lavalink
     environment:
