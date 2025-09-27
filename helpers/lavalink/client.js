@@ -3,7 +3,8 @@ const { Poru } = require("poru");
 const { errorEmbed } = require("../embeds");
 const Log = require("../logs/log");
 const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
-const { ensurePlaybackState, cloneTrack, pushTrackHistory, playbackState } = require("./state");
+const { fetchLyricsFromNode } = require("./lyricsClient");
+const { ensurePlaybackState, cloneTrack, pushTrackHistory, playbackState, setLyricsState, clearLyricsState } = require("./state");
 const { clearInactivityTimer, scheduleInactivityDisconnect, clearProgressInterval, scheduleProgressUpdates } = require("./timers");
 
 let poru = null;
@@ -97,7 +98,7 @@ function createPoru(client) {
     }
   });
 
-  poru.on("trackStart", (player, track) => {
+  poru.on("trackStart", async (player, track) => {
     clearInactivityTimer(player.guildId, "trackStart");
     scheduleProgressUpdates(player);
 
@@ -106,6 +107,9 @@ function createPoru(client) {
     state.lastPosition = 0;
     state.lastTimestamp = Date.now();
     playbackState.set(player.guildId, state);
+
+    const lyricsPayload = await fetchLyricsFromNode(player, track.info).catch(() => null);
+    setLyricsState(player.guildId, lyricsPayload);
 
     Log.info(
       "Lavalink track started",
@@ -146,6 +150,7 @@ function createPoru(client) {
 
     state.currentTrack = null;
     playbackState.set(player.guildId, state);
+    clearLyricsState(player.guildId);
 
     if(player.queue.length === 0)
     {
@@ -175,6 +180,7 @@ function createPoru(client) {
 
     scheduleInactivityDisconnect(player, "queueEnd");
     clearProgressInterval(player.guildId);
+    clearLyricsState(player.guildId);
   });
 
   poru.on("playerUpdate", (player) => {

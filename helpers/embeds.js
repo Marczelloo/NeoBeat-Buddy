@@ -100,4 +100,15 @@ module.exports = {
         .setFooter({ text: 'Neo Beat Buddy • Queue system' })
         .setTimestamp();
     },
+    lyricsEmbed: function(title, description, footerNote) {
+        return new EmbedBuilder()
+            .setColor('#5865F2') // Discord blurple
+            .setAuthor({
+                name: '🎵 Lyrics',
+                iconURL: 'https://cdn.discordapp.com/emojis/741605543046807626.gif',
+            })
+            .setTitle(title)
+            .setDescription(description || null)
+            .setFooter({ text: footerNote || 'Neo Beat Buddy • Lyrics' });
+    },
 }

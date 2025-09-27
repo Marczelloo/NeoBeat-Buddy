@@ -7,7 +7,7 @@
 - [x] volume command
 - [x] true previous button functionality and command
 - [x] live equalizer
-- [] lyrics for current song (if possible make them synced with song)
+- [x] lyrics for current song (if possible make them synced with song | not possible - most of the time out of sync)
 - [] improve info when adding playlist to queue (embed with playlist name and number of songs etc.)
 - [] autoplay (automatically searches for next song based on current one)
 - [] 24/7 command
@@ -25,8 +25,87 @@
 - [x] fix issue when queue is empty (last song from queue stops playing) and u want to play song its only added to the queue but its not starting playing (confirmed issue)
 - [x] fix after using stop command and playing somethign there are sent two players in message channel
 - [x] fix seekTo command (when song duration in 2:57 and i seek to 2:30 track ends and plays next one from queue)
-- [] fix fallback query when there is no queue (add to queue but since there arent any songs it will try to play it on another /play command)
+- [x] fix fallback query when there is no queue (add to queue but since there arent any songs it will try to play it on another /play command)
+- [] fix requester info after adding playlist (displays unknown)
 - [] fix double player message on pi after adding one song to queue and it stopping playing and then adding another song to queue
+▌INFO         27.09.2025 01:36:07.996 █ - █ guild=857906909930455070 █ track=Zwariowana noc [1G2Mvdoy6VqE1szk91yfFS] █ reason={
+  op: 'event',                                                                                                                                                                                     
+  type: 'TrackEndEvent',                                                                                                                                                                           
+  guildId: '857906909930455070',                                                                                                                                                                   
+  track: {                                                                                                                                                                                         
+    encoded: 'QAABWQMADlp3YXJpb3dhbmEgbm9jAAV2YXNlcgAAAAAAAfIPABYxRzJNdmRveTZWcUUxc3prOTF5ZkZTAAEANWh0dHBzOi8vb3Blbi5zcG90aWZ5LmNvbS90cmFjay8xRzJNdmRveTZWcUUxc3prOTF5ZkZTAQBAaHR0cHM6Ly9pLnNjZG4uY28vaW1hZ2UvYWI2NzYxNmQwMDAwYjI3M2YxODY2MTUyMDBkMDI4OGVlYTA4Yzc4YQEADFBMQzA2MjM4NTAzNgAHc3BvdGlmeQEADlp3YXJpb3dhbmEgbm9jAQA1aHR0cHM6Ly9vcGVuLnNwb3RpZnkuY29tL2FsYnVtLzB5akFJd1h5NjhIOTJJakpMOUI1NDEBADZodHRwczovL29wZW4uc3BvdGlmeS5jb20vYXJ0aXN0LzN4YXFCZUd2TXRMNHFBQnJnUnBKdzIAAAAAAAAAAAAAAA==',                                                                                                     
+    info: [Object],                                                                                                                                                                                
+    pluginInfo: [Object],                                                                                                                                                                          
+    userData: {}                                                                                                                                                                                   
+  },                                                                                                                                                                                               
+  reason: 'finished'                                                                                                                                                                               
+} █ queueLength=539 █ next=Zwariowana noc [1G2Mvdoy6VqE1szk91yfFS]      Lavalink track ended
+ ▌ERROR        27.09.2025 01:36:08.010 █ - █ guild=857906909930455070 █ track=Szonlover [5cQrcDeXnXmJVLrM1fqJxv] █ queueLength=538 █ error={
+  op: 'event',                                                                                                                                                                                     
+  type: 'TrackExceptionEvent',                                                                                                                                                                     
+  guildId: '857906909930455070',                                                                                                                                                                   
+  track: {                                                                                                                                                                                         
+    encoded: 'QAABWQMADlp3YXJpb3dhbmEgbm9jAAV2YXNlcgAAAAAAAfIPABYxRzJNdmRveTZWcUUxc3prOTF5ZkZTAAEANWh0dHBzOi8vb3Blbi5zcG90aWZ5LmNvbS90cmFjay8xRzJNdmRveTZWcUUxc3prOTF5ZkZTAQBAaHR0cHM6Ly9pLnNjZG4uY28vaW1hZ2UvYWI2NzYxNmQwMDAwYjI3M2YxODY2MTUyMDBkMDI4OGVlYTA4Yzc4YQEADFBMQzA2MjM4NTAzNgAHc3BvdGlmeQEADlp3YXJpb3dhbmEgbm9jAQA1aHR0cHM6Ly9vcGVuLnNwb3RpZnkuY29tL2FsYnVtLzB5akFJd1h5NjhIOTJJakpMOUI1NDEBADZodHRwczovL29wZW4uc3BvdGlmeS5jb20vYXJ0aXN0LzN4YXFCZUd2TXRMNHFBQnJnUnBKdzIAAAAAAAAAAAAAAA==',                                                                                                     
+    info: [Object],                                                                                                                                                                                
+    pluginInfo: [Object],                                                                                                                                                                          
+    userData: {}                                                                                                                                                                                   
+  },                                                                                                                                                                                               
+  exception: {                                                                                                                                                                                     
+    message: 'No mirror found for track',                                                                                                                                                          
+    severity: 'common',                                                                                                                                                                            
+    cause: 'com.github.topi314.lavasrc.mirror.TrackNotFoundException: No mirror found for track',                                                                                                  
+    causeStackTrace: 'com.github.topi314.lavasrc.mirror.TrackNotFoundException: No mirror found for track\n' +                                                                                     
+      '\tat com.github.topi314.lavasrc.mirror.MirroringAudioTrack.process(MirroringAudioTrack.java:59)\n' +                                                                                        
+      '\tat com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor.execute(LocalAudioTrackExecutor.java:109)\n' +                                                                 
+      '\tat com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager.lambda$executeTrack$2(DefaultAudioPlayerManager.java:339)\n' +                                                       
+      '\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)\n' +                                                                                                       
+      '\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)\n' +                                                                                                      
+      '\tat java.base/java.lang.Thread.run(Unknown Source)\n'                                                                                                                                      
+  }                                                                                                                                                                                                
+}      Lavalink track error
+ ▌ERROR        27.09.2025 01:36:08.013 █ - █ guild=857906909930455070 █ track=Szonlover [5cQrcDeXnXmJVLrM1fqJxv] █ queueLength=538 █ error={
+  op: 'event',                                                                                                                                                                                     
+  type: 'TrackExceptionEvent',                                                                                                                                                                     
+  guildId: '857906909930455070',                                                                                                                                                                   
+  track: {                                                                                                                                                                                         
+    encoded: 'QAABWQMADlp3YXJpb3dhbmEgbm9jAAV2YXNlcgAAAAAAAfIPABYxRzJNdmRveTZWcUUxc3prOTF5ZkZTAAEANWh0dHBzOi8vb3Blbi5zcG90aWZ5LmNvbS90cmFjay8xRzJNdmRveTZWcUUxc3prOTF5ZkZTAQBAaHR0cHM6Ly9pLnNjZG4uY28vaW1hZ2UvYWI2NzYxNmQwMDAwYjI3M2YxODY2MTUyMDBkMDI4OGVlYTA4Yzc4YQEADFBMQzA2MjM4NTAzNgAHc3BvdGlmeQEADlp3YXJpb3dhbmEgbm9jAQA1aHR0cHM6Ly9vcGVuLnNwb3RpZnkuY29tL2FsYnVtLzB5akFJd1h5NjhIOTJJakpMOUI1NDEBADZodHRwczovL29wZW4uc3BvdGlmeS5jb20vYXJ0aXN0LzN4YXFCZUd2TXRMNHFBQnJnUnBKdzIAAAAAAAAAAAAAAA==',                                                                                                     
+    info: [Object],                                                                                                                                                                                
+    pluginInfo: [Object],                                                                                                                                                                          
+    userData: {}                                                                                                                                                                                   
+  },                                                                                                                                                                                               
+  exception: {                                                                                                                                                                                     
+    message: 'No mirror found for track',                                                                                                                                                          
+    severity: 'common',                                                                                                                                                                            
+    cause: 'com.github.topi314.lavasrc.mirror.TrackNotFoundException: No mirror found for track',                                                                                                  
+    causeStackTrace: 'com.github.topi314.lavasrc.mirror.TrackNotFoundException: No mirror found for track\n' +                                                                                     
+      '\tat com.github.topi314.lavasrc.mirror.MirroringAudioTrack.process(MirroringAudioTrack.java:59)\n' +                                                                                        
+      '\tat com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor.execute(LocalAudioTrackExecutor.java:109)\n' +                                                                 
+      '\tat com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager.lambda$executeTrack$2(DefaultAudioPlayerManager.java:339)\n' +                                                       
+      '\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)\n' +                                                                                                       
+      '\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)\n' +                                                                                                      
+      '\tat java.base/java.lang.Thread.run(Unknown Source)\n'                                                                                                                                      
+  }                                                                                                                                                                                                
+}      Lavalink track error
+ ▌INFO         27.09.2025 01:36:08.015 █ - █ guild=857906909930455070 █ track=Szonlover [5cQrcDeXnXmJVLrM1fqJxv] █ queueLength=538      Lavalink track started
+ ▌INFO         27.09.2025 01:36:08.020 █ - █ guild=857906909930455070 █ track=Szonlover [5cQrcDeXnXmJVLrM1fqJxv] █ reason={
+  op: 'event',                                                                                                                                                                                     
+  type: 'TrackEndEvent',                                                                                                                                                                           
+  guildId: '857906909930455070',                                                                                                                                                                   
+  track: {                                                                                                                                                                                         
+    encoded: 'QAABWgMACVN6b25sb3ZlcgAQUC5JLldPIEJPWVogR0FORwAAAAAAA7DhABY1Y1FyY0RlWG5YbUpWTHJNMWZxSnh2AAEANWh0dHBzOi8vb3Blbi5zcG90aWZ5LmNvbS90cmFjay81Y1FyY0RlWG5YbUpWTHJNMWZxSnh2AQBAaHR0cHM6Ly9pLnNjZG4uY28vaW1hZ2UvYWI2NzYxNmQwMDAwYjI3MzBlN2Y1MzFkYmM3NGVjMzczODJlOGM5ZQEADFFaRVM2MjE4MDY4NQAHc3BvdGlmeQEACVN6b25sb3ZlcgEANWh0dHBzOi8vb3Blbi5zcG90aWZ5LmNvbS9hbGJ1bS8xN09MMWJYNjFaS1phTnhTa3ZFZmdaAQA2aHR0cHM6Ly9vcGVuLnNwb3RpZnkuY29tL2FydGlzdC80MTNXVTJlb2w2eFBqZ2lnR1g1ZWU4AAAAAAAAAAAAAAA=',                                                                                                     
+    info: [Object],                                                                                                                                                                                
+    pluginInfo: [Object],                                                                                                                                                                          
+    userData: {}                                                                                                                                                                                   
+  },                                                                                                                                                                                               
+  reason: 'stopped'                                                                                                                                                                                
+} █ queueLength=538 █ next=Szonlover [5cQrcDeXnXmJVLrM1fqJxv]      Lavalink track ended
+ ▌INFO         27.09.2025 01:36:08.025 █ - █ guild=857906909930455070 █ track=SIĘ WJEŻDŻA [2yEWVnp65tTXSrRW03IqXs] █ queueLength=537      Lavalink track started
+ ▌ERROR        27.09.2025 01:36:08.228 █ -      Failed to disable buttons on track end DiscordAPIError[10008]: Unknown Message
+ ▌ERROR        27.09.2025 01:36:08.249 █ -      Failed to delete old now playing message DiscordAPIError[10008]: Unknown Message
+ ▌INFO         27.09.2025 01:36:08.377 █ - █ guild=857906909930455070 █ from=Szonlover [5cQrcDeXnXmJVLrM1fqJxv] █ to=Szonlover [-TFNO4andzU] █ source=ytmsearch      Queued fallback track
+ ▌ERROR        27.09.2025 01:36:08.446 █ -      Failed to delete old now playing message DiscordAPIError[10008]: Unknown Message
+ ▌WARNING      27.09.2025 01:36:08.486 █ - █ guild=857906909930455070 █ queueLength=538      Waiting for Lavalink auto-skip after error
+ ▌ERROR        27.09.2025 01:36:13.212 █ -      Failed to disable buttons on track end DiscordAPIError[10008]: Unknown Message
 - [] fix after changing channel region bot freezes and is not playing anything, not throwing error any, responding to commands but not doing anything related to playing
 
 ## OTHER

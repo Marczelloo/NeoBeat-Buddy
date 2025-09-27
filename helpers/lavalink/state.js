@@ -3,6 +3,7 @@ const { TRACK_HISTORY_LIMIT } = require("./constants");
 const inactivityTimers = new Map();
 const playbackState = new Map();
 const equalizerState = new Map();
+const lyricsState = new Map();
 
 const ensurePlaybackState = (guildId) => {
   const state = playbackState.get(guildId) || {};
@@ -37,6 +38,14 @@ const pushTrackHistory = (guildId, track) => {
   }
 }
 
+const setLyricsState = (guildId, payload) => {
+  if (payload) lyricsState.set(guildId, payload);
+  else lyricsState.delete(guildId);
+};
+
+const getLyricsState = (guildId) => lyricsState.get(guildId) ?? null;
+const clearLyricsState = (guildId) => lyricsState.delete(guildId);
+
 module.exports = {
   inactivityTimers,
   playbackState,
@@ -44,4 +53,7 @@ module.exports = {
   ensurePlaybackState,
   cloneTrack,
   pushTrackHistory,
+  setLyricsState,
+  getLyricsState,
+  clearLyricsState,
 };

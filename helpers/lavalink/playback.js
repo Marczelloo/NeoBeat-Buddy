@@ -1,7 +1,7 @@
 const Log = require("../logs/log");
 const { describeTrack } = require("./fallbacks");
 const { getPlayer, getPoru } = require("./players");
-const { cloneTrack, playbackState, ensurePlaybackState } = require("./state");
+const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
 const { clearInactivityTimer, clearProgressInterval, scheduleInactivityDisconnect, scheduleProgressUpdates } = require("./timers");
 
 async function ensurePlayer(guildId, voiceId, textId) {
@@ -104,8 +104,8 @@ async function lavalinkStop(guildId) {
   await player.destroy();
   clearInactivityTimer(guildId, "stopCommand");
   clearProgressInterval(guildId);
+  clearLyricsState(guildId);
   playbackState.delete(guildId);
-
 
   return true;
 }
