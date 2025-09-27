@@ -111,4 +111,36 @@ module.exports = {
             .setDescription(description || null)
             .setFooter({ text: footerNote || 'Neo Beat Buddy • Lyrics' });
     },
+    playlistEmbed({
+        title,
+        url,
+        trackCount,
+        totalDurationMs,
+        requesterTag,
+        requesterAvatar,
+        source,
+    }) {
+        const durationLabel = Number.isFinite(totalDurationMs)
+            ? formatDuration(totalDurationMs)
+            : 'Unknown';
+
+        return new EmbedBuilder()
+            .setColor('#e91e63')
+            .setAuthor({
+                name: '🎶 Playlist Added',
+                iconURL: 'https://cdn.discordapp.com/emojis/853314041004015616.png',
+            })
+            .setTitle(title)
+            .setURL(url)
+            .setDescription(source ? `Source • **${source}**` : null)
+            .addFields(
+                { name: 'Tracks', value: `**${trackCount}**`, inline: true },
+                { name: 'Total duration', value: `**${durationLabel}**`, inline: true },
+            )
+            .setFooter({
+                text: requesterTag ? `Requested by ${requesterTag}` : 'Neo Beat Buddy • Queue',
+                iconURL: requesterAvatar ?? undefined,
+            })
+            .setTimestamp();
+    },
 }

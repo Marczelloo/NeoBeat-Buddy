@@ -8,14 +8,16 @@
 - [x] true previous button functionality and command
 - [x] live equalizer
 - [x] lyrics for current song (if possible make them synced with song | not possible - most of the time out of sync)
-- [] improve info when adding playlist to queue (embed with playlist name and number of songs etc.)
+- [x] improve info when adding playlist to queue (embed with playlist name and number of songs etc.)
 - [] autoplay (automatically searches for next song based on current one)
+- [] possibility to remove selected song from queue (by id or title )
+- [] add dj role, only users with dj role can add songs to queue, use player, handle queue etc.
 - [] 24/7 command
 - [x] progress of song
 - [] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )
 - [] create help command with descriptions and select form for additional info (possibly per categories or usage of specific command)
 - [] other commands
-- [] create readme file 
+- [x] create readme file (update it later with bot implementation)
 
 ## FIXES
 - [x] fix issue when playing age restricted songs and one fails then some songs are skipped 
@@ -26,7 +28,7 @@
 - [x] fix after using stop command and playing somethign there are sent two players in message channel
 - [x] fix seekTo command (when song duration in 2:57 and i seek to 2:30 track ends and plays next one from queue)
 - [x] fix fallback query when there is no queue (add to queue but since there arent any songs it will try to play it on another /play command)
-- [] fix requester info after adding playlist (displays unknown)
+- [x] fix requester info after adding playlist (displays unknown)
 - [] fix double player message on pi after adding one song to queue and it stopping playing and then adding another song to queue
 ▌INFO         27.09.2025 01:36:07.996 █ - █ guild=857906909930455070 █ track=Zwariowana noc [1G2Mvdoy6VqE1szk91yfFS] █ reason={
   op: 'event',                                                                                                                                                                                     

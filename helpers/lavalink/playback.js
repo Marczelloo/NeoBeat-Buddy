@@ -26,7 +26,7 @@ async function ensurePlayer(guildId, voiceId, textId) {
   return player;
 }
 
-async function lavalinkPlay({ guildId, voiceId, textId, query }) {
+async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
   const player = await ensurePlayer(guildId, voiceId, textId);
   const poru = getPoru();
   let startImmediately = false;
@@ -54,9 +54,22 @@ async function lavalinkPlay({ guildId, voiceId, textId, query }) {
     tracksToAdd = [nowPlaying]
   }
 
+  const isPlaylist = res.loadType === 'playlist';
+  const playlistInfo = isPlaylist ? (res.playlistInfo ?? {}) : null;
+  const playlistTrackCount = tracksToAdd.length;
+  const playlistDurationMs = isPlaylist
+    ? tracksToAdd.reduce((sum, t) => sum + (t.info.length ?? 0), 0)
+    : 0;
+
+  const requesterMeta = requester ? {
+    requesterId: requester.id,
+    requesterTag: requester.tag,
+    requesterAvatar: requester.avatar,
+  } : {};
+
   for(const track of tracksToAdd)
   {
-    track.info.requester = textId;
+    track.info = { ...(track.info || {}), ...requesterMeta, requester: textId };
     track.userData = {
       ...(track.userData || {}),
       fallbackAttempts: 0,
@@ -92,7 +105,15 @@ async function lavalinkPlay({ guildId, voiceId, textId, query }) {
 
   clearInactivityTimer(guildId, "playRequest");
 
-  return { track: nowPlaying, player, startImmediately };
+  return {
+    track: nowPlaying,
+    player,
+    startImmediately,
+    isPlaylist,
+    playlistInfo,
+    playlistTrackCount,
+    playlistDurationMs,
+  };
 }
 
 async function lavalinkStop(guildId) {

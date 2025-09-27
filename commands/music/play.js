@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { buildControlRows } = require('../../helpers/buttons.js');
-const { errorEmbed, playerEmbed } = require('../../helpers/embeds');
+const { errorEmbed, playerEmbed, playlistEmbed } = require('../../helpers/embeds');
 const { songEmbed } = require('../../helpers/embeds.js');
 const { getGuildState, updateGuildState } = require('../../helpers/guildState.js');
 const { lavalinkPlay } = require('../../helpers/lavalink/index');
@@ -32,22 +32,53 @@ module.exports = {
 
             try
             {
-                const { track, player, startImmediately } = await lavalinkPlay({
+                const requester = {
+                    id: interaction.user.id,
+                    tag: interaction.user.tag,
+                    avatar: interaction.user.displayAvatarURL({ size: 256 }),
+                }
+
+                const { 
+                    track, 
+                    player, 
+                    startImmediately,
+                    isPlaylist,
+                    playlistInfo,
+                    playlistTrackCount,
+                    playlistDurationMs
+                } = await lavalinkPlay({
                     guildId: interaction.guild.id,
                     voiceId: voiceChannel.id,
                     textId: interaction.channel.id,
                     query: query,
+                    requester: requester
                 })
 
                 const controls = buildControlRows({ paused: false, loopMode: player.loop ?? 'NONE'})
 
-                const requester = interaction.user;
-                track.info.requesterId = requester.id;
-                track.info.requesterTag = requester.tag;
-                track.info.requesterAvatar = requester.displayAvatarURL({ size: 256 });
                 track.info.loop = player.loop ?? 'NONE';
 
-                await interaction.editReply({ embeds: [songEmbed(track.info)]});
+                if(isPlaylist)
+                {
+                    await interaction.editReply({
+                        embeds: [
+                        playlistEmbed({
+                            title: playlistInfo?.name ?? track.info.title ?? 'Playlist',
+                            url: playlistInfo?.url ?? track.info.uri,
+                            trackCount: playlistTrackCount,
+                            totalDurationMs: playlistDurationMs,
+                            requesterTag: requester.tag,
+                            requesterAvatar: requester.avatar,
+                            source: track.info?.sourceName ?? 'Unknown',
+                        }),
+                        ],
+                    });
+                }
+                else
+                {
+                    await interaction.editReply({ embeds: [songEmbed(track.info)]});
+                }
+
 
                 if(startImmediately)
                 {
@@ -60,8 +91,8 @@ module.exports = {
                         info.uri,
                         artwork,
                         info.author ?? 'Unknown',
-                        info.requesterTag,
-                        info.requesterAvatar,
+                        requester.tag,
+                        requester.avatar,
                         duration,
                         position,
                         info.loop,
