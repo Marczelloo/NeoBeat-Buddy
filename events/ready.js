@@ -21,26 +21,16 @@ module.exports = {
 
             poru.on('trackStart', async (player) => {
                 const info = player.currentTrack?.info || {};
-                const state = updateGuildState(player.guildId, { nowPlayingReplacing: true }) ?? {};
+                const state = getGuildState(player.guildId) ?? {};
                 const channelId = state.nowPlayingChannel ?? player.textChannel;
+                if (!channelId) return;
 
-                if (!channelId) {
-                    Log.warn('trackStart without known channel', `guild=${player.guildId}`);
-                    return;
-                }
-
-                const channel = await client.channels.fetch(channelId).catch((err) => {
-                    Log.error('Failed to fetch now-playing channel', err, `guild=${player.guildId}`, `channel=${channelId}`);
-                    return null;
-                });
+                const channel = await client.channels.fetch(channelId).catch(() => null);
                 if (!channel) return;
 
-                const previousId = state.nowPlayingMessage ?? null;
-                if (previousId) {
-                    await channel.messages.delete(previousId).catch((err) => {
-                    if (err?.code !== 10008) {
-                        Log.error('trackStart failed to delete previous now-playing', err, `guild=${player.guildId}`, `message=${previousId}`);
-                    }
+                if (state.nowPlayingMessage) {
+                    await channel.messages.delete(state.nowPlayingMessage).catch((err) => {
+                    if (err?.code !== 10008) Log.error('Failed to delete now-playing message', err);
                     });
                 }
 
@@ -66,52 +56,32 @@ module.exports = {
                     loopMode: player.loop ?? 'NONE',
                 });
 
-                const message = await channel.send({ embeds: [embed], components: controls }).catch((err) => {
-                    Log.error('Failed to send now-playing message', err, `guild=${player.guildId}`);
-                    return null;
-                });
-                if (!message) {
-                    updateGuildState(player.guildId, { nowPlayingReplacing: false });
-                    return;
-                }
+                const message = await channel.send({ embeds: [embed], components: controls }).catch(() => null);
+                if (!message) return;
 
                 updateGuildState(player.guildId, {
                     nowPlayingMessage: message.id,
                     nowPlayingChannel: channel.id,
                     nowPlayingRequesterTag: info.requesterTag ?? 'Unknown',
                     nowPlayingRequesterAvatar: info.requesterAvatar ?? null,
-                    nowPlayingReplacing: false,
-                    nowPlayingVersion: (state.nowPlayingVersion ?? 0) + 1,
                 });
-
-                Log.info('Posted now-playing message', `guild=${player.guildId}`, `message=${message.id}`, `title=${info.title ?? 'Unknown'}`);
             });
 
 
             poru.on('trackEnd', async (player) => {
                 const state = getGuildState(player.guildId);
-                if (!state) return;
-
-                // If something else is already replacing the card, let that run.
-                if (state.nowPlayingReplacing) return;
-
-                const channelId = state.nowPlayingChannel;
-                const messageId = state.nowPlayingMessage;
+                const channelId = state?.nowPlayingChannel;
+                const messageId = state?.nowPlayingMessage;
                 if (!channelId || !messageId) return;
 
                 const channel = await client.channels.fetch(channelId).catch(() => null);
                 if (!channel) return;
 
                 await channel.messages.delete(messageId).catch((err) => {
-                    if (err?.code !== 10008) {
-                    Log.error('trackEnd failed to delete now-playing message', err, `guild=${player.guildId}`, `message=${messageId}`);
-                    }
+                    if (err?.code !== 10008) Log.error('Failed to delete now-playing message on track end', err);
                 });
 
-                updateGuildState(player.guildId, {
-                    nowPlayingMessage: null,
-                    nowPlayingReplacing: false,
-                });
+                updateGuildState(player.guildId, { nowPlayingMessage: null });
             });
 
             poru.on('queueEnd', async (player) => {
