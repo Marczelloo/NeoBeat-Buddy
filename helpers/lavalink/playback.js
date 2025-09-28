@@ -38,16 +38,33 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
   }
 
   const res = await poru.resolve({ query: isUrl ? q : q });
-  if (!res || !res.tracks || res.tracks.length === 0) throw new Error("No results found");
 
-  let tracksToAdd = [];
-  let nowPlaying = res.tracks[0];
+  const validTracks = Array.isArray(res?.tracks)
+    ? res.tracks.filter(
+        (t) =>
+          t &&
+          typeof t.track === 'string' &&
+          t.track.length > 0 &&
+          t.info &&
+          typeof t.info === 'object'
+      )
+    : [];
+
+  if (!validTracks.length) {
+    throw new Error(
+      res?.loadType === 'loadFailed'
+        ? res?.exception?.message ?? 'Failed to load track (Lavalink error).'
+        : 'No playable tracks found.'
+    );
+  };
+
+  let tracksToAdd = validTracks;
+  let nowPlaying = validTracks[0];
 
   if(res.loadType === 'playlist')
   {
     const selectedIndex = res.playlistInfo?.selectedTrack ?? 0;
-    nowPlaying = res.tracks[selectedIndex] ?? res.tracks[0];
-    tracksToAdd = res.tracks;
+    nowPlaying = tracksToAdd[selectedIndex] ?? nowPlaying;
   }
   else
   {
@@ -69,11 +86,14 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
 
   for(const track of tracksToAdd)
   {
+    if(!track) continue;
+
     track.info = { ...(track.info || {}), ...requesterMeta, requester: textId };
     track.userData = {
       ...(track.userData || {}),
       fallbackAttempts: 0,
     };
+
     await player.queue.add(track);
   }
 
@@ -106,7 +126,7 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
   clearInactivityTimer(guildId, "playRequest");
 
   return {
-    track: nowPlaying,
+    track: cloneTrack(nowPlaying),
     player,
     startImmediately,
     isPlaylist,
@@ -168,6 +188,35 @@ async function lavalinkSkip(guildId) {
     scheduleInactivityDisconnect(player, "skipEmpty");
   }
   return true;
+}
+
+async function lavalinkRemoveFromQueue(guildId, { position, title })
+{
+  const player = getPlayer(guildId);
+  if(!player || player.queue.length === 0) return { status: "empty_queue" };
+
+  let index = -1;
+
+  if(typeof position === 'number')
+  {
+    index = position - 1;
+  }
+  else if(typeof title === 'string' && title.trim())
+  {
+    const term = title.trim().toLowerCase();
+    index = player.queue.findIndex((track) => track?.info?.title?.toLowerCase().includes(term));
+  }
+
+  if(index < 0 || index >= player.queue.length) return { status: "not_found" };
+
+  const removed = player.queue.remove(index);
+  clearInactivityTimer(guildId, "removeFromQueue");
+
+  return {
+    status: "removed",
+    trackTitle: removed?.info?.title ?? "Unknown title",
+    index: index + 1,
+  };
 }
 
 async function lavalinkPrevious(guildId)
@@ -267,6 +316,7 @@ module.exports = {
     lavalinkPause,
     lavalinkResume,
     lavalinkSkip,
+    lavalinkRemoveFromQueue,
     lavalinkPrevious,
     lavalinkToggleLoop,
     lavalinkShuffle,

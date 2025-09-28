@@ -10,6 +10,7 @@ const {
     createPoru,
     lavalinkPrevious,
 } = require('./lavalink/index');
+const Log = require('./logs/log');
 const { formatDuration } = require('./utils');
 
 const LOOP_EMOJI = '1198248581304418396';
@@ -135,13 +136,19 @@ async function handleControlButtons(interaction, player)
     );
 }
 
-async function refreshNowPlayingMessage(client, guildId, playerOverride = null, loopOverride, positionOverride)
-{
+async function refreshNowPlayingMessage(client, guildId, playerOverride = null, loopOverride, positionOverride) {
     const server = getGuildState(guildId);
+    if (!server || server.nowPlayingReplacing) {
+        Log.info('refreshNowPlayingMessage skipped (replace in progress)', `guild=${guildId}`);
+        return;
+    }
+
     const channelId = server.nowPlayingChannel;
     const messageId = server.nowPlayingMessage;
-
-    if (!channelId || !messageId) return;
+    if (!channelId || !messageId) {
+        Log.info('refreshNowPlayingMessage missing channel/message', `guild=${guildId}`);
+        return;
+    }
 
     const player = playerOverride ?? createPoru(client).players.get(guildId);
     if (!player) return;
@@ -150,14 +157,15 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
     const controls = buildControlRows({ paused: player.isPaused, loopMode, disabled: !player.currentTrack });
 
     let embed = null;
-    if (player.currentTrack)
+
+    if (player.currentTrack) 
     {
         const info = player.currentTrack.info || {};
         const artwork = info.artworkUrl ?? info.image ?? 'https://i.imgur.com/3g7nmJC.png';
         const elapsedMs = positionOverride ?? player.position ?? 0;
         const durationLabel = info.isStream ? 'Live' : formatDuration(info.length ?? 0);
         const positionLabel = info.isStream ? 'Live' : formatDuration(elapsedMs);
-        
+
         embed = playerEmbed(
             info.title,
             info.uri,
@@ -173,40 +181,37 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
     }
 
     const channel = await client.channels.fetch(channelId).catch(() => null);
-    if(!channel) return;
+    
+    if (!channel) return;
 
-    const message = await channel.messages
-    .fetch(messageId)
-    .catch((err) => {
-        if (err?.code === 10008) 
-        {
-            server.nowPlayingMessage = null;
+    const message = await channel.messages.fetch(messageId).catch((err) => {
+        if (err?.code === 10008) {
+            Log.info('refreshNowPlayingMessage target already gone', `guild=${guildId}`, `message=${messageId}`);
             return null;
         }
-
         throw err;
-    })
+    });
 
-    if(!message) return;
+    if (!message) return;
 
     const payload = { components: controls };
     if (embed) payload.embeds = [embed];
 
-    try
+    try 
     {
         await message.edit(payload);
-    }
-    catch(err)
+    } 
+    catch (err) 
     {
-        if(err?.code === 10008)
-        {
-            server.nowPlayingMessage = null;
-            server.nowPlayingChannel = null;
+        if (err?.code === 10008) {
+            Log.info('refreshNowPlayingMessage edit target missing', `guild=${guildId}`, `message=${messageId}`);
             return;
         }
+        
         throw err;
     }
 }
+
 
 module.exports = {
     skipButton,

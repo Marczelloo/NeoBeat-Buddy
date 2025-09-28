@@ -9,13 +9,15 @@
 - [x] live equalizer
 - [x] lyrics for current song (if possible make them synced with song | not possible - most of the time out of sync)
 - [x] improve info when adding playlist to queue (embed with playlist name and number of songs etc.)
-- [] autoplay (automatically searches for next song based on current one)
-- [] possibility to remove selected song from queue (by id or title )
+- [x] possibility to remove selected song from queue (by id or title )
+- [x] improve messages when track is age restricted and will be queued with fallback (now shows 2 messages)
 - [] add dj role, only users with dj role can add songs to queue, use player, handle queue etc.
+- [] autoplay (automatically searches for next song based on current one)
 - [] 24/7 command
+- [] server playlists, user playlists
 - [x] progress of song
 - [] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )
-- [] create help command with descriptions and select form for additional info (possibly per categories or usage of specific command)
+- [x] create help command with descriptions and select form for additional info (possibly per categories or usage of specific command)
 - [] other commands
 - [x] create readme file (update it later with bot implementation)
 

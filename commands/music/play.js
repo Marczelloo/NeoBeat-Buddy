@@ -1,11 +1,9 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { buildControlRows } = require('../../helpers/buttons.js');
-const { errorEmbed, playerEmbed, playlistEmbed } = require('../../helpers/embeds');
+const { errorEmbed,playlistEmbed } = require('../../helpers/embeds');
 const { songEmbed } = require('../../helpers/embeds.js');
-const { getGuildState, updateGuildState } = require('../../helpers/guildState.js');
+const { updateGuildState } = require('../../helpers/guildState.js');
 const { lavalinkPlay } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
-const { formatDuration } = require('../../helpers/utils.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -54,7 +52,22 @@ module.exports = {
                     requester: requester
                 })
 
-                const controls = buildControlRows({ paused: false, loopMode: player.loop ?? 'NONE'})
+                if(!track || !track.info)
+                {
+                    Log.warning("Lavalink returned a track without metadata", {
+                        guild: interaction.guild.id,
+                        query
+                    })
+
+                    return interaction.editReply({
+                        embeds: [
+                            errorEmbed(
+                                'Track unavailable',
+                                'YouTube would not give me the metadata for that track. If it is age‑restricted, I will keep trying another source automatically.'
+                            )
+                        ]
+                    })
+                }
 
                 track.info.loop = player.loop ?? 'NONE';
 
@@ -79,57 +92,15 @@ module.exports = {
                     await interaction.editReply({ embeds: [songEmbed(track.info)]});
                 }
 
+                updateGuildState(interaction.guild.id, { 
+                    nowPlayingChannel: interaction.channel.id
+                });
 
                 if(startImmediately)
                 {
-                    const info = player.currentTrack.info || {};
-                    const duration = info.isStream ? 'Live' : formatDuration(info.length ?? 0);
-                    const position = info.isStream ? 'Live' : formatDuration(player.position ?? 0);
-                    const artwork = info.artworkUrl ?? info.image ?? 'https://i.imgur.com/3g7nmJC.png';
-                    const nowPlayingEmbed = playerEmbed(
-                        info.title,
-                        info.uri,
-                        artwork,
-                        info.author ?? 'Unknown',
-                        requester.tag,
-                        requester.avatar,
-                        duration,
-                        position,
-                        info.loop,
-                        player.volume
-                    );
-
-                    const payload = { embeds: [nowPlayingEmbed], components: controls };
-                    const server = getGuildState(interaction.guild.id);
-                    const channelId = server.nowPlayingChannel;
-                    const messageId = server.nowPlayingMessage;
-
-                    let message = null;
-                    if (channelId && messageId)
-                    {
-                        const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
-                        if (channel)
-                        {
-                            message = await channel.messages.fetch(messageId).catch((err) => {
-                                if (err?.code === 10008) return null;
-                                return null;
-                            });
-                        }
-                    }
-
-                    if (message)
-                    {
-                        await message.edit(payload);
-                    }
-                    else
-                    {
-                        message = await interaction.followUp(payload);
-                    }
-
-                    updateGuildState(interaction.guild.id,{
-                        nowPlayingMessage: message.id,
-                        nowPlayingChannel: message.channelId ?? interaction.channel.id
-                    });
+                    updateGuildState(interaction.guild.id, {
+                        nowPlayingChannel: interaction.channel.id
+                    })
                 }
             }   
             catch(error)

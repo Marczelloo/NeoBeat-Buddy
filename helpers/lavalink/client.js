@@ -7,6 +7,27 @@ const { fetchLyricsFromNode } = require("./lyricsClient");
 const { ensurePlaybackState, cloneTrack, pushTrackHistory, playbackState, setLyricsState, clearLyricsState } = require("./state");
 const { clearInactivityTimer, scheduleInactivityDisconnect, clearProgressInterval, scheduleProgressUpdates } = require("./timers");
 
+const buildPlaybackErrorMessage = (err, fallback = "Unable to play this track") => {
+  if (!err) return fallback;
+
+  const summary =
+    typeof err === "string"
+      ? err
+      : err?.exception?.message ?? err?.message ?? fallback;
+
+  const lower = summary.toLowerCase();
+  if(lower.includes('age') && lower.includes('restrict')) return "YouTube blocked this track (age-restricted).";
+  if(lower.includes('region') && (lower.includes('block') || lower.includes('restrict'))) return "YouTube blocked this track (region-locked).";
+  if(lower.includes('copyright') && lower.includes('claim')) return "This track is blocked due to a copyright claim.";
+  if(lower.includes('copyright') && lower.includes('content')) return "This track is blocked due to a copyright content.";
+  if(lower.includes('private video')) return "This track is a private YouTube video.";
+  if(lower.includes('video unavailable')) return "This track is unavailable on YouTube.";
+  if(lower.includes('429')) return "Too many requests to YouTube. Please try again later.";
+  if(lower.includes('status code 5')) return "YouTube is currently experiencing issues. Please try again later.";
+  
+  return summary || fallback;
+}
+
 let poru = null;
 
 function createPoru(client) {
@@ -41,54 +62,51 @@ function createPoru(client) {
       `queueLength=${player.queue.length}`,
       `error=${errorSummary}`
     );
-
-    const fallbackTrack = await tryQueueFallbackTrack   (player, track);
     const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
+    if(!channel) return;
 
-    if (fallbackTrack) {
-      if (channel) {
-        await channel.send({
-          embeds: [errorEmbed(
-            "Trying alternate source",
-            `The YouTube stream failed, so I'm retrying with an alternate source for **${fallbackTrack.info.title || fallbackTrack.info.identifier || "this track"}**.`
-          )],
-        }).catch(() => null);
+    const placeholder = await channel.send({
+      embeds: [errorEmbed('Trying alternate source', 'The YouTube stream failed, looking for another version…')],
+    }).catch(() => null);
+
+    const fallbackTrack = await tryQueueFallbackTrack(player, track);
+
+    if(fallbackTrack)
+    {
+      if(placeholder)
+      {
+        const title = fallbackTrack.info?.title || fallbackTrack.info?.identifier || "this track";
+        await placeholder.edit({
+          embeds: [
+            errorEmbed(
+              'Ttrying alternate source',
+              `The YouTube stream failed, so I'm retrying with an alternate source for **${title}**.`
+            )
+          ]
+        })
+        .catch(() => null);
+
+        return
       }
-    } else if (channel) {
-      await channel.send({
-        embeds: [errorEmbed("Track unavailable", "YouTube blocked this track (age-restricted or region-locked).")],
-      }).catch(() => null);
+      
+      if(placeholder)
+      {
+        await placeholder.edit({
+          embeds: [
+            errorEmbed(
+              'Playback error',
+              buildPlaybackErrorMessage(err)
+            )
+          ]
+        })
+        .catch(() => null);
+
+        return
+      }
     }
-
-    if (!fallbackTrack && player.queue.length) {
-      Log.warning(
-        "Waiting for Lavalink auto-skip after error",
-        "",
-        `guild=${player.guildId}`,
-        `queueLength=${player.queue.length}`
-      );
-    }
-  });
-
-  poru.on("trackError", async (player, track, err) => {
-    const errorSummary = err instanceof Error ? err.message : inspect(err, { depth: 1 });
-    Log.error(
-      "Lavalink track error",
-      "",
-      `guild=${player.guildId}`,
-      `track=${describeTrack(track)}`,
-      `queueLength=${player.queue.length}`,
-      `error=${errorSummary}`
-    );
-
-    const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
-    if (channel) {
-      await channel.send({
-        embeds: [errorEmbed("Track unavailable", "YouTube blocked this track (age-restricted or region-locked).")],
-      });
-    }
-
-    if (player.queue.length) {
+    
+    if (!fallbackTrack && player.queue.length) 
+    {
       Log.warning(
         "Waiting for Lavalink auto-skip after error",
         "",
