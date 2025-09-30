@@ -13,6 +13,10 @@ module.exports = {
             .setName('query')
             .setDescription('The URL or search term of the song to play')
             .setRequired(true)
+        ).addBooleanOption(option => option
+            .setName('prepend')
+            .setDescription('Add the track to the front of the queue instead of the back')
+            .setRequired(false)
         ),
 
         async execute(interaction)
@@ -28,6 +32,8 @@ module.exports = {
 
             if(!query || query.trim() === '') return interaction .editReply({ embeds: [errorEmbed('Please provide a valid URL or search term.')] });
 
+            const prepend = interaction.options.getBoolean('prepend') ?? false;
+
             try
             {
                 const requester = {
@@ -39,7 +45,6 @@ module.exports = {
                 const { 
                     track, 
                     player, 
-                    startImmediately,
                     isPlaylist,
                     playlistInfo,
                     playlistTrackCount,
@@ -49,8 +54,9 @@ module.exports = {
                     voiceId: voiceChannel.id,
                     textId: interaction.channel.id,
                     query: query,
-                    requester: requester
-                })
+                    requester: requester,
+                    prepend: prepend
+                });
 
                 if(!track || !track.info)
                 {
@@ -95,13 +101,6 @@ module.exports = {
                 updateGuildState(interaction.guild.id, { 
                     nowPlayingChannel: interaction.channel.id
                 });
-
-                if(startImmediately)
-                {
-                    updateGuildState(interaction.guild.id, {
-                        nowPlayingChannel: interaction.channel.id
-                    })
-                }
             }   
             catch(error)
             {

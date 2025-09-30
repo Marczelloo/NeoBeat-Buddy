@@ -26,10 +26,9 @@ async function ensurePlayer(guildId, voiceId, textId) {
   return player;
 }
 
-async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
+async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepend = false }) {
   const player = await ensurePlayer(guildId, voiceId, textId);
   const poru = getPoru();
-  let startImmediately = false;
 
   let q = String(query || '').trim();
   const isUrl = /^(https?:\/\/)/i.test(q);
@@ -84,7 +83,10 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
     requesterAvatar: requester.avatar,
   } : {};
 
-  for(const track of tracksToAdd)
+  const shouldPrepend = prepend && player.queue.length > 0;
+  const queueTargets = shouldPrepend  ? [...tracksToAdd].reverse() : tracksToAdd;
+
+  for(const track of queueTargets)
   {
     if(!track) continue;
 
@@ -94,7 +96,10 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
       fallbackAttempts: 0,
     };
 
-    await player.queue.add(track);
+    if(shouldPrepend)
+      await player.queue.unshift(track);
+    else
+      await player.queue.add(track);
   }
 
   const currentDescription = player.currentTrack ? describeTrack(player.currentTrack) : 'none';
@@ -111,7 +116,6 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
   if(!player.currentTrack && player.queue.length > 0)
   {
     await player.play();
-    startImmediately = true;
   }
 
   Log.info(
@@ -119,7 +123,6 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
     "",
     `guild=${guildId}`,
     `tracksAdded=${tracksToAdd.length}`,
-    `startImmediately=${startImmediately}`,
     `queueLength=${player.queue.length}`
   );
 
@@ -128,7 +131,6 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester }) {
   return {
     track: cloneTrack(nowPlaying),
     player,
-    startImmediately,
     isPlaylist,
     playlistInfo,
     playlistTrackCount,

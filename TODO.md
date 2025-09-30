@@ -16,6 +16,7 @@
 - [x] create readme file (update it later with bot implementation)
 - [x] add button to player for lyrics
 - [x] add button for volume (display modal window with text input for new volume)
+- [x] add play override queue (instead adding song at the end of the queue it will place it at the start)
 - [] add dj role, only users with dj role can add songs to queue, use player, handle queue etc.
 - [] stats tracking per guild and globa (hours played, songs played etc.)
 - [] autoplay (automatically searches for next song based on current one)
