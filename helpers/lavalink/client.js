@@ -3,7 +3,7 @@ const { Poru } = require("poru");
 const { errorEmbed } = require("../embeds");
 const Log = require("../logs/log");
 const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
-const { fetchLyricsFromNode } = require("./lyricsClient");
+const { fetchLyrics } = require("./lyricsClient");
 const { ensurePlaybackState, cloneTrack, pushTrackHistory, playbackState, setLyricsState, clearLyricsState } = require("./state");
 const { clearInactivityTimer, scheduleInactivityDisconnect, clearProgressInterval, scheduleProgressUpdates } = require("./timers");
 
@@ -126,7 +126,7 @@ function createPoru(client) {
     state.lastTimestamp = Date.now();
     playbackState.set(player.guildId, state);
 
-    const lyricsPayload = await fetchLyricsFromNode(player, track.info).catch(() => null);
+    const lyricsPayload = await fetchLyrics(player, track.info).catch(() => null);
     setLyricsState(player.guildId, lyricsPayload);
 
     Log.info(

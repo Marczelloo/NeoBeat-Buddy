@@ -1,6 +1,6 @@
 {
   "name": "neo-beat-buddy",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "A Discord music bot",
   "main": "index.js",
   "scripts": {
@@ -17,15 +17,16 @@
     "lint": "eslint . --ext .js,.cjs,.mjs",
     "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix"
   },
-
   "keywords": [],
   "author": "Marczelloo",
   "license": "ISC",
   "packageManager": "pnpm@10.15.0",
   "dependencies": {
     "@discordjs/voice": "^0.19.0",
+    "cheerio": "^1.1.2",
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.2",
+    "node-fetch": "^2.7.0",
     "poru": "^5.2.0",
     "shoukaku": "^4.1.1"
   },

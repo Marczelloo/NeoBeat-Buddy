@@ -2,18 +2,34 @@ const { EmbedBuilder } = require("discord.js");
 const { formatDuration } = require("./utils");
 
 const ICONS = {
-  artist: '🎙️',
-  duration: '⏱️',
-  loop: '🔁',
-  volume: '🔊',
-  source: '📡',
-  requested: '🙏',
+    artist: '🎙️',
+    duration: '⏱️',
+    loop: '🔁',
+    volume: '🔊',
+    source: '📡',
+    requested: '🙏',
+    nowPlaying: '🎧',
+    success: '✅',
+    error: '❌',
+    lyrics: '🎵',
+    playlist: '🎶',
+
 };
+
+const COLORS = {
+    player: '#1DB954',
+    success: '#00d26a',
+    error: '#ff4757',
+    song: '#7289da',
+    lyrics: '#5865F2',
+    playlist: '#e91e63',
+}
 
 const bold = (label, value) => `**${label}** ${value ?? '—'}`;
 
 module.exports = { 
-    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, position, loop, volume = 100) {
+    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, position, loop, volume = 100) 
+    {
         const loopLabel =
         loop === 'TRACK' ? 'Track'
         : loop === 'QUEUE' ? 'Queue'
@@ -30,8 +46,8 @@ module.exports = {
         ].join('\n');
 
         return new EmbedBuilder()
-        .setColor('#1DB954')
-        .setAuthor({ name: '🎧 Now Playing', iconURL: 'https://cdn.discordapp.com/emojis/741605543046807626.gif' })
+        .setColor(COLORS.player)
+        .setAuthor({ name: `${ICONS.nowPlaying} Now Playing`, iconURL: 'https://cdn.discordapp.com/emojis/741605543046807626.gif' })
         .setTitle(title)
         .setURL(url)
         .setThumbnail(image ?? 'https://i.imgur.com/3g7nmJC.png')
@@ -45,11 +61,12 @@ module.exports = {
             iconURL: requesterAvatar ?? undefined,
         });
     },
-    successEmbed: function(title, description) {
+    successEmbed: function(title, description) 
+    {
         return new EmbedBuilder()
-            .setColor('#00d26a') // Modern green
+            .setColor(COLORS.success)
             .setAuthor({ 
-                name: '✅ Success', 
+                name: `${ICONS.success} Success`, 
                 iconURL: 'https://cdn.discordapp.com/emojis/809543717553446912.gif' 
             })
             .setTitle(title)
@@ -58,11 +75,12 @@ module.exports = {
                 text: 'Neo Beat Buddy • Success', 
             })
         },
-    errorEmbed: function(title, description) {
+    errorEmbed: function(title, description) 
+    {
         return new EmbedBuilder()
-            .setColor('#ff4757') // Modern red
+            .setColor(COLORS.error)
             .setAuthor({ 
-                name: '❌ Error', 
+                name: `${ICONS.error} Error`, 
                 iconURL: 'https://cdn.discordapp.com/emojis/853314041004015616.png' 
             })
             .setTitle(title)
@@ -72,7 +90,8 @@ module.exports = {
             })
             .setTimestamp();
     },
-    songEmbed(trackInfo) {
+    songEmbed(trackInfo) 
+    {
         const duration = trackInfo.isStream
         ? 'Live'
         : Number.isFinite(trackInfo.length)
@@ -90,8 +109,8 @@ module.exports = {
         ].join('\n');
 
         return new EmbedBuilder()
-        .setColor('#7289da')
-        .setAuthor({ name: '🎶 Added to Queue', iconURL: 'https://cdn.discordapp.com/emojis/853314041004015616.png' })
+        .setColor(COLORS.song)
+        .setAuthor({ name: `${ICONS.playlist} Added to Queue`, iconURL: 'https://cdn.discordapp.com/emojis/853314041004015616.png' })
         .setTitle(trackInfo.title)
         .setURL(trackInfo.uri)
         .setDescription(trackInfo.author ? `*${trackInfo.author}*` : null)
@@ -100,11 +119,12 @@ module.exports = {
         .setFooter({ text: 'Neo Beat Buddy • Queue system' })
         .setTimestamp();
     },
-    lyricsEmbed: function(title, description, footerNote) {
+    lyricsEmbed: function(title, description, footerNote) 
+    {
         return new EmbedBuilder()
-            .setColor('#5865F2') // Discord blurple
+            .setColor(COLORS.lyrics)
             .setAuthor({
-                name: '🎵 Lyrics',
+                name: `${ICONS.lyrics} Lyrics`,
                 iconURL: 'https://cdn.discordapp.com/emojis/741605543046807626.gif',
             })
             .setTitle(title)
@@ -125,9 +145,9 @@ module.exports = {
             : 'Unknown';
 
         return new EmbedBuilder()
-            .setColor('#e91e63')
+            .setColor(COLORS.playlist)
             .setAuthor({
-                name: '🎶 Playlist Added',
+                name: `${ICONS.playlist} Playlist Added`,
                 iconURL: 'https://cdn.discordapp.com/emojis/853314041004015616.png',
             })
             .setTitle(title)

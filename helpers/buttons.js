@@ -1,5 +1,5 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
-const { playerEmbed } = require('./embeds');
+const { playerEmbed, errorEmbed } = require('./embeds');
 const { getGuildState } = require('./guildState');
 const {
     lavalinkPause,
@@ -9,7 +9,9 @@ const {
     lavalinkShuffle,
     createPoru,
     lavalinkPrevious,
+    getLyricsState,
 } = require('./lavalink/index');
+const { buildLyricsResponse } = require('./lavalink/lyricsFormatter');
 const Log = require('./logs/log');
 const { formatDuration } = require('./utils');
 
@@ -19,8 +21,11 @@ const SKIP_EMOJI = '1198248590087307385';
 const REWIND_EMOJI = '1198248587369386134';
 const PAUSE_EMOJI = '1198248585624571904';
 const RESUME_EMOJI = '1198248583162511430';
+const LYRICS_EMOJI = '📝';
+const VOLUME_EMOJI = '🔊';
 
-function createButton(id, style, emoji, disabled = false) {
+function createButton(id, style, emoji, disabled = false) 
+{
     return new ButtonBuilder()
         .setCustomId(id)
         .setStyle(style)
@@ -63,6 +68,16 @@ function shuffleButton(disabled = false)
     return createButton('shuffle-button', ButtonStyle.Primary, SHUFFLE_EMOJI, disabled);
 }
 
+function lyricsButton(disabled = false)
+{
+    return createButton('lyrics-button', ButtonStyle.Primary, LYRICS_EMOJI, disabled);
+}
+
+function volumeUpButton(disabled = false)
+{
+    return createButton('volume-up-button', ButtonStyle.Primary, VOLUME_EMOJI, disabled);
+}
+
 function buildControlRows({  paused =  false, loopMode = 'NONE', disabled = false} = {})
 {
     return [
@@ -74,7 +89,9 @@ function buildControlRows({  paused =  false, loopMode = 'NONE', disabled = fals
         ),
         new ActionRowBuilder().addComponents(
             loopButton(disabled, loopMode),
-            shuffleButton(disabled)
+            shuffleButton(disabled),
+            lyricsButton(disabled),
+            // volumeUpButton(disabled
         ),
     ];
 }
@@ -121,8 +138,64 @@ async function handleControlButtons(interaction, player)
             await lavalinkShuffle(guildId);
             await interaction.followUp({ content: 'Queue shuffled!', flags: MessageFlags.Ephemeral });
             break;
+        case 'lyrics-button': {
+            const payload = getLyricsState(guildId);
+
+            if (!payload || (!payload.lyrics && !payload.lines)) 
+            {
+                await interaction.followUp({
+                    embeds: [errorEmbed('No lyrics were found for this track.')],
+                    flags: MessageFlags.Ephemeral,
+                });
+            
+                return;
+            }
+
+            const text = payload.lyrics
+                || (Array.isArray(payload.lines)
+                    ? payload.lines.map((entry) => entry.line).join('\n')
+                    : null);
+
+            if (!text) 
+            {
+                await interaction.followUp({
+                    embeds: [errorEmbed('The lyrics provider returned an empty result.')],
+                    flags: MessageFlags.Ephemeral,
+                });
+            
+                return;
+            }
+
+            const trackTitle = payload.track?.title
+                ?? player.currentTrack?.info?.title
+                ?? 'Unknown track';
+
+            const { embeds, content } = buildLyricsResponse({
+                text,
+                provider: payload?.source,
+                trackTitle,
+            });
+
+            if (!embeds.length) 
+            {
+                await interaction.followUp({
+                    embeds: [errorEmbed('The lyrics provider returned an empty result.')],
+                });
+            
+                return;
+            }
+
+            await interaction.followUp({
+                content,
+                embeds,
+            });
+            
+            return;
+        }
+
         default:
-            return interaction.reply({ content: 'Unknown button.', ephemeral: true });
+            await interaction.followUp({ content: 'Unknown button.', flags: MessageFlags.Ephemeral });
+            return;
     }
 
     const loopToDisplay = loopMode ?? (player.loop ?? 'NONE');
@@ -136,21 +209,27 @@ async function handleControlButtons(interaction, player)
     );
 }
 
-async function refreshNowPlayingMessage(client, guildId, playerOverride = null, loopOverride, positionOverride) {
+async function refreshNowPlayingMessage(client, guildId, playerOverride = null, loopOverride, positionOverride) 
+{
     const server = getGuildState(guildId);
-    if (!server || server.nowPlayingReplacing) {
+
+    if (!server || server.nowPlayingReplacing) 
+    {
         Log.info('refreshNowPlayingMessage skipped (replace in progress)', `guild=${guildId}`);
         return;
     }
 
     const channelId = server.nowPlayingChannel;
     const messageId = server.nowPlayingMessage;
-    if (!channelId || !messageId) {
+    
+    if (!channelId || !messageId) 
+    {
         Log.info('refreshNowPlayingMessage missing channel/message', `guild=${guildId}`);
         return;
     }
 
     const player = playerOverride ?? createPoru(client).players.get(guildId);
+    
     if (!player) return;
 
     const loopMode = loopOverride ?? (player.loop ?? 'NONE');
