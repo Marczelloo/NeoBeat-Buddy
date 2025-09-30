@@ -2,6 +2,7 @@ const { inspect } = require("util");
 const { Poru } = require("poru");
 const { errorEmbed } = require("../embeds");
 const Log = require("../logs/log");
+const statsStore = require("../stats/store.js");
 const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
 const { fetchLyrics } = require("./lyricsClient");
 const { ensurePlaybackState, cloneTrack, pushTrackHistory, playbackState, setLyricsState, clearLyricsState } = require("./state");
@@ -136,6 +137,15 @@ function createPoru(client) {
       `track=${describeTrack(track)}`,
       `queueLength=${player.queue.length}`
     );
+
+    try
+    {
+      statsStore.beginTrackSession(player.guildId, track)
+    }
+    catch(err)
+    {
+      Log.error(`Failed to begin track session for guild ${player.guildId}`, err);
+    }
   });
 
   poru.on("trackEnd", (player, track, reason) => {
@@ -182,6 +192,14 @@ function createPoru(client) {
       scheduleInactivityDisconnect(player, "trackEndEmpty");
     }
 
+    try
+    {
+      statsStore.finishTrackSession(player.guildId, track, reasonCode)
+    }
+    catch(err)
+    {
+      Log.error(`Failed to finish track session for guild ${player.guildId}`, err);
+    }
   });
 
   poru.on("queueEnd", (player) => {
@@ -199,6 +217,15 @@ function createPoru(client) {
     scheduleInactivityDisconnect(player, "queueEnd");
     clearProgressInterval(player.guildId);
     clearLyricsState(player.guildId);
+
+    try
+    {
+      statsStore.abortSession(player.guildId);
+    }
+    catch(err)
+    {
+      Log.error(`Failed to abort track session for guild ${player.guildId}`, err);
+    }
   });
 
   poru.on("playerUpdate", (player) => {
@@ -206,7 +233,16 @@ function createPoru(client) {
     state.lastPosition = player.position ?? 0;
     state.lastTimestamp = Date.now();
     playbackState.set(player.guildId, state);
-  })
+
+    try
+    {
+      statsStore.updateProgress(player.guildId, player.position)
+    }
+    catch(err)
+    {
+      Log.error(`Failed to update track session for guild ${player.guildId}`, err);
+    }
+  });
 
   return poru;
 }

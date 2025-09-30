@@ -8,6 +8,7 @@ const token = process.env.DISCORD_TOKEN;
 const { setClient } = require('./helpers/clientRegistry.js');
 const { createPoru } = require('./helpers/lavalink/index.js')
 const Log = require('./helpers/logs/log.js');
+const statsStore = require('./helpers/stats/store.js');
 
 Log.info('Token:', token ? 'Loaded' : 'Not Found');
 
@@ -75,8 +76,6 @@ for(const file of eventsFiles){
 client.on('voiceStateUpdate', (oldState, newState) => {
 	if (oldState.member.user.id === client.user.id && newState.channelId === null) {
 		Log.info('Bot left the voice channel:', oldState.channel, newState.guild.name, newState.guild.id);
-		//const guild = newState.guild;
-		//vcLeaveReset(guild.id);
 	}
 });
 
@@ -92,7 +91,6 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 		if (oldMembers !== newMembers && newMembers === 1) {
 			Log.info('Bot is alone in the voice channel:', newChannel.name, guild.name, guild.id);
 			Log.info('Bot will leave the voice channel in 60 seconds:', newChannel.name, guild.name, guild.id);
-            //add leaving voice channnel after 60 seconds if alone and clearing up the queue
 		}
 	}
 });
@@ -133,6 +131,14 @@ function reconnectClient() {
 		 process.exit(1); // Exit the process to allow a restart
 	}
 }
+
+statsStore.init()
+	.then(() => {
+		Log.info('Stats store initialized');
+	})
+	.catch(err => {
+		Log.error('Failed to initialize stats store:', err);
+	});
 
 connectClient();
 

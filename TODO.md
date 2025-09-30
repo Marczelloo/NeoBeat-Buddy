@@ -18,7 +18,7 @@
 - [x] add button for volume (display modal window with text input for new volume)
 - [x] add play override queue (instead adding song at the end of the queue it will place it at the start)
 - [] add dj role, only users with dj role can add songs to queue, use player, handle queue etc.
-- [] stats tracking per guild and globa (hours played, songs played etc.)
+- [x] stats tracking per guild and globa (hours played, songs played etc.)
 - [] autoplay (automatically searches for next song based on current one)
 - [] 24/7 command
 - [] server playlists, user playlists

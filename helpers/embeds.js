@@ -13,7 +13,7 @@ const ICONS = {
     error: '❌',
     lyrics: '🎵',
     playlist: '🎶',
-
+    stats: '📊',
 };
 
 const COLORS = {
@@ -23,6 +23,7 @@ const COLORS = {
     song: '#7289da',
     lyrics: '#5865F2',
     playlist: '#e91e63',
+    stats: '#f39c12',
 }
 
 const bold = (label, value) => `**${label}** ${value ?? '—'}`;
@@ -163,4 +164,31 @@ module.exports = {
             })
             .setTimestamp();
     },
+    statsEmbed(guildStats, globalStats, lastActivityLabel)
+    {
+        const toHours = (ms) => (ms / 3_600_000).toFixed(2);
+
+        return new EmbedBuilder()
+        .setTitle(`${ICONS.stats} Playback Stats`)
+        .setColor(COLORS.stats)
+        .addFields(
+        {
+          name: 'This Server',
+          value: [
+            `Songs played: **${guildStats.songsPlayed}**`,
+            `Hours played: **${toHours(guildStats.msPlayed)}**`,
+          ].join('\n'),
+          inline: true,
+        },
+        {
+          name: 'Global',
+          value: [
+            `Songs played: **${globalStats.songsPlayed}**`,
+            `Hours played: **${toHours(globalStats.msPlayed)}**`,
+          ].join('\n'),
+          inline: true,
+        },
+      )
+      .setFooter({ text: `Last activity: ${lastActivityLabel}` });
+    }
 }
