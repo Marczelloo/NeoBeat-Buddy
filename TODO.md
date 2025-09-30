@@ -15,7 +15,7 @@
 - [x] create help command with descriptions and select form for additional info (possibly per categories or usage of specific command | update it with new commands)
 - [x] create readme file (update it later with bot implementation)
 - [x] add button to player for lyrics
-- [] add button for volume (display modal window with text input for new volume)
+- [x] add button for volume (display modal window with text input for new volume)
 - [] add dj role, only users with dj role can add songs to queue, use player, handle queue etc.
 - [] stats tracking per guild and globa (hours played, songs played etc.)
 - [] autoplay (automatically searches for next song based on current one)

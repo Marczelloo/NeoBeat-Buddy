@@ -73,9 +73,9 @@ function lyricsButton(disabled = false)
     return createButton('lyrics-button', ButtonStyle.Primary, LYRICS_EMOJI, disabled);
 }
 
-function volumeUpButton(disabled = false)
+function volumeButton(disabled = false)
 {
-    return createButton('volume-up-button', ButtonStyle.Primary, VOLUME_EMOJI, disabled);
+    return createButton('volume-button', ButtonStyle.Primary, VOLUME_EMOJI, disabled);
 }
 
 function buildControlRows({  paused =  false, loopMode = 'NONE', disabled = false} = {})
@@ -91,7 +91,7 @@ function buildControlRows({  paused =  false, loopMode = 'NONE', disabled = fals
             loopButton(disabled, loopMode),
             shuffleButton(disabled),
             lyricsButton(disabled),
-            // volumeUpButton(disabled
+            volumeButton(disabled),
         ),
     ];
 }
