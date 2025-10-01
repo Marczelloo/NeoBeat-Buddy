@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
 const { errorEmbed } = require("../../helpers/embeds");
+const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { buildLyricsResponse } = require('../../helpers/lavalink/lyricsFormatter');
 const { getPlayer } = require('../../helpers/lavalink/players');
 const { getLyricsState } = require('../../helpers/lavalink/state');
@@ -13,11 +14,13 @@ module.exports = {
     {
         await interaction.deferReply();
 
+        const guard = await requireSharedVoice(interaction);
+        if(!guard.ok) return interaction.editReply(guard.response);
+
         const player = getPlayer(interaction.guildId);
     
         if (!player?.currentTrack) return interaction.editReply({ embeds: [errorEmbed('No track is currently playing.')] });
         
-
         const payload = getLyricsState(interaction.guildId);
 
         if (!payload || (!payload.lyrics && !payload.lines)) return interaction.editReply({ embeds: [errorEmbed('No lyrics were found for this track.')] });

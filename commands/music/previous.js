@@ -1,5 +1,5 @@
 const { SlashCommandBuilder  } = require('discord.js');
-const { errorEmbed } = require('../../helpers/embeds');
+const { requireSharedVoice } = require('../../helpers/interactions/voiceGuards');
 const { lavalinkPrevious } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
 
@@ -14,13 +14,8 @@ module.exports = {
 
         await interaction.deferReply({ ephemeral: true });
 
-        const voiceChannel = interaction.member.voice.channel;
-        if (!voiceChannel)
-            return interaction.editReply({ embeds: [errorEmbed('You must be in a voice channel to use this command.')] });
-        
-        const botVoiceChannel = interaction.guild.members.me.voice.channel;
-        if (botVoiceChannel && voiceChannel.id !== botVoiceChannel.id)
-            return interaction.editReply({ embeds: [errorEmbed('You must be in the same voice channel as the bot to use this command.')] });
+        const guard = await requireSharedVoice(interaction);
+        if(!guard.ok) return interaction.editReply(guard.response);
 
         const result = await lavalinkPrevious(interaction.guild.id);
 
