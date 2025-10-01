@@ -44,7 +44,7 @@
 - [x] create docker file and compose lavalink and bot
 - [x] remove global.js since lavalink poru/lavalink maintain most of these functions and migrate the needed ones 
 - [] add more logging and improve track logs
-- [] cleanup help command and sepperate it into smaller chunks
+- [x] cleanup help command and sepperate it into smaller chunks
 - [] cleanup code
 - [] create website for bot 
 

@@ -1,98 +1,35 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { errorEmbed } = require('../../helpers/embeds');
+const { SlashCommandBuilder } = require('discord.js');
+const {
+    ITEMS_PER_PAGE,
+    buildQueueControls,
+    decodeQueueId
+} = require('../../helpers/components/queue');
+const { errorEmbed, queueEmbed } = require('../../helpers/embeds');
 const { createPoru } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
-const { formatDuration } = require('../../helpers/utils');
 
-const ITEMS_PER_PAGE = 20;
-const PREV_EMOJI = '⬅️';
-const NEXT_EMOJI = '➡️';
 
-const encodeId = (action, guildId, userId, page) => 
-    `queue|${action}|${guildId}|${userId}|${page}`;
+async function renderQueue(interaction, player, page = 0) {
+  const totalPages = Math.max(1, Math.ceil(player.queue.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
 
-const decodeId = (customId) => {
-    const [root, action, guildId, userId, page] = customId.split('|');
+  const embed = queueEmbed({
+    currentTrack: player.currentTrack,
+    isPlaying: player.isPlaying,
+    queue: player.queue,
+    page: safePage,
+    totalPages,
+    requesterId: interaction.user.id,
+  });
 
-    if(root !== 'queue') return null;
+  const components = buildQueueControls(
+    safePage,
+    totalPages,
+    interaction.guildId,
+    interaction.user.id,
+  );
 
-    return { action, guildId, userId, page: Number(page) || 0 };
-}
-
-function buildQueueEmbed(player, page, totalPages, requesterId)
-{
-    const lines = [];
-
-    const isActivelyPlaying = Boolean(player.currentTrack) && (player.isPlaying || player.queue.length > 0);
-
-    if(isActivelyPlaying)
-    {
-        const now = player.currentTrack.info;
-        const duration = now.isStream ? 'Live' : formatDuration(now.length);
-        lines.push(`**Now Playing:** [${now.title}](${now.uri}) · \`${duration}\` · requested by <@${now.requesterId ?? requesterId}>`);
-        lines.push(''); // Empty line for spacing
-    }
-    else
-    {
-        lines.push('**Not playing anything right now.**');
-        lines.push(''); // Empty line for spacing
-    }
-
-    const start = page * ITEMS_PER_PAGE;
-    const slice = player.queue.slice(start, start + ITEMS_PER_PAGE);
-
-    if(slice.length === 0)
-    {
-        lines.push('The queue is empty.');
-    }
-    else
-    {
-        slice.forEach((track, idx) => {
-            const info = track.info;
-            const duration = info.isStream ? 'Live' : formatDuration(info.length);
-            const position = start + idx + 1;
-            lines.push(`**${position}.** [${info.title}](${info.uri}) · \`${duration}\` · requested by <@${info.requesterId ?? requesterId}>`);
-        })
-    }
-
-    return new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle('Current Queue')
-        .setDescription(lines.join('\n'))
-        .setFooter({
-            text: `Page ${page + 1}/${totalPages} • ${player.queue.length} queued tracks`,
-        })
-        .setTimestamp();
-}
-
-function buildControls(currentPage, totalPages, guildId, userId)
-{
-    const prevPage = Math.max(0, currentPage - 1);
-    const nextPage = Math.min(totalPages - 1, currentPage + 1);
-
-    const prev = new ButtonBuilder()
-        .setCustomId(encodeId('prev', guildId, userId, prevPage))
-        .setLabel(PREV_EMOJI)
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(currentPage === 0);
-
-    const next = new ButtonBuilder()
-        .setCustomId(encodeId('next', guildId, userId, nextPage))
-        .setLabel(NEXT_EMOJI)
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(currentPage === totalPages - 1 || totalPages === 0);
-
-    return [new ActionRowBuilder().addComponents(prev, next)];
-}
-
-async function renderQueue(interaction, player, page = 0)
-{
-    const totalPages = Math.max(1, Math.ceil(player.queue.length / ITEMS_PER_PAGE));
-    const safePage = Math.min(Math.max(0, page), totalPages - 1);
-    const embed = buildQueueEmbed(player, safePage, totalPages, interaction.user.id);
-    const components = buildControls(safePage, totalPages, interaction.guildId, interaction.user.id);
-
-    return { embed, components, page: safePage, totalPages };
+  return { embed, components, page: safePage, totalPages };
 }
 
 
@@ -127,7 +64,7 @@ module.exports = {
         },
         async handlePaginationButtons(interaction)
         {
-            const data = decodeId(interaction.customId);
+            const data = decodeQueueId(interaction.customId);
             if(!data) return interaction.reply({ content: 'Invalid button.', ephemeral: true });
 
             if(interaction.user.id !== data.userId)

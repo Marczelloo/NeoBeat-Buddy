@@ -24,6 +24,7 @@ const COLORS = {
     lyrics: '#5865F2',
     playlist: '#e91e63',
     stats: '#f39c12',
+    queue: '#5865F2'
 }
 
 const bold = (label, value) => `**${label}** ${value ?? '—'}`;
@@ -190,5 +191,67 @@ module.exports = {
         },
       )
       .setFooter({ text: `Last activity: ${lastActivityLabel}` });
+    },
+    queueEmbed({ currentTrack, isPlaying, queue, page, totalPages, requesterId })
+    {
+        const lines = [];
+
+        if(currentTrack && (isPlaying || queue.length))
+        {
+            const info = currentTrack.info  || {};
+            const duration = info.isStream ? "Live" : formatDuration(info.length);
+
+            lines.push(
+                `**Now Playing:** [${info.title}](${info.uri}) • \`${duration}\` • requested by <@${info.requesterId ?? requesterId}>`,
+                '',
+            );
+        }
+        else
+        {
+            lines.push('**Not playing anything right now.**', '');
+        }
+
+        const start = page * 20;
+        const slice = queue.slice(start, start + 20);
+
+        if(!slice.length) lines.push('The queue is empty.')
+        else
+        {
+            slice.forEach((track, idx) => {
+                const info = track.info || {};
+                const duration = info.isStream ? "Live" : formatDuration(info.length);
+                const position = start + idx + 1;
+
+                lines.push(
+                    `**${position}.** [${info.title}](${info.uri}) • \`${duration}\` • requested by <@${info.requesterId ?? requesterId}>`,
+                );
+            })
+        }
+
+        return new EmbedBuilder()
+            .setColor(COLORS.queue)
+            .setTitle('Current Queue')
+            .setDescription(lines.join('\n'))
+            .setFooter({ text: `Page ${page + 1}/${totalPages} • ${queue.length} queued tracks` })
+            .setTimestamp();
+    },
+    helpCategoryEmbed(category, user)
+    {
+        const embed = new EmbedBuilder()
+            .setColor(0xff4f8b)
+            .setTitle(`Help • ${category.label}`)
+            .setDescription(category.description);
+
+        category.commands.forEach((command) =>  {
+            embed.addFields({
+                 name: `/${command.name}`,
+                value: `${command.description}\nUsage: \`${command.usage}\``,
+            })
+        })
+            
+        return embed.setFooter({
+            text: `Requested by ${user.tag}`,
+            iconURL: user.displayAvatarURL({ size: 128 }),
+        });
     }
 }
