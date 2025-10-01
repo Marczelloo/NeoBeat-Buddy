@@ -1,13 +1,8 @@
 const { SlashCommandBuilder } = require("discord.js");
+const PRESET_CHOICES = require("../../helpers/equalizer/presets");
 const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { lavalinkSetEqualizer, lavalinkResetFilters } = require("../../helpers/lavalink/index");
 const Log = require("../../helpers/logs/log");
-
-const PRESET_CHOICES = [
-  "flat", "bass", "treble", "nightcore",
-  "pop", "edm", "rock", "vocal", "podcast",
-  "bassboost", "lofi"
-];
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -75,7 +70,7 @@ module.exports = {
                     result.status === "no_player"
                     ? "No music is currently playing."
                     : "Equalizer restored to default."
-  );
+                );
             }            
 
             if(!payload)
