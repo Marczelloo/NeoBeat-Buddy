@@ -72,6 +72,9 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
 
   const isPlaylist = res.loadType === 'playlist';
   const playlistInfo = isPlaylist ? (res.playlistInfo ?? {}) : null;
+  const playlistUrl = isPlaylist 
+    ? (playlistInfo?.uri ?? playlistInfo?.url ?? (isUrl ? q : null))
+    : null;
   const playlistTrackCount = tracksToAdd.length;
   const playlistDurationMs = isPlaylist
     ? tracksToAdd.reduce((sum, t) => sum + (t.info.length ?? 0), 0)
@@ -133,6 +136,7 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
     player,
     isPlaylist,
     playlistInfo,
+    playlistUrl,
     playlistTrackCount,
     playlistDurationMs,
   };

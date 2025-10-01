@@ -58,7 +58,7 @@ async function persist()
     await fs.writeFile(DATA_FILE, JSON.stringify(state, null, 2), 'utf-8');
 }
 
-function beginTrackSession(guildId, track)
+function beginTrackSession(guildId, track) 
 {
     const stats = ensureGuild(guildId);
     stats.songsPlayed += 1;
@@ -67,31 +67,29 @@ function beginTrackSession(guildId, track)
 
     sessions.set(guildId, {
         startedAt: Date.now(),
-        lastPosition: 0,
-        trackLength: track.info.length ?? null,
-    })
+        lastPositionMs: 0,
+        trackLength: track.info?.length ?? null,
+    });
 
     scheduleSave();
 }
 
-function updateProgress(guildId, positionMs)
+
+function updateProgress(guildId, positionMs) 
 {
     const session = sessions.get(guildId);
-
-    if(!session) return;
-
-    session.lastPosition = Math.max(session.lastPosition, Number(positionMs) || 0);
+    if (!session) return;
+    session.lastPositionMs = Math.max(session.lastPositionMs, Number(positionMs) || 0);
 }
 
-function finishTrackSession(guildId, track, reason)
+function finishTrackSession(guildId, track, reason) 
 {
     const session = sessions.get(guildId);
-    if(!session) return;
+    if (!session) return;
 
-    if(['replaced', 'load_failed'].includes(reason))
-    {
-        sessions.delete(guildId);
-        return;
+    if (['replaced', 'load_failed'].includes(reason)) {
+    sessions.delete(guildId);
+    return;
     }
 
     const length = session.trackLength ?? track?.info?.length ?? session.lastPositionMs;
@@ -103,6 +101,7 @@ function finishTrackSession(guildId, track, reason)
     state.global.msPlayed += safePlay;
 
     sessions.delete(guildId);
+    
     scheduleSave();
 }
 

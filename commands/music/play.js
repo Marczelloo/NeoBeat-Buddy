@@ -47,6 +47,7 @@ module.exports = {
                     player, 
                     isPlaylist,
                     playlistInfo,
+                    playlistUrl,
                     playlistTrackCount,
                     playlistDurationMs
                 } = await lavalinkPlay({
@@ -83,7 +84,7 @@ module.exports = {
                         embeds: [
                         playlistEmbed({
                             title: playlistInfo?.name ?? track.info.title ?? 'Playlist',
-                            url: playlistInfo?.url ?? track.info.uri,
+                            url: playlistUrl ?? playlistInfo?.url ?? track.info.uri,
                             trackCount: playlistTrackCount,
                             totalDurationMs: playlistDurationMs,
                             requesterTag: requester.tag,
