@@ -6,6 +6,7 @@ const { Client, Collection, GatewayIntentBits } = require('discord.js');
 
 const token = process.env.DISCORD_TOKEN;
 const { setClient } = require('./helpers/clientRegistry.js');
+const djStore = require('./helpers/dj/store.js');
 const { createPoru } = require('./helpers/lavalink/index.js')
 const Log = require('./helpers/logs/log.js');
 const statsStore = require('./helpers/stats/store.js');
@@ -140,7 +141,16 @@ statsStore.init()
 		Log.error('Failed to initialize stats store:', err);
 	});
 
+djStore.init()
+	.then(() => {
+		Log.info('DJ store initialized');
+	})
+	.catch(err => {
+		Log.error('Failed to initialize DJ store:', err);
+	});
+
 connectClient();
 
 const poru = createPoru(client);
 client.on('raw', (d) => poru.packetUpdate(d));
+

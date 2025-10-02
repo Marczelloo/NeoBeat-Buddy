@@ -6,4 +6,4 @@ node_modules
 /logs
 helpers/lavalink/youtube-cookies.txt
 *.txt
-stats.json
+data

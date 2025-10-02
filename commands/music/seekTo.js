@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { errorEmbed, successEmbed } = require('../../helpers/embeds');
+const { requireDj } = require('../../helpers/interactions/djGuards');
 const { requireSharedVoice } = require('../../helpers/interactions/voiceGuards');
 const { lavalinkSeekTo, lavalinkGetDuration } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
@@ -18,8 +19,11 @@ module.exports = {
 
         await interaction.deferReply({ ephemeral: true });
 
-        const guard = await requireSharedVoice(interaction);
-        if(!guard.ok) return interaction.editReply(guard.response);
+        const voiceGuard = await requireSharedVoice(interaction);
+        if(!voiceGuard.ok) return interaction.editReply(voiceGuard.response);
+
+        const djGuard = requireDj(interaction, { action: 'seek within the track' });
+        if(!djGuard.ok) return interaction.editReply(djGuard.response);
 
         const position = interaction.options.getString('position');
         if (!position) return interaction.editReply({ embeds: [errorEmbed('You must specify a position to seek to.')] });
@@ -51,14 +55,15 @@ module.exports = {
         }
 
         if (positionInMs > duration) {
-            return interaction.editReply({ embeds: [errorEmbed(`Invalid position. The track duration is only ${duration / 1000} seconds.`)] });
+            return interaction.editReply({ embeds: [errorEmbed(`Invalid position. The track duration is only ${Math.floor(duration / 1000)} seconds.`)] });
         }
 
         const success = await lavalinkSeekTo(interaction.guild.id, positionInMs);
         if (success) {
-            return interaction.editReply({ embeds: [successEmbed(`⏩ Seeking to ${position}...`)] });
-        } else {
-            return interaction.editReply({ embeds: [errorEmbed('Failed to seek to the specified position.')] });
+            return interaction.editReply({ embeds: [successEmbed(`Seeking to ${position}...`)] });
         }
+
+        return interaction.editReply({ embeds: [errorEmbed('Failed to seek to the specified position.')] });
     }
 }
+

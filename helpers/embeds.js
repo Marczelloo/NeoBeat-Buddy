@@ -239,16 +239,27 @@ module.exports = {
     {
         const embed = new EmbedBuilder()
             .setColor(0xff4f8b)
-            .setTitle(`Help • ${category.label}`)
+            .setTitle(`Help - ${category.label}`)
             .setDescription(category.description);
 
-        category.commands.forEach((command) =>  {
+        (category.commands ?? []).forEach((command) => {
             embed.addFields({
-                 name: `/${command.name}`,
+                name: `/${command.name}`,
                 value: `${command.description}\nUsage: \`${command.usage}\``,
-            })
-        })
-            
+            });
+        });
+
+        if (Array.isArray(category.notes))
+        {
+            category.notes.forEach((note) => {
+                embed.addFields({
+                    name: note.name,
+                    value: note.value,
+                    inline: false,
+                });
+            });
+        }
+
         return embed.setFooter({
             text: `Requested by ${user.tag}`,
             iconURL: user.displayAvatarURL({ size: 128 }),

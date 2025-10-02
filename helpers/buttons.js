@@ -14,6 +14,8 @@ const {
 const { buildLyricsResponse } = require('./lavalink/lyricsFormatter');
 const Log = require('./logs/log');
 const { formatDuration } = require('./utils');
+const djStore = require('./dj/store');
+const skipVotes = require('./dj/skipVotes');
 
 const LOOP_EMOJI = '1198248581304418396';
 const SHUFFLE_EMOJI = '1198248578146115605';
@@ -57,7 +59,7 @@ function loopButton(disabled = false, mode = 'NONE')
 {
     const active = mode !== 'NONE';
     const label = 
-        mode === 'QUEUE' ? '🔁'
+        mode === 'QUEUE' ? 'đź”'
         : LOOP_EMOJI;
 
     return createButton('loop-button', active ? ButtonStyle.Success : ButtonStyle.Primary, label, disabled);
@@ -99,11 +101,121 @@ function buildControlRows({  paused =  false, loopMode = 'NONE', disabled = fals
 async function handleControlButtons(interaction, player)
 {
     const guildId = interaction.guildId;
+    const config = djStore.getGuildConfig(guildId);
+    const isDj = djStore.hasDjPermissions(interaction.member, config);
+    const customId = interaction.customId;
     let loopMode = player.loop ?? 'NONE';
+
+    if(customId === 'skip-button')
+    {
+        if(!config.enabled || isDj)
+        {
+            await interaction.deferUpdate();
+            await lavalinkSkip(guildId);
+            skipVotes.clear(guildId);
+
+            const loopToDisplay = player.loop ?? 'NONE';
+            const playerSnapshot = createPoru(interaction.client).players.get(guildId) ?? player;
+
+            await refreshNowPlayingMessage(
+              interaction.client,
+              guildId,
+              playerSnapshot,
+              loopToDisplay
+            );
+            return;
+        }
+
+        const settings = djStore.getSkipSettings(guildId);
+        const poru = createPoru(interaction.client);
+        const livePlayer = poru.players.get(guildId);
+
+        if(!livePlayer || (!livePlayer.currentTrack && livePlayer.queue.length === 0))
+        {
+            await interaction.reply({ content: 'Nothing is playing right now.', ephemeral: true });
+            return;
+        }
+
+        const voiceChannel = interaction.guild.channels.cache.get(livePlayer.voiceChannel)
+            ?? await interaction.guild.channels.fetch(livePlayer.voiceChannel).catch(() => null);
+
+        if(!voiceChannel)
+        {
+            await interaction.reply({ content: 'Could not determine the active voice channel.', ephemeral: true });
+            return;
+        }
+
+        if(settings.mode === 'dj')
+        {
+            const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+            await interaction.reply({ content: 'Only ' + mention + ' can skip tracks while DJ mode is active.', ephemeral: true });
+            return;
+        }
+
+        const listeners = voiceChannel.members.filter((member) => !member.user.bot);
+        const eligibleCount = listeners.size;
+
+        if(eligibleCount <= 1)
+        {
+            await lavalinkSkip(guildId);
+            skipVotes.clear(guildId);
+            await interaction.reply({ content: 'Song skipped.', ephemeral: true });
+
+            const loopToDisplay = player.loop ?? 'NONE';
+            const playerSnapshot = poru.players.get(guildId) ?? player;
+            await refreshNowPlayingMessage(
+              interaction.client,
+              guildId,
+              playerSnapshot,
+              loopToDisplay
+            );
+            return;
+        }
+
+        const result = skipVotes.registerVote({
+            guildId,
+            userId: interaction.user.id,
+            voiceChannelId: voiceChannel.id,
+            eligibleCount,
+            threshold: settings.threshold,
+        });
+
+        if(result.status === 'duplicate')
+        {
+            await interaction.reply({ content: 'You already voted. Votes: ' + result.votes + '/' + result.required + '.', ephemeral: true });
+            return;
+        }
+
+        if(result.status === 'passed')
+        {
+            await lavalinkSkip(guildId);
+            skipVotes.clear(guildId);
+            await interaction.reply({ content: 'Vote passed. Song skipped.', ephemeral: true });
+
+            const loopToDisplay = player.loop ?? 'NONE';
+            const playerSnapshot = poru.players.get(guildId) ?? player;
+            await refreshNowPlayingMessage(
+              interaction.client,
+              guildId,
+              playerSnapshot,
+              loopToDisplay
+            );
+            return;
+        }
+
+        await interaction.reply({ content: 'Vote recorded. Votes: ' + result.votes + '/' + result.required + '.', ephemeral: true });
+        return;
+    }
+
+    if(config.enabled && !isDj && ['loop-button','shuffle-button','volume-button','pause-button','resume-button','rewind-button'].includes(customId))
+    {
+        await interaction.reply({ content: 'Only the DJ can use this control while DJ mode is active.', ephemeral: true });
+        return;
+    }
 
     await interaction.deferUpdate();
 
-    switch(interaction.customId)
+    switch(customId)
     {
         case 'pause-button':
             await lavalinkPause(guildId);
@@ -111,88 +223,60 @@ async function handleControlButtons(interaction, player)
         case 'resume-button':
             await lavalinkResume(guildId);
             break;
-        case 'skip-button':
-            await lavalinkSkip(guildId);
-            break;
         case 'rewind-button': {
             const result = await lavalinkPrevious(guildId);
 
-            if (result?.status === 'no-player') 
+            if (result?.status === 'no-player')
             {
                 await interaction.followUp({ content: 'Nothing is playing right now.', flags: MessageFlags.Ephemeral });
                 return;
             }
             
-            if (result?.status === 'empty') 
+            if (result?.status === 'empty')
             {
                 await interaction.followUp({ content: 'No previous track in history yet.', flags: MessageFlags.Ephemeral });
                 return;
             }
-            
+
             break;
         }
         case 'loop-button':
-            loopMode = await lavalinkToggleLoop(guildId);
+            loopMode = await lavalinkToggleLoop(guildId) ?? loopMode;
             break;
         case 'shuffle-button':
             await lavalinkShuffle(guildId);
-            await interaction.followUp({ content: 'Queue shuffled!', flags: MessageFlags.Ephemeral });
             break;
-        case 'lyrics-button': {
-            const payload = getLyricsState(guildId);
-
-            if (!payload || (!payload.lyrics && !payload.lines)) 
+        case 'lyrics-button':
             {
+                const state = getLyricsState(guildId);
+                if(!state)
+                {
+                    await interaction.followUp({
+                        content: 'No lyrics cached yet. Try again shortly.',
+                        flags: MessageFlags.Ephemeral,
+                    });
+
+                    return;
+                }
+
+                const { content, embeds } = buildLyricsResponse(state);
+
+                if (!embeds.length)
+                {
+                    await interaction.followUp({
+                        embeds: [errorEmbed('The lyrics provider returned an empty result.')],
+                    });
+
+                    return;
+                }
+
                 await interaction.followUp({
-                    embeds: [errorEmbed('No lyrics were found for this track.')],
-                    flags: MessageFlags.Ephemeral,
+                    content,
+                    embeds,
                 });
-            
+
                 return;
             }
-
-            const text = payload.lyrics
-                || (Array.isArray(payload.lines)
-                    ? payload.lines.map((entry) => entry.line).join('\n')
-                    : null);
-
-            if (!text) 
-            {
-                await interaction.followUp({
-                    embeds: [errorEmbed('The lyrics provider returned an empty result.')],
-                    flags: MessageFlags.Ephemeral,
-                });
-            
-                return;
-            }
-
-            const trackTitle = payload.track?.title
-                ?? player.currentTrack?.info?.title
-                ?? 'Unknown track';
-
-            const { embeds, content } = buildLyricsResponse({
-                text,
-                provider: payload?.source,
-                trackTitle,
-            });
-
-            if (!embeds.length) 
-            {
-                await interaction.followUp({
-                    embeds: [errorEmbed('The lyrics provider returned an empty result.')],
-                });
-            
-                return;
-            }
-
-            await interaction.followUp({
-                content,
-                embeds,
-            });
-            
-            return;
-        }
-
         default:
             await interaction.followUp({ content: 'Unknown button.', flags: MessageFlags.Ephemeral });
             return;
@@ -303,3 +387,5 @@ module.exports = {
     handleControlButtons,
     refreshNowPlayingMessage
 }
+
+

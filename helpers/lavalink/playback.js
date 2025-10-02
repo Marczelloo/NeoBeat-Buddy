@@ -26,10 +26,8 @@ async function ensurePlayer(guildId, voiceId, textId) {
   return player;
 }
 
-async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepend = false }) {
-  const player = await ensurePlayer(guildId, voiceId, textId);
+async function lavalinkResolveTracks(query) {
   const poru = getPoru();
-
   let q = String(query || '').trim();
   const isUrl = /^(https?:\/\/)/i.test(q);
   if (!isUrl && q.toLowerCase().startsWith('ytsearch:')) {
@@ -39,59 +37,83 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
   const res = await poru.resolve({ query: isUrl ? q : q });
 
   const validTracks = Array.isArray(res?.tracks)
-    ? res.tracks.filter(
-        (t) =>
-          t &&
-          typeof t.track === 'string' &&
-          t.track.length > 0 &&
-          t.info &&
-          typeof t.info === 'object'
+    ? res.tracks.filter((t) =>
+        t &&
+        typeof t.track === "string" &&
+        t.track.length > 0 &&
+        t.info &&
+        typeof t.info === "object"
       )
     : [];
 
   if (!validTracks.length) {
     throw new Error(
-      res?.loadType === 'loadFailed'
-        ? res?.exception?.message ?? 'Failed to load track (Lavalink error).'
-        : 'No playable tracks found.'
+      res?.loadType === "loadFailed"
+        ? res?.exception?.message ?? "Failed to load track (Lavalink error)."
+        : "No playable tracks found."
     );
-  };
+  }
 
   let tracksToAdd = validTracks;
   let nowPlaying = validTracks[0];
 
-  if(res.loadType === 'playlist')
-  {
+  if (res.loadType === "playlist") {
     const selectedIndex = res.playlistInfo?.selectedTrack ?? 0;
     nowPlaying = tracksToAdd[selectedIndex] ?? nowPlaying;
-  }
-  else
-  {
-    tracksToAdd = [nowPlaying]
+  } else {
+    tracksToAdd = [nowPlaying];
   }
 
-  const isPlaylist = res.loadType === 'playlist';
+  const clones = tracksToAdd.map((track) => cloneTrack(track));
+  const selectedClone = cloneTrack(nowPlaying);
+
+  const isPlaylist = res.loadType === "playlist";
   const playlistInfo = isPlaylist ? (res.playlistInfo ?? {}) : null;
-  const playlistUrl = isPlaylist 
+  const playlistUrl = isPlaylist
     ? (playlistInfo?.uri ?? playlistInfo?.url ?? (isUrl ? q : null))
     : null;
-  const playlistTrackCount = tracksToAdd.length;
+  const playlistTrackCount = clones.length;
   const playlistDurationMs = isPlaylist
-    ? tracksToAdd.reduce((sum, t) => sum + (t.info.length ?? 0), 0)
+    ? clones.reduce((sum, track) => sum + (track.info?.length ?? 0), 0)
     : 0;
 
-  const requesterMeta = requester ? {
-    requesterId: requester.id,
-    requesterTag: requester.tag,
-    requesterAvatar: requester.avatar,
-  } : {};
+  return {
+    tracks: clones,
+    track: selectedClone,
+    isPlaylist,
+    playlistInfo,
+    playlistUrl,
+    playlistTrackCount,
+    playlistDurationMs,
+  };
+}
+
+async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepend = false }) {
+  const player = await ensurePlayer(guildId, voiceId, textId);
+
+  const resolution = await lavalinkResolveTracks(query);
+  const tracksToAdd = resolution.tracks.map((track) => cloneTrack(track));
+
+  if (!tracksToAdd.length) {
+    throw new Error('No playable tracks found.');
+  }
+
+  const targetEncoded = resolution.track?.track ?? tracksToAdd[0].track;
+  let nowPlaying = tracksToAdd.find((track) => track.track === targetEncoded) ?? tracksToAdd[0];
+
+  const requesterMeta = requester
+    ? {
+        requesterId: requester.id,
+        requesterTag: requester.tag,
+        requesterAvatar: requester.avatar,
+      }
+    : {};
 
   const shouldPrepend = prepend && player.queue.length > 0;
-  const queueTargets = shouldPrepend  ? [...tracksToAdd].reverse() : tracksToAdd;
+  const queueTargets = shouldPrepend ? [...tracksToAdd].reverse() : tracksToAdd;
 
-  for(const track of queueTargets)
-  {
-    if(!track) continue;
+  for (const track of queueTargets) {
+    if (!track) continue;
 
     track.info = { ...(track.info || {}), ...requesterMeta, requester: textId };
     track.userData = {
@@ -99,10 +121,8 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
       fallbackAttempts: 0,
     };
 
-    if(shouldPrepend)
-      await player.queue.unshift(track);
-    else
-      await player.queue.add(track);
+    if (shouldPrepend) await player.queue.unshift(track);
+    else await player.queue.add(track);
   }
 
   const currentDescription = player.currentTrack ? describeTrack(player.currentTrack) : 'none';
@@ -116,8 +136,7 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
     `queueLength=${player.queue.length}`
   );
 
-  if(!player.currentTrack && player.queue.length > 0)
-  {
+  if (!player.currentTrack && player.queue.length > 0) {
     await player.play();
   }
 
@@ -129,16 +148,16 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
     `queueLength=${player.queue.length}`
   );
 
-  clearInactivityTimer(guildId, "playRequest");
+  clearInactivityTimer(guildId, 'playRequest');
 
   return {
     track: cloneTrack(nowPlaying),
     player,
-    isPlaylist,
-    playlistInfo,
-    playlistUrl,
-    playlistTrackCount,
-    playlistDurationMs,
+    isPlaylist: resolution.isPlaylist,
+    playlistInfo: resolution.playlistInfo,
+    playlistUrl: resolution.playlistUrl,
+    playlistTrackCount: resolution.playlistTrackCount,
+    playlistDurationMs: resolution.playlistDurationMs,
   };
 }
 
@@ -326,5 +345,8 @@ module.exports = {
     lavalinkPrevious,
     lavalinkToggleLoop,
     lavalinkShuffle,
-    lavalinkClearQueue
+    lavalinkClearQueue,
+    lavalinkResolveTracks
 };
+
+

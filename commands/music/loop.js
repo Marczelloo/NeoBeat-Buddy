@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { refreshNowPlayingMessage } = require('../../helpers/buttons');
 const { errorEmbed, successEmbed } = require('../../helpers/embeds');
+const { requireDj } = require('../../helpers/interactions/djGuards');
 const { requireSharedVoice } = require('../../helpers/interactions/voiceGuards');
 const { lavalinkToggleLoop, createPoru } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
@@ -26,8 +27,11 @@ module.exports = {
 
         await interaction.deferReply({ ephemeral: true });
 
-        const guard = await requireSharedVoice(interaction);
-        if(!guard.ok) return interaction.editReply(guard.response);
+        const voiceGuard = await requireSharedVoice(interaction);
+        if(!voiceGuard.ok) return interaction.editReply(voiceGuard.response);
+
+        const djGuard = requireDj(interaction, { action: 'change the loop mode' });
+        if(!djGuard.ok) return interaction.editReply(djGuard.response);
 
         const mode = interaction.options.getString('mode');
 
@@ -35,13 +39,13 @@ module.exports = {
 
         if(loopMode) 
         {
-            const player = createPoru(interaction.guild.id).players.get(interaction.guild.id);
+            const poru = createPoru(interaction.client);
+            const player = poru.players.get(interaction.guild.id);
             await refreshNowPlayingMessage(interaction.client, interaction.guild.id, player);
-            return interaction.editReply({ embeds: [successEmbed(`🔁 Loop mode set to **${loopMode}**.`)] }) ;
+            return interaction.editReply({ embeds: [successEmbed(`Loop mode set to **${loopMode}**.`)] }) ;
         }
-        else
-            return interaction.editReply({ embeds: [errorEmbed('No music is currently playing.')] });
 
-
+        return interaction.editReply({ embeds: [errorEmbed('No music is currently playing.')] });
     }
 }
+

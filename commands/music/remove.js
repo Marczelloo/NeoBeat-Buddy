@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { errorEmbed, successEmbed } = require('../../helpers/embeds');
+const { requireDj } = require('../../helpers/interactions/djGuards');
 const { requireSharedVoice } = require('../../helpers/interactions/voiceGuards');
 const { lavalinkRemoveFromQueue } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
@@ -26,8 +27,11 @@ module.exports = {
 
             await interaction.deferReply({ ephemeral: true });
 
-            const guard = await requireSharedVoice(interaction);
-            if(!guard.ok) return interaction.editReply(guard.response);
+            const voiceGuard = await requireSharedVoice(interaction);
+            if(!voiceGuard.ok) return interaction.editReply(voiceGuard.response);
+
+            const djGuard = requireDj(interaction, { action: 'modify the queue' });
+            if(!djGuard.ok) return interaction.editReply(djGuard.response);
 
             const position = interaction.options.getInteger('position');
             const title= interaction.options.getString('title') || position;
@@ -44,14 +48,15 @@ module.exports = {
 
             switch(result?.status)
             {
-                case "removed":
-                    return interaction.editReply({ embeds: [successEmbed(`🗑️ Removed **${result.trackTitle}** from position ${result.index} in the queue.`)] })
-                case "not_found":
+                case 'removed':
+                    return interaction.editReply({ embeds: [successEmbed(`Removed **${result.trackTitle}** from position ${result.index} in the queue.`)] })
+                case 'not_found':
                     return interaction.editReply({ embeds: [errorEmbed('No music found with that title or ID.')] })
-                case "empty_queue":
+                case 'empty_queue':
                     return interaction.editReply({ embeds: [errorEmbed('The queue is empty.')] })
                 default:
                     return interaction.editReply({ embeds: [errorEmbed('An unknown error occurred.')] })
                 };
         }
 }
+

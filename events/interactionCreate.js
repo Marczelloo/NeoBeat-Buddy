@@ -1,108 +1,132 @@
-const { Events, TextInputStyle } = require('discord.js');
-const { ModalBuilder } = require('discord.js');
-const { TextInputBuilder } = require('discord.js');
-const { ActionRowBuilder } = require('discord.js');
+﻿const { Events, TextInputStyle, ModalBuilder, TextInputBuilder, ActionRowBuilder } = require('discord.js');
 const queueCommand = require('../commands/music/queue');
 const helpCommand = require('../commands/utility/help');
 const { handleControlButtons, refreshNowPlayingMessage } = require('../helpers/buttons');
 const { getClient } = require('../helpers/clientRegistry');
 const { createPoru, lavalinkSetVolume } = require('../helpers/lavalink/index');
 const Log = require('../helpers/logs/log');
+const djStore = require('../helpers/dj/store');
+const { handleProposalInteraction } = require('../helpers/dj/interactions');
 
 module.exports = {
-    name: Events.InteractionCreate,
-    async execute(interaction) {
-		if (interaction.isStringSelectMenu()) {
-			if (interaction.customId === 'help-category' && typeof helpCommand.handleCategorySelect === 'function') 
-			{
-				await helpCommand.handleCategorySelect(interaction);
-			}
-      		
-			return;
-    	}
+  name: Events.InteractionCreate,
+  async execute(interaction) {
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === 'help-category' && typeof helpCommand.handleCategorySelect === 'function') {
+        await helpCommand.handleCategorySelect(interaction);
+      }
 
-		if(interaction.isButton())
-		{
-			if(interaction.customId.startsWith('queue|'))
-			{
-				if(typeof queueCommand.handlePaginationButtons === 'function')
-				{
-					await queueCommand.handlePaginationButtons(interaction);
-				}	
+      return;
+    }
 
-				return;
-			}
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith('dj|')) {
+        await handleProposalInteraction(interaction);
+        return;
+      }
 
-			const poru = createPoru(getClient());
-			const player = poru.players.get(interaction.guild.id);
-			if(!player) return interaction.reply({ content: 'No music is being played on this server.', ephemeral: true });
+      if (interaction.customId.startsWith('queue|')) {
+        if (typeof queueCommand.handlePaginationButtons === 'function') {
+          await queueCommand.handlePaginationButtons(interaction);
+        }
 
-			const memeberChannel = interaction.member.voice.channelId;
-			if(player.voiceChannel && player.voiceChannel !== memeberChannel) return interaction.reply({ content: 'You must be in the same voice channel as me to use this button.', ephemeral: true });
+        return;
+      }
 
-			if(interaction.customId === 'volume-button')
-			{
-				const modal = new ModalBuilder()
-					.setCustomId('player-volume-modal')
-					.setTitle('Set Player Volume');
+      const poru = createPoru(getClient());
+      const player = poru.players.get(interaction.guild.id);
+      if (!player) {
+        await interaction.reply({ content: 'No music is being played on this server.', ephemeral: true });
+        return;
+      }
 
-				const volumeInput = new TextInputBuilder()
-					.setCustomId('player-volume-value')
-					.setLabel('Volume (1-100)')
-					.setStyle(TextInputStyle.Short)
-					.setRequired(true)
-					.setValue(String(player.volume ?? 100));
+      const config = djStore.getGuildConfig(interaction.guild.id);
+      const isDj = djStore.hasDjPermissions(interaction.member, config);
 
-				modal.addComponents(new ActionRowBuilder().addComponents(volumeInput));
-				
-				return interaction.showModal(modal);
-			}
+      const memberChannel = interaction.member.voice?.channelId;
+      if (player.voiceChannel && player.voiceChannel !== memberChannel) {
+        await interaction.reply({ content: 'You must be in the same voice channel as me to use this button.', ephemeral: true });
+        return;
+      }
 
-			await handleControlButtons(interaction, player);
-			return;
-		}
+      if (interaction.customId === 'volume-button') {
+        if (config.enabled && !isDj) {
+          await interaction.reply({ content: 'Only the DJ can adjust the volume while DJ mode is active.', ephemeral: true });
+          return;
+        }
 
-		if(interaction.isModalSubmit())
-		{
-			if(interaction.customId !== 'player-volume-modal') return;
+        const modal = new ModalBuilder()
+          .setCustomId('player-volume-modal')
+          .setTitle('Set Player Volume');
 
-			const rawValue = interaction.fields.getTextInputValue('player-volume-value').trim();
-			const parsed = Number(rawValue);
+        const volumeInput = new TextInputBuilder()
+          .setCustomId('player-volume-value')
+          .setLabel('Volume (1-100)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setValue(String(player.volume ?? 100));
 
-			if(!Number.isFinite(parsed)) return interaction.reply({ content: 'Invalid volume value. Please provide a number between 1 and 100.', ephemeral: true });
+        modal.addComponents(new ActionRowBuilder().addComponents(volumeInput));
+        await interaction.showModal(modal);
+        return;
+      }
 
-			const target = Math.max(0, Math.min(100, Math.round(parsed)));
+      await handleControlButtons(interaction, player);
+      return;
+    }
 
-			const poru = createPoru(getClient());
-			const player = poru.players.get(interaction.guild.id);
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId !== 'player-volume-modal') return;
 
-			if(!player) return interaction.reply({ content: 'No music is being played on this server.', ephemeral: true });
+      const rawValue = interaction.fields.getTextInputValue('player-volume-value').trim();
+      const parsed = Number(rawValue);
 
-			const memberChannel = interaction.member.voice?.channelId;
+      if (!Number.isFinite(parsed)) {
+        await interaction.reply({ content: 'Invalid volume value. Please provide a number between 1 and 100.', ephemeral: true });
+        return;
+      }
 
-			if(player.voiceChannel && player.voiceChannel !== memberChannel) return interaction.reply({ content: 'You must be in the same voice channel as me to use this button.', ephemeral: true });
+      const target = Math.max(0, Math.min(100, Math.round(parsed)));
 
-			await lavalinkSetVolume(interaction.guild.id, target);
-			await interaction.reply({ content: `Set player volume to \`${target}\`.`, ephemeral: true });
-			await refreshNowPlayingMessage(interaction.client, interaction.guild.id, player, player.loop ?? 'NONE', player.position);
+      const poru = createPoru(getClient());
+      const player = poru.players.get(interaction.guild.id);
+      if (!player) {
+        await interaction.reply({ content: 'No music is being played on this server.', ephemeral: true });
+        return;
+      }
 
-			return;
-		}
+      const config = djStore.getGuildConfig(interaction.guild.id);
+      const isDj = djStore.hasDjPermissions(interaction.member, config);
+      if (config.enabled && !isDj) {
+        await interaction.reply({ content: 'Only the DJ can adjust the volume while DJ mode is active.', ephemeral: true });
+        return;
+      }
 
-		if (!interaction.isChatInputCommand()) return;
+      const memberChannel = interaction.member.voice?.channelId;
+      if (player.voiceChannel && player.voiceChannel !== memberChannel) {
+        await interaction.reply({ content: 'You must be in the same voice channel as me to use this button.', ephemeral: true });
+        return;
+      }
 
-		const command = interaction.client.commands.get(interaction.commandName);
+      await lavalinkSetVolume(interaction.guild.id, target);
+      await interaction.reply({ content: `Set player volume to \`${target}\`.`, ephemeral: true });
+      await refreshNowPlayingMessage(interaction.client, interaction.guild.id, player, player.loop ?? 'NONE', player.position);
+      return;
+    }
 
-		if (!command) {
-			Log.error(`No command matching ${interaction.commandName} was found.`, null, `Command name: ${interaction.commandName}`, interaction.guild.id, interaction.guild.name);
-			return;
-		}
+    if (!interaction.isChatInputCommand()) return;
 
-		try 
-		{
-			await command.execute(interaction);
-		} catch (error) {
-			Log.error(`Error executing ${interaction.commandName}`, error, `Command name: ${interaction.commandName}`, interaction.guild.id, interaction.guild.name);
-		}
-    },
+    const command = interaction.client.commands.get(interaction.commandName);
+
+    if (!command) {
+      Log.error(`No command matching ${interaction.commandName} was found.`, null, `Command name: ${interaction.commandName}`, interaction.guild.id, interaction.guild.name);
+      return;
+    }
+
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      Log.error(`Error executing ${interaction.commandName}`, error, `Command name: ${interaction.commandName}`, interaction.guild.id, interaction.guild.name);
+    }
+  },
 };

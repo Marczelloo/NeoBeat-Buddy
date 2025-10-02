@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { refreshNowPlayingMessage } = require('../../helpers/buttons');
 const { errorEmbed, successEmbed } = require('../../helpers/embeds');
+const { requireDj } = require('../../helpers/interactions/djGuards');
 const { requireSharedVoice } = require('../../helpers/interactions/voiceGuards');
 const { lavalinkPause, createPoru } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
@@ -16,19 +17,23 @@ module.exports = {
 
             await interaction.deferReply({ ephemeral: true });
 
-           const guard = await requireSharedVoice(interaction);
-            if(!guard.ok) return interaction.editReply(guard.response);
+           const voiceGuard = await requireSharedVoice(interaction);
+            if(!voiceGuard.ok) return interaction.editReply(voiceGuard.response);
+
+            const djGuard = requireDj(interaction, { action: 'pause the music' });
+            if(!djGuard.ok) return interaction.editReply(djGuard.response);
 
             const paused = await lavalinkPause(interaction.guild.id);
             if (paused) 
             {
-                const player = createPoru(interaction.guild.id).players.get(interaction.guild.id);
+                const poru = createPoru(interaction.client);
+                const player = poru.players.get(interaction.guild.id);
                 await refreshNowPlayingMessage(interaction.client, interaction.guild.id, player)
-                return interaction.editReply({ embeds: [successEmbed('⏸️ Music paused.')] });
+                return interaction.editReply({ embeds: [successEmbed('Music paused.')] });
             }
-            else 
-                return interaction.editReply({ embeds: [errorEmbed('No music is currently playing.')] });
-            
+
+            return interaction.editReply({ embeds: [errorEmbed('No music is currently playing.')] });
         }
 
 }
+

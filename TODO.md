@@ -37,6 +37,7 @@
 - [x] fix requester info after adding playlist (displays unknown)
 - [x] fix double player message on pi after adding one song to queue and it stopping playing and then adding another song to queue
 - [x] fix lyrics check if found are for proper song (not offical songs without posted lyrics have lyrics from different songs) | switched to genius api instead of lavalinks
+- [] review all changes and check what can be moved to modules, reused etc.
 
 ## OTHER
 - [x] clean lavalinkManager and move helpers to other files !!!!
