@@ -1,4 +1,6 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags } = require('discord.js');
+const skipVotes = require('./dj/skipVotes');
+const djStore = require('./dj/store');
 const { playerEmbed, errorEmbed } = require('./embeds');
 const { getGuildState } = require('./guildState');
 const {
@@ -14,8 +16,6 @@ const {
 const { buildLyricsResponse } = require('./lavalink/lyricsFormatter');
 const Log = require('./logs/log');
 const { formatDuration } = require('./utils');
-const djStore = require('./dj/store');
-const skipVotes = require('./dj/skipVotes');
 
 const LOOP_EMOJI = '1198248581304418396';
 const SHUFFLE_EMOJI = '1198248578146115605';
@@ -248,18 +248,28 @@ async function handleControlButtons(interaction, player)
             break;
         case 'lyrics-button':
             {
-                const state = getLyricsState(guildId);
-                if(!state)
+                const payload = getLyricsState(guildId);
+                if(!payload || (!payload.lyrics && !payload.lines))
                 {
-                    await interaction.followUp({
-                        content: 'No lyrics cached yet. Try again shortly.',
-                        flags: MessageFlags.Ephemeral,
-                    });
-
-                    return;
+                    return interaction.editReply({ embeds: [errorEmbed('No lyrics were found for this track.')] });
                 }
 
-                const { content, embeds } = buildLyricsResponse(state);
+                const text = payload.lyrics
+                    || (Array.isArray(payload.lines)
+                        ? payload.lines.map((entry) => entry.line).join('\n')
+                        : null);
+
+                if (!text) return interaction.editReply({ embeds: [errorEmbed('The lyrics provider returned an empty result.')] });
+
+                const trackTitle = payload.track?.title
+                    ?? player.currentTrack?.info?.title
+                    ?? 'Unknown track';
+
+                const { embeds, content } = buildLyricsResponse({
+                    text,
+                    provider: payload?.source,
+                    trackTitle,
+                });
 
                 if (!embeds.length)
                 {
