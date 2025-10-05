@@ -403,7 +403,15 @@ Contributions are welcome! Please:
 
 ## License
 
-ISC
+This project is licensed under the **Educational & Research License** - see the [LICENSE](LICENSE) file for details.
+
+⚠️ **Important:** This license restricts use to educational and research purposes only. It is NOT an open-source license and does NOT permit:
+- Commercial use
+- Public deployment
+- Distribution as a service
+- Any use that violates third-party Terms of Service
+
+**You assume all legal responsibility** for how you use this code.
 
 ---
 
