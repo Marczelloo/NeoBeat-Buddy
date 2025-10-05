@@ -147,9 +147,21 @@ async function handleControlButtons(interaction, player)
 
         if(settings.mode === 'dj')
         {
-            const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+            const mention = djStore.getDjRoleMention(config);
             await interaction.reply({ content: 'Only ' + mention + ' can skip tracks while DJ mode is active.', ephemeral: true });
             return;
+        }
+
+        if(settings.mode === 'hybrid' && isDj)
+        {
+            const skipped = await lavalinkSkip(guildId);
+            if(skipped)
+            {
+                skipVotes.clear(guildId);
+                await interaction.reply({ content: 'Song skipped.', ephemeral: true });
+            }
+
+            return interaction.reply({ content: 'No music is currently playing.', ephemeral: true });
         }
 
         const listeners = voiceChannel.members.filter((member) => !member.user.bot);
@@ -209,7 +221,7 @@ async function handleControlButtons(interaction, player)
 
     if(config.enabled && !isDj && ['loop-button','shuffle-button','volume-button','pause-button','resume-button','rewind-button'].includes(customId))
     {
-        const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+        const mention = djStore.getDjRoleMention(config);
         await interaction.reply({ content: 'Only ' + mention + ' can use this control while DJ mode is active.', ephemeral: true });
         return;
     }

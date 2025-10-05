@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
 const PRESET_CHOICES = require("../../helpers/equalizer/presets");
+const { requireDj } = require("../../helpers/interactions/djGuards");
 const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { lavalinkSetEqualizer, lavalinkResetFilters } = require("../../helpers/lavalink/index");
 const Log = require("../../helpers/logs/log");
@@ -51,6 +52,9 @@ module.exports = {
 
             const guard = await requireSharedVoice(interaction);
             if(!guard.ok) return interaction.editReply(guard.response);
+
+            const djGuard = requireDj(interaction, { action: 'adjust the equalizer' });
+            if (!djGuard.ok) return interaction.editReply(djGuard.response);
 
             const preset = interaction.options.getString("name");
             const band = interaction.options.getInteger("band");

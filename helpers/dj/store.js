@@ -213,6 +213,22 @@ function setStrictMode(guildId, strict)
   return setGuildConfig(guildId, { strictMode: Boolean(strict) });
 }
 
+function getDjRoleMention(configOrGuildId)
+{
+  if(typeof configOrGuildId === 'string')
+  {
+    const config = getGuildConfig(configOrGuildId);
+    return config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+  }
+
+  if(configOrGuildId && typeof configOrGuildId === 'object')
+  {
+    return configOrGuildId.roleId ? '<@&' + configOrGuildId.roleId + '>' : 'the DJ';
+  }
+
+  return 'the DJ';
+}
+
 module.exports = {
   init,
   getGuildConfig,
@@ -223,6 +239,7 @@ module.exports = {
   isDjModeEnabled,
   hasDjPermissions,
   getSkipSettings,
+  getDjRoleMention,
   DEFAULT_CONFIG,
   ALLOWED_SKIP_MODES,
 };

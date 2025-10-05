@@ -57,8 +57,20 @@ module.exports = {
 
             if(settings.mode === 'dj')
             {
-                const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+                const mention = djStore.getDjRoleMention(config);
                 return interaction.editReply({ embeds: [errorEmbed('Only ' + mention + ' can skip tracks while DJ mode is active.')] });
+            }
+
+            if(settings.mode === 'hybrid' && isDj)
+            {
+                const skipped = await lavalinkSkip(interaction.guild.id);
+                if(skipped)
+                {
+                    skipVotes.clear(interaction.guild.id);
+                    return interaction.editReply({ embeds: [successEmbed('Song skipped.')] });
+                }
+
+                return interaction.editReply({ embeds: [errorEmbed('No music is currently playing.')] });
             }
 
             if(eligibleCount <= 1)
@@ -83,7 +95,7 @@ module.exports = {
 
             if(result.status === 'duplicate')
             {
-                const mention = config.roleId ? '<@&' + config.roleId + '>' : 'a DJ';
+                const mention = djStore.getDjRoleMention(config);
                 return interaction.editReply({ embeds: [errorEmbed(`You already voted. Votes: ${result.votes}/${result.required}.\nTip: ${mention} can skip instantly.`)] });
             }
 

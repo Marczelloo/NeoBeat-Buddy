@@ -1,4 +1,5 @@
 const sessions = new Map();
+const VOTE_EXPIRY_MS = 5 * 60 * 1000;
 
 function clear(guildId)
 {
@@ -9,6 +10,24 @@ function requiredVotes(count, threshold)
 {
   const needed = Math.ceil(count * threshold);
   return Math.max(1, needed);
+}
+
+function clearExpiredVoters(session)
+{
+  const now = Date.now();
+  const expiredVoters = [];
+
+  for(const [userId, timestamp] of session.voterTimestamps || [])
+  {
+    if (now - timestamp > VOTE_EXPIRY_MS) expiredVoters.push(userId);
+  }
+
+  expiredVoters.forEach((userId) => {
+    session.voters.delete(userId);
+    session.voterTimeestamps.delete(userId);
+  });
+
+  return expiredVoters.length > 0;
 }
 
 function registerVote({ guildId, userId, voiceChannelId, eligibleCount, threshold })
@@ -35,6 +54,7 @@ function registerVote({ guildId, userId, voiceChannelId, eligibleCount, threshol
   else
   {
     session.eligibleCount = count;
+    clearExpiredVoters(session);
   }
 
   if(session.voters.has(userId))
@@ -44,6 +64,7 @@ function registerVote({ guildId, userId, voiceChannelId, eligibleCount, threshol
   }
 
   session.voters.add(userId);
+  session.voterTimestamps.set(userId, Date.now());
   session.updatedAt = Date.now();
 
   if(session.voters.size >= needed)

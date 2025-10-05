@@ -53,7 +53,7 @@ module.exports = {
       {
         if (config.enabled && !isDj) 
         {
-          const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+          const mention = djStore.getDjRoleMention(config);
           await interaction.reply({ content: 'Only ' + mention + ' can adjust the volume while DJ mode is active.', ephemeral: true });
           return;
         }
@@ -102,7 +102,7 @@ module.exports = {
       const isDj = djStore.hasDjPermissions(interaction.member, config);
       if (config.enabled && !isDj) 
       {
-        const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+        const mention = djStore.getDjRoleMention(config);
         await interaction.reply({ content: 'Only ' + mention + ' can adjust the volume while DJ mode is active.', ephemeral: true });
         return;
       }
