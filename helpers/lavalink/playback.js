@@ -1,10 +1,12 @@
 const djProposals = require("../dj/proposals");
 const skipVotes = require("../dj/skipVotes");
 const Log = require("../logs/log");
+const { getEqualizerState } = require("./equalizerStore");
 const { describeTrack } = require("./fallbacks");
 const { getPlayer, getPoru } = require("./players");
 const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
 const { clearInactivityTimer, clearProgressInterval, scheduleInactivityDisconnect, scheduleProgressUpdates } = require("./timers");
+const statsStore = require("../stats/store");
 
 async function ensurePlayer(guildId, voiceId, textId) {
   let player = getPlayer(guildId);
@@ -25,6 +27,23 @@ async function ensurePlayer(guildId, voiceId, textId) {
   await player.setVolume(target);
   player.volume = target;
 
+  const savedEq = getEqualizerState(guildId);
+
+  if (savedEq?.equalizer?.length) 
+  {
+    try 
+    {
+      await player.node.rest.updatePlayer({
+        guildId,
+        data: { filters: savedEq }
+      });
+      player.filters = savedEq;
+    } 
+    catch (err) 
+    {
+      Log.error('Failed to restore EQ settings', err, `guild=${guildId}`);
+    }
+  }
   return player;
 }
 
@@ -211,11 +230,18 @@ async function lavalinkSkip(guildId) {
   const player = getPlayer(guildId);
   if (!player || (!player.currentTrack && player.queue.length === 0)) return false;
 
-  await player.skip();
+  const result = await player.skip();
+
   if(!player.currentTrack && player.queue.length === 0)
   {
     scheduleInactivityDisconnect(player, "skipEmpty");
   }
+
+  if(result)
+  {
+    statsStore.trackSkip(guildId);
+  }
+
   return true;
 }
 

@@ -1,8 +1,8 @@
 const { TRACK_HISTORY_LIMIT } = require("./constants");
+const { equalizerState } = require("./equalizerStore");
 
 const inactivityTimers = new Map();
 const playbackState = new Map();
-const equalizerState = new Map();
 const lyricsState = new Map();
 
 const ensurePlaybackState = (guildId) => {

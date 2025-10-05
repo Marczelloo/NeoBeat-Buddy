@@ -36,4 +36,7 @@ services:
       - .env.prod
     environment:
       NODE_ENV: production
+    volumes:
+    - ./helpers/data:/app/helpers/data  # Persist data across restarts
+    - ./logs:/app/logs   
     restart: unless-stopped

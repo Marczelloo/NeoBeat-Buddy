@@ -6,6 +6,7 @@ const { errorEmbed, successEmbed, playlistEmbed, songEmbed } = require('../../he
 const { updateGuildState } = require('../../helpers/guildState.js');
 const { lavalinkPlay, lavalinkResolveTracks } = require('../../helpers/lavalink/index');
 const Log = require('../../helpers/logs/log');
+const statsStore = require('../../helpers/stats/store');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -127,6 +128,8 @@ module.exports = {
 
                 if(isPlaylist)
                 {
+                    statsStore.trackPlaylistAdded(interaction.guild.id, playlistTrackCount);
+
                     await interaction.editReply({
                         embeds: [
                         playlistEmbed({

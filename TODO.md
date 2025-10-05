@@ -17,7 +17,7 @@
 - [x] add button to player for lyrics
 - [x] add button for volume (display modal window with text input for new volume)
 - [x] add play override queue (instead adding song at the end of the queue it will place it at the start)
-- [] add dj role, only users with dj role can add songs to queue, use player, handle queue etc.
+- [x] add dj role, only users with dj role can add songs to queue, use player, handle queue etc.
 - [x] stats tracking per guild and globa (hours played, songs played etc.)
 - [] autoplay (automatically searches for next song based on current one)
 - [] 24/7 command
@@ -37,7 +37,7 @@
 - [x] fix requester info after adding playlist (displays unknown)
 - [x] fix double player message on pi after adding one song to queue and it stopping playing and then adding another song to queue
 - [x] fix lyrics check if found are for proper song (not offical songs without posted lyrics have lyrics from different songs) | switched to genius api instead of lavalinks
-- [] review all changes and check what can be moved to modules, reused etc.
+- [x] review all changes and check what can be moved to modules, reused etc.
 
 ## OTHER
 - [x] clean lavalinkManager and move helpers to other files !!!!

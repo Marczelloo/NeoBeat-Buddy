@@ -1,6 +1,6 @@
 const { EQUALIZER_PRESETS } = require("./constants");
+const { equalizerState, setEqualizerState } = require("./equalizerStore");
 const { getPlayer } = require("./players");
-const { equalizerState } = require("./state");
 const { clearInactivityTimer } = require("./timers");
 
 async function lavalinkSetEqualizer(guildId, presetOrBands)
@@ -35,7 +35,7 @@ async function lavalinkSetEqualizer(guildId, presetOrBands)
     data: { filters: nextFilters }
   })
 
-  equalizerState.set(guildId, nextFilters);
+  setEqualizerState(guildId, nextFilters);
   player.filters = nextFilters;
   clearInactivityTimer(guildId, "setEqualizer");
 
@@ -56,8 +56,9 @@ async function lavalinkResetFilters(guildId)
     data: { filters: { ...baseline, equalizer: [] } }
   });
 
-  equalizerState.set(guildId, { ...baseline, equalizer: []} );
-  player.filters = { ...baseline, equalizer: [] };
+  const resetFilters = { ...baseline, equalizer: [] };
+  setEqualizerState(guildId, resetFilters);
+  player.filters = resetFilters;
   clearInactivityTimer(guildId, "resetFilters");
 
   return { status: "ok" };

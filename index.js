@@ -7,9 +7,17 @@ const { Client, Collection, GatewayIntentBits } = require('discord.js');
 const token = process.env.DISCORD_TOKEN;
 const { setClient } = require('./helpers/clientRegistry.js');
 const djStore = require('./helpers/dj/store.js');
+const guildState = require('./helpers/guildState.js');
+const equalizerStore = require('./helpers/lavalink/equalizerStore.js');
 const { createPoru } = require('./helpers/lavalink/index.js')
 const Log = require('./helpers/logs/log.js');
 const statsStore = require('./helpers/stats/store.js');
+
+if (!token)
+{
+	Log.error('DISCORD_TOKEN is not set in the environment variables.');
+	process.exit(1);
+}
 
 Log.info('Token:', token ? 'Loaded' : 'Not Found');
 
@@ -147,6 +155,22 @@ djStore.init()
 	})
 	.catch(err => {
 		Log.error('Failed to initialize DJ store:', err);
+	});
+
+guildState.init()
+	.then(() => {
+		Log.info('Guild state initialized');
+	})
+	.catch(err => {
+		Log.error('Failed to initialize guild state:', err);
+	});	
+
+equalizerStore.init()
+	.then(() => {
+		Log.info('Equalizer store initialized');
+	})
+	.catch(err => {
+		Log.error('Failed to initialize equalizer store:', err);
 	});
 
 connectClient();

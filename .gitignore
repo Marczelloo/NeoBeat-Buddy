@@ -7,3 +7,5 @@ node_modules
 helpers/lavalink/youtube-cookies.txt
 *.txt
 data
+helpers/data/*
+!helpers/data/.gitkeep

@@ -64,6 +64,11 @@
           usage: '/queue',
         },
         {
+          name: 'remove',
+          description: 'Remove a specific track from the queue by position or title (DJ only in DJ mode).',
+          usage: '/remove [position:<number>] [title:<keyword>]',
+        },
+        {
           name: 'clearqueue',
           description: 'Remove every track from the queue (DJ only while DJ mode is enabled).',
           usage: '/clearqueue',

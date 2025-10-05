@@ -1,69 +1,146 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const Log = require('../logs/log');
 
 const DATA_FILE = path.join(__dirname, '..', 'data', 'stats.json');
-const DEFAULT_STATE = { global: { songsPlayed: 0, msPlayed: 0}, guilds: {} };
-const sessions = new Map();
+const DEFAULT_GUILD_STATS = {
+    songsPlayed: 0,
+    msPlayed: 0,
+    songsSkipped: 0,
+    streamsPlayed: 0,
+    playlistsAdded: 0,
+    totalSessions: 0,
+    peakListeners: 0,
+    lastPlayedAt: null,
+    firstPlayedAt: null,
+    uniqueUsers: [],
+    topSources: {},
+    hourlyActivity: {},
+};
 
+const DEFAULT_STATE = { 
+    global: { ...DEFAULT_GUILD_STATS }, 
+    guilds: {} 
+};
+
+const sessions = new Map();
 let state = { ...DEFAULT_STATE };
 let saveTimer = null;
 
-async function init()
-{
-    try
-    {
+async function init() {
+    try {
         const raw = await fs.readFile(DATA_FILE, 'utf-8');
+
+        if(!raw || raw.trim() === '') 
+        {
+            await ensureDataDir();
+            await persist();
+            return;
+        }
+
         const parsed = JSON.parse(raw);
 
         state = {
-            global: { ...DEFAULT_STATE.global, ...(parsed.global || {} )},
-            guilds: { ...parsed.guilds },
+            global: { 
+                ...DEFAULT_GUILD_STATS, 
+                ...(parsed.global || {}) 
+            },
+            guilds: parsed.guilds || {},
+        };
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            Log.error('Failed to load stats', error);
         }
-    }
-    catch(error)
-    {
-        if(error.code !== 'ENOENT') throw error;
-
         await ensureDataDir();
         await persist();
     }
 }
 
-function ensureDataDir()
-{
+function ensureDataDir() {
     return fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
 }
 
-function ensureGuild(guildId)
-{
-    if(!state.guilds[guildId])
-    {
-        state.guilds[guildId] = { songsPlayed: 0, msPlayed: 0, lastPlayedAt: null };
+function ensureGuild(guildId) {
+    if (!state.guilds[guildId]) {
+        state.guilds[guildId] = { ...DEFAULT_GUILD_STATS };
     }
-
     return state.guilds[guildId];
 }
 
-function scheduleSave()
-{
-    if(saveTimer) return;
+function scheduleSave() {
+    if (saveTimer) return;
     saveTimer = setTimeout(async () => {
         saveTimer = null;
-        await persist();
+        try {
+            await persist();
+        } catch (err) {
+            Log.error('Failed to save stats', err);
+        }
     }, 2000).unref?.();
 }
 
-async function persist()
-{
+async function persist() {
+    await ensureDataDir();
     await fs.writeFile(DATA_FILE, JSON.stringify(state, null, 2), 'utf-8');
 }
 
-function beginTrackSession(guildId, track) 
-{
+function incrementSource(stats, sourceName) {
+    const source = sourceName || 'unknown';
+    stats.topSources[source] = (stats.topSources[source] || 0) + 1;
+}
+
+function updateHourlyActivity(stats) {
+    const hour = new Date().getHours();
+    stats.hourlyActivity[hour] = (stats.hourlyActivity[hour] || 0) + 1;
+}
+
+function addUniqueUser(stats, userId) {
+    if (!userId) return;
+    if (!Array.isArray(stats.uniqueUsers)) {
+        stats.uniqueUsers = [];
+    }
+    if (!stats.uniqueUsers.includes(userId)) {
+        stats.uniqueUsers.push(userId);
+    }
+}
+
+function beginTrackSession(guildId, track, voiceChannelSize = 0) {
     const stats = ensureGuild(guildId);
+    const now = new Date().toISOString();
+    
     stats.songsPlayed += 1;
-    stats.lastPlayedAt = new Date().toISOString();
+    stats.lastPlayedAt = now;
+    
+    if (!stats.firstPlayedAt) {
+        stats.firstPlayedAt = now;
+    }
+
+    if (track.info?.isStream) {
+        stats.streamsPlayed += 1;
+    }
+
+    // Track source
+    incrementSource(stats, track.info?.sourceName);
+    
+    // Track user
+    addUniqueUser(stats, track.info?.requesterId);
+    
+    // Track hourly activity
+    updateHourlyActivity(stats);
+    
+    // Track peak listeners
+    if (voiceChannelSize > stats.peakListeners) {
+        stats.peakListeners = voiceChannelSize;
+    }
+
+    // Global stats
     state.global.songsPlayed += 1;
+    if (track.info?.isStream) {
+        state.global.streamsPlayed += 1;
+    }
+    incrementSource(state.global, track.info?.sourceName);
+    addUniqueUser(state.global, track.info?.requesterId);
+    updateHourlyActivity(state.global);
 
     sessions.set(guildId, {
         startedAt: Date.now(),
@@ -74,22 +151,33 @@ function beginTrackSession(guildId, track)
     scheduleSave();
 }
 
+function trackPlaylistAdded(guildId) {
+    const stats = ensureGuild(guildId);
+    stats.playlistsAdded += 1;
+    state.global.playlistsAdded += 1;
+    scheduleSave();
+}
 
-function updateProgress(guildId, positionMs) 
-{
+function trackSkip(guildId) {
+    const stats = ensureGuild(guildId);
+    stats.songsSkipped += 1;
+    state.global.songsSkipped += 1;
+    scheduleSave();
+}
+
+function updateProgress(guildId, positionMs) {
     const session = sessions.get(guildId);
     if (!session) return;
     session.lastPositionMs = Math.max(session.lastPositionMs, Number(positionMs) || 0);
 }
 
-function finishTrackSession(guildId, track, reason) 
-{
+function finishTrackSession(guildId, track, reason) {
     const session = sessions.get(guildId);
     if (!session) return;
 
     if (['replaced', 'load_failed'].includes(reason)) {
-    sessions.delete(guildId);
-    return;
+        sessions.delete(guildId);
+        return;
     }
 
     const length = session.trackLength ?? track?.info?.length ?? session.lastPositionMs;
@@ -101,21 +189,78 @@ function finishTrackSession(guildId, track, reason)
     state.global.msPlayed += safePlay;
 
     sessions.delete(guildId);
-    
     scheduleSave();
 }
 
-function abortSession(guildId)
-{
+function beginSession(guildId) {
+    const stats = ensureGuild(guildId);
+    stats.totalSessions += 1;
+    state.global.totalSessions += 1;
+    scheduleSave();
+}
+
+function abortSession(guildId) {
     sessions.delete(guildId);
+}
+
+function getGuildStats(guildId) {
+    const stats = state.guilds[guildId];
+    if (!stats) return null;
+    
+    return {
+        ...stats,
+        averageSessionLength: stats.totalSessions > 0 
+            ? Math.round(stats.msPlayed / stats.totalSessions)
+            : 0,
+        uniqueUserCount: stats.uniqueUsers?.length || 0,
+    };
+}
+
+function getGlobalStats() {
+    return {
+        ...state.global,
+        averageSessionLength: state.global.totalSessions > 0
+            ? Math.round(state.global.msPlayed / state.global.totalSessions)
+            : 0,
+        uniqueUserCount: state.global.uniqueUsers?.length || 0,
+    };
+}
+
+function getTopSources(guildId, limit = 5) {
+    const stats = guildId ? state.guilds[guildId] : state.global;
+    if (!stats?.topSources) return [];
+    
+    return Object.entries(stats.topSources)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, limit)
+        .map(([source, count]) => ({ source, count }));
+}
+
+function getMostActiveHour(guildId) {
+    const stats = guildId ? state.guilds[guildId] : state.global;
+    if (!stats?.hourlyActivity) return null;
+    
+    const entries = Object.entries(stats.hourlyActivity);
+    if (entries.length === 0) return null;
+    
+    const [hour, count] = entries.reduce((max, current) => 
+        current[1] > max[1] ? current : max
+    );
+    
+    return { hour: parseInt(hour), count };
 }
 
 module.exports = {
     init,
     beginTrackSession,
+    beginSession,
+    trackPlaylistAdded,
+    trackSkip,
     updateProgress,
     finishTrackSession,
     abortSession,
-    getGuildStats: (guildId) => state.guilds[guildId] ?? null,
-    getGlobalStats: () => state.global,
-}
+    getGuildStats,
+    getGlobalStats,
+    getTopSources,
+    getMostActiveHour,
+};

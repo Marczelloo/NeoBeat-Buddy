@@ -52,6 +52,15 @@ async function init()
   try
   {
     const raw = await fs.readFile(DATA_FILE, 'utf-8');
+
+    if(!raw || raw.trim() === '')
+    {
+      await ensureDataDir();
+      await persist();
+      ready = true;
+      return;
+    }
+
     const parsed = JSON.parse(raw);
     if(parsed && typeof parsed === 'object' && parsed.guilds && typeof parsed.guilds === 'object')
     {

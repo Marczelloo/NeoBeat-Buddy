@@ -165,32 +165,59 @@ module.exports = {
             })
             .setTimestamp();
     },
-    statsEmbed(guildStats, globalStats, lastActivityLabel)
-    {
+    statsEmbed(guildStats, globalStats, lastActivityLabel) {
         const toHours = (ms) => (ms / 3_600_000).toFixed(2);
+        const toDays = (ms) => (ms / 86_400_000).toFixed(1);
+        
+        const guildFields = [];
+        const globalFields = [];
+        
+        if (guildStats) {
+            guildFields.push(
+                {
+                    name: '🎵 This Server',
+                    value: [
+                        `Songs played: **${guildStats.songsPlayed}**`,
+                        `Hours played: **${toHours(guildStats.msPlayed)}h**`,
+                        `Songs skipped: **${guildStats.songsSkipped}**`,
+                        `Playlists added: **${guildStats.playlistsAdded}**`,
+                    ].join('\n'),
+                    inline: true,
+                },
+                {
+                    name: '👥 Server Activity',
+                    value: [
+                        `Unique users: **${guildStats.uniqueUserCount}**`,
+                        `Peak listeners: **${guildStats.peakListeners}**`,
+                        `Sessions: **${guildStats.totalSessions}**`,
+                        `Avg session: **${toHours(guildStats.averageSessionLength)}h**`,
+                    ].join('\n'),
+                    inline: true,
+                }
+            );
+        }
+        
+        if (globalStats) {
+            globalFields.push(
+                {
+                    name: '🌍 Global Stats',
+                    value: [
+                        `Songs played: **${globalStats.songsPlayed}**`,
+                        `Total playtime: **${toDays(globalStats.msPlayed)} days**`,
+                        `Unique users: **${globalStats.uniqueUserCount}**`,
+                        `Total sessions: **${globalStats.totalSessions}**`,
+                    ].join('\n'),
+                    inline: false,
+                }
+            );
+        }
 
         return new EmbedBuilder()
-        .setTitle(`${ICONS.stats} Playback Stats`)
-        .setColor(COLORS.stats)
-        .addFields(
-        {
-          name: 'This Server',
-          value: [
-            `Songs played: **${guildStats.songsPlayed}**`,
-            `Hours played: **${toHours(guildStats.msPlayed)}**`,
-          ].join('\n'),
-          inline: true,
-        },
-        {
-          name: 'Global',
-          value: [
-            `Songs played: **${globalStats.songsPlayed}**`,
-            `Hours played: **${toHours(globalStats.msPlayed)}**`,
-          ].join('\n'),
-          inline: true,
-        },
-      )
-      .setFooter({ text: `Last activity: ${lastActivityLabel}` });
+            .setTitle(`${ICONS.stats} Playback Statistics`)
+            .setColor(COLORS.stats)
+            .addFields(...guildFields, ...globalFields)
+            .setFooter({ text: `Last activity: ${lastActivityLabel}` })
+            .setTimestamp();
     },
     queueEmbed({ currentTrack, isPlaying, queue, page, totalPages, requesterId })
     {

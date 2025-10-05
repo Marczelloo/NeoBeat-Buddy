@@ -138,11 +138,17 @@ function createPoru(client) {
       `queueLength=${player.queue.length}`
     );
 
-    try
+    try 
     {
-      statsStore.beginTrackSession(player.guildId, track)
-    }
-    catch(err)
+      const voiceChannel = player.poru.client.guilds.cache
+        .get(player.guildId)?.channels.cache
+        .get(player.voiceChannel);
+      
+      const listenerCount = voiceChannel?.members?.filter(m => !m.user.bot).size || 0;
+      
+      statsStore.beginTrackSession(player.guildId, track, listenerCount);
+    } 
+    catch(err) 
     {
       Log.error(`Failed to begin track session for guild ${player.guildId}`, err);
     }
