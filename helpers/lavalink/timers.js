@@ -46,7 +46,7 @@ const scheduleInactivityDisconnect = (player, reason = "queueEnd") => {
 
       if(channel)
       {
-        await channel.send("Disconnecting due to inactivity. Start playing a new track too bring me back.").catch(() => null);  
+        await channel.send("Disconnecting due to inactivity. Start playing a new track to bring me back.").catch(() => null);  
       }
 
       await current.destroy();

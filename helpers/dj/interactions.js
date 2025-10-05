@@ -23,7 +23,8 @@ async function handleProposalInteraction(interaction)
   const config = djStore.getGuildConfig(guildId);
   if(!djStore.hasDjPermissions(interaction.member, config))
   {
-    await interaction.reply({ content: 'Only the DJ can manage suggestions.', ephemeral: true });
+    const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+    await interaction.reply({ content: 'Only ' + mention + ' can manage suggestions.', ephemeral: true });
     return;
   }
 

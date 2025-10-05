@@ -3,10 +3,10 @@ const queueCommand = require('../commands/music/queue');
 const helpCommand = require('../commands/utility/help');
 const { handleControlButtons, refreshNowPlayingMessage } = require('../helpers/buttons');
 const { getClient } = require('../helpers/clientRegistry');
+const { handleProposalInteraction } = require('../helpers/dj/interactions');
+const djStore = require('../helpers/dj/store');
 const { createPoru, lavalinkSetVolume } = require('../helpers/lavalink/index');
 const Log = require('../helpers/logs/log');
-const djStore = require('../helpers/dj/store');
-const { handleProposalInteraction } = require('../helpers/dj/interactions');
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -49,9 +49,12 @@ module.exports = {
         return;
       }
 
-      if (interaction.customId === 'volume-button') {
-        if (config.enabled && !isDj) {
-          await interaction.reply({ content: 'Only the DJ can adjust the volume while DJ mode is active.', ephemeral: true });
+      if (interaction.customId === 'volume-button') 
+      {
+        if (config.enabled && !isDj) 
+        {
+          const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+          await interaction.reply({ content: 'Only ' + mention + ' can adjust the volume while DJ mode is active.', ephemeral: true });
           return;
         }
 
@@ -97,8 +100,10 @@ module.exports = {
 
       const config = djStore.getGuildConfig(interaction.guild.id);
       const isDj = djStore.hasDjPermissions(interaction.member, config);
-      if (config.enabled && !isDj) {
-        await interaction.reply({ content: 'Only the DJ can adjust the volume while DJ mode is active.', ephemeral: true });
+      if (config.enabled && !isDj) 
+      {
+        const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+        await interaction.reply({ content: 'Only ' + mention + ' can adjust the volume while DJ mode is active.', ephemeral: true });
         return;
       }
 

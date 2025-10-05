@@ -160,7 +160,7 @@ module.exports = {
       if(!requireManagement(interaction, config))
       {
         const noAccessMessage = config.strictMode && config.roleId
-          ? 'Only the DJ role can configure DJ mode.'
+          ? `Only ${config.roleId ? '<@&' + config.roleId + '>' : 'the DJ role'} can configure DJ mode.`
           : 'You need the Manage Server permission to configure DJ mode.';
 
         await respond(interaction, { embeds: [errorEmbed(noAccessMessage)] });

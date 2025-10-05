@@ -80,7 +80,7 @@ function createPoru(client) {
         await placeholder.edit({
           embeds: [
             errorEmbed(
-              'Ttrying alternate source',
+              'Trying alternate source',
               `The YouTube stream failed, so I'm retrying with an alternate source for **${title}**.`
             )
           ]

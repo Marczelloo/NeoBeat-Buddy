@@ -209,7 +209,8 @@ async function handleControlButtons(interaction, player)
 
     if(config.enabled && !isDj && ['loop-button','shuffle-button','volume-button','pause-button','resume-button','rewind-button'].includes(customId))
     {
-        await interaction.reply({ content: 'Only the DJ can use this control while DJ mode is active.', ephemeral: true });
+        const mention = config.roleId ? '<@&' + config.roleId + '>' : 'the DJ';
+        await interaction.reply({ content: 'Only ' + mention + ' can use this control while DJ mode is active.', ephemeral: true });
         return;
     }
 

@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { PermissionsBitField } = require('discord.js');
+const Log = require('../logs/log');
 
 const DATA_FILE = path.join(__dirname, '..', 'data', 'dj.json');
 const DEFAULT_CONFIG = {
@@ -81,7 +82,7 @@ function scheduleSave()
     }
     catch(error)
     {
-      console.error('Failed to persist DJ config', error);
+      Log.error('Failed to persist DJ config', error);
     }
   }, 2000).unref?.();
 }

@@ -1,3 +1,4 @@
+const skipVotes = require("../dj/skipVotes");
 const Log = require("../logs/log");
 const { describeTrack } = require("./fallbacks");
 const { getPlayer, getPoru } = require("./players");
@@ -172,6 +173,7 @@ async function lavalinkStop(guildId) {
   clearProgressInterval(guildId);
   clearLyricsState(guildId);
   playbackState.delete(guildId);
+  skipVotes.clear(guildId);
 
   return true;
 }

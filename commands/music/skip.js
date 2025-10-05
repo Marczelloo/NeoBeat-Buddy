@@ -83,7 +83,8 @@ module.exports = {
 
             if(result.status === 'duplicate')
             {
-                return interaction.editReply({ embeds: [errorEmbed('You already voted. Votes: ' + result.votes + '/' + result.required + '.')] });
+                const mention = config.roleId ? '<@&' + config.roleId + '>' : 'a DJ';
+                return interaction.editReply({ embeds: [errorEmbed(`You already voted. Votes: ${result.votes}/${result.required}.\nTip: ${mention} can skip instantly.`)] });
             }
 
             if(result.status === 'passed')
