@@ -1,7 +1,9 @@
 {
   "name": "neo-beat-buddy",
-  "version": "0.0.34",
-  "description": "A Discord music bot",
+  "version": "1.0.0",
+  "description": "Educational music bot example (NOT for production use) | A feature-rich Discord music bot with DJ mode, advanced statistics, and persistent EQ settings",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -17,10 +19,32 @@
     "lint": "eslint . --ext .js,.cjs,.mjs",
     "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix"
   },
-  "keywords": [],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Marczelloo/NeoBeat-Buddy.git"
+  },
+  "keywords": [
+    "discord",
+    "music-bot",
+    "lavalink",
+    "discord-bot",
+    "music",
+    "discord.js",
+    "poru",
+    "equalizer",
+    "dj-mode",
+    "statistics"
+  ],
   "author": "Marczelloo",
-  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Marczelloo/NeoBeat-Buddy/issues"
+  },
+  "homepage": "https://github.com/Marczelloo/NeoBeat-Buddy#readme",
   "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.0.0"
+  },
   "dependencies": {
     "@discordjs/voice": "^0.19.0",
     "cheerio": "^1.1.2",
