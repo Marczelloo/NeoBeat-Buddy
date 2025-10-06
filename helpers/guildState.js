@@ -66,6 +66,7 @@ async function persist() {
 const createDefaultState = () => ({
     nowPlayingMessage: null,
     nowPlayingChannel: null,
+    autoplay: false,
 })
 
 function getGuildState(guildId) {

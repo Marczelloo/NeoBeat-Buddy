@@ -1,6 +1,7 @@
 const { inspect } = require("util");
 const { Poru } = require("poru");
 const { errorEmbed } = require("../embeds");
+const { getGuildState } = require("../guildState.js");
 const Log = require("../logs/log");
 const statsStore = require("../stats/store.js");
 const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
@@ -208,10 +209,12 @@ function createPoru(client) {
     }
   });
 
-  poru.on("queueEnd", (player) => {
+  poru.on("queueEnd", async (player) => {
     Log.info("Lavalink queue end", "", `guild=${player.guildId}`);
 
     const state = ensurePlaybackState(player.guildId);
+    const lastTrack = state.currentTrack;
+
     state.currentTrack = null;
     playbackState.set(player.guildId, state);
 
@@ -220,7 +223,6 @@ function createPoru(client) {
     player.isPaused = false;
     player.position = 0;
 
-    scheduleInactivityDisconnect(player, "queueEnd");
     clearProgressInterval(player.guildId);
     clearLyricsState(player.guildId);
 
@@ -232,6 +234,23 @@ function createPoru(client) {
     {
       Log.error(`Failed to abort track session for guild ${player.guildId}`, err);
     }
+
+    const guildSettings = getGuildState(player.guildId);
+
+    if(guildSettings?.autoplay && lastTrack)
+    {
+      Log.info("Autoplay enabled, fetching related track", "", `guild=${player.guildId}`);
+
+      const { queueAutoplayTrack } = require("./autoplay");
+      const added = await queueAutoplayTrack(player, lastTrack, player.textChannel);
+
+      if(added)
+      {
+        return;
+      }
+    }
+    
+    scheduleInactivityDisconnect(player, "queueEnd");
   });
 
   poru.on("playerUpdate", (player) => {

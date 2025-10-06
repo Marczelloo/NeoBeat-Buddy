@@ -47,6 +47,11 @@ async function init() {
             },
             guilds: parsed.guilds || {},
         };
+
+        if (!state.global.topSources) state.global.topSources = {};
+        if (!state.global.hourlyActivity) state.global.hourlyActivity = {};
+        if (!Array.isArray(state.global.uniqueUsers)) state.global.uniqueUsers = [];
+
     } catch (error) {
         if (error.code !== 'ENOENT') {
             Log.error('Failed to load stats', error);
@@ -64,7 +69,17 @@ function ensureGuild(guildId) {
     if (!state.guilds[guildId]) {
         state.guilds[guildId] = { ...DEFAULT_GUILD_STATS };
     }
-    return state.guilds[guildId];
+
+    const guild = state.guilds[guildId];
+    if (!guild.topSources) guild.topSources = {};
+    if (!guild.hourlyActivity) guild.hourlyActivity = {};
+    if (!Array.isArray(guild.uniqueUsers)) guild.uniqueUsers = [];
+    if (guild.peakListeners === undefined) guild.peakListeners = 0;
+    if (guild.streamsPlayed === undefined) guild.streamsPlayed = 0;
+    if (guild.playlistsAdded === undefined) guild.playlistsAdded = 0;
+    if (guild.totalSessions === undefined) guild.totalSessions = 0;
+
+    return guild;
 }
 
 function scheduleSave() {

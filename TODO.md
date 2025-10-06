@@ -19,7 +19,8 @@
 - [x] add play override queue (instead adding song at the end of the queue it will place it at the start)
 - [x] add dj role, only users with dj role can add songs to queue, use player, handle queue etc.
 - [x] stats tracking per guild and globa (hours played, songs played etc.)
-- [] autoplay (automatically searches for next song based on current one)
+- [x] autoplay (automatically searches for next song based on current one)
+- [] adjust autoplay to count track history for better picking better song, include suggestions from spotify
 - [] 24/7 command
 - [] server playlists, user playlists
 - [] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )

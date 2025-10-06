@@ -37,6 +37,7 @@ module.exports = {
                 const duration = info.isStream ? 'Live' : formatDuration(info.length ?? 0);
                 const position = info.isStream ? 'Live' : formatDuration(player.position ?? 0);
                 const artwork = info.artworkUrl ?? info.image ?? 'https://i.imgur.com/3g7nmJC.png';
+                const autoplay = getGuildState(player.guildId)?.autoplay ?? false;
 
                 const embed = playerEmbed(
                     info.title,
@@ -49,6 +50,7 @@ module.exports = {
                     position,
                     info.loop,
                     player.volume,
+                    autoplay,
                 );
 
                 const controls = buildControlRows({

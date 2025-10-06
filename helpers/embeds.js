@@ -14,6 +14,7 @@ const ICONS = {
     lyrics: '🎵',
     playlist: '🎶',
     stats: '📊',
+    autoplay: '🔄',
 };
 
 const COLORS = {
@@ -30,7 +31,7 @@ const COLORS = {
 const bold = (label, value) => `**${label}** ${value ?? '—'}`;
 
 module.exports = { 
-    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, position, loop, volume = 100) 
+    playerEmbed(title, url, image, artist, requesterTag, requesterAvatar, duration, position, loop, volume = 100, autoplay = false) 
     {
         const loopLabel =
         loop === 'TRACK' ? 'Track'
@@ -45,6 +46,7 @@ module.exports = {
         const infoRight = [
         `${ICONS.loop} ${bold('Loop', loopLabel)}`,
         `${ICONS.volume} ${bold('Volume', volume)}`,
+        `${ICONS.autoplay} ${bold('Autoplay', autoplay ? "On" : "Off")}`,
         ].join('\n');
 
         return new EmbedBuilder()
