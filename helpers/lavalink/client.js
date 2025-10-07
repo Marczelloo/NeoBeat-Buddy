@@ -6,29 +6,40 @@ const Log = require("../logs/log");
 const statsStore = require("../stats/store.js");
 const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
 const { fetchLyrics } = require("./lyricsClient");
-const { ensurePlaybackState, cloneTrack, pushTrackHistory, playbackState, setLyricsState, clearLyricsState } = require("./state");
-const { clearInactivityTimer, scheduleInactivityDisconnect, clearProgressInterval, scheduleProgressUpdates } = require("./timers");
+const {
+  ensurePlaybackState,
+  cloneTrack,
+  pushTrackHistory,
+  playbackState,
+  setLyricsState,
+  clearLyricsState,
+} = require("./state");
+const {
+  clearInactivityTimer,
+  scheduleInactivityDisconnect,
+  clearProgressInterval,
+  scheduleProgressUpdates,
+} = require("./timers");
 
 const buildPlaybackErrorMessage = (err, fallback = "Unable to play this track") => {
   if (!err) return fallback;
 
-  const summary =
-    typeof err === "string"
-      ? err
-      : err?.exception?.message ?? err?.message ?? fallback;
+  const summary = typeof err === "string" ? err : err?.exception?.message ?? err?.message ?? fallback;
 
   const lower = summary.toLowerCase();
-  if(lower.includes('age') && lower.includes('restrict')) return "YouTube blocked this track (age-restricted).";
-  if(lower.includes('region') && (lower.includes('block') || lower.includes('restrict'))) return "YouTube blocked this track (region-locked).";
-  if(lower.includes('copyright') && lower.includes('claim')) return "This track is blocked due to a copyright claim.";
-  if(lower.includes('copyright') && lower.includes('content')) return "This track is blocked due to a copyright content.";
-  if(lower.includes('private video')) return "This track is a private YouTube video.";
-  if(lower.includes('video unavailable')) return "This track is unavailable on YouTube.";
-  if(lower.includes('429')) return "Too many requests to YouTube. Please try again later.";
-  if(lower.includes('status code 5')) return "YouTube is currently experiencing issues. Please try again later.";
-  
+  if (lower.includes("age") && lower.includes("restrict")) return "YouTube blocked this track (age-restricted).";
+  if (lower.includes("region") && (lower.includes("block") || lower.includes("restrict")))
+    return "YouTube blocked this track (region-locked).";
+  if (lower.includes("copyright") && lower.includes("claim")) return "This track is blocked due to a copyright claim.";
+  if (lower.includes("copyright") && lower.includes("content"))
+    return "This track is blocked due to a copyright content.";
+  if (lower.includes("private video")) return "This track is a private YouTube video.";
+  if (lower.includes("video unavailable")) return "This track is unavailable on YouTube.";
+  if (lower.includes("429")) return "Too many requests to YouTube. Please try again later.";
+  if (lower.includes("status code 5")) return "YouTube is currently experiencing issues. Please try again later.";
+
   return summary || fallback;
-}
+};
 
 let poru = null;
 
@@ -65,50 +76,45 @@ function createPoru(client) {
       `error=${errorSummary}`
     );
     const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
-    if(!channel) return;
+    if (!channel) return;
 
-    const placeholder = await channel.send({
-      embeds: [errorEmbed('Trying alternate source', 'The YouTube stream failed, looking for another version…')],
-    }).catch(() => null);
+    const placeholder = await channel
+      .send({
+        embeds: [errorEmbed("Trying alternate source", "The YouTube stream failed, looking for another version…")],
+      })
+      .catch(() => null);
 
     const fallbackTrack = await tryQueueFallbackTrack(player, track);
 
-    if(fallbackTrack)
-    {
-      if(placeholder)
-      {
+    if (fallbackTrack) {
+      if (placeholder) {
         const title = fallbackTrack.info?.title || fallbackTrack.info?.identifier || "this track";
-        await placeholder.edit({
-          embeds: [
-            errorEmbed(
-              'Trying alternate source',
-              `The YouTube stream failed, so I'm retrying with an alternate source for **${title}**.`
-            )
-          ]
-        })
-        .catch(() => null);
+        await placeholder
+          .edit({
+            embeds: [
+              errorEmbed(
+                "Trying alternate source",
+                `The YouTube stream failed, so I'm retrying with an alternate source for **${title}**.`
+              ),
+            ],
+          })
+          .catch(() => null);
 
-        return
+        return;
       }
-      
-      if(placeholder)
-      {
-        await placeholder.edit({
-          embeds: [
-            errorEmbed(
-              'Playback error',
-              buildPlaybackErrorMessage(err)
-            )
-          ]
-        })
-        .catch(() => null);
 
-        return
+      if (placeholder) {
+        await placeholder
+          .edit({
+            embeds: [errorEmbed("Playback error", buildPlaybackErrorMessage(err))],
+          })
+          .catch(() => null);
+
+        return;
       }
     }
-    
-    if (!fallbackTrack && player.queue.length) 
-    {
+
+    if (!fallbackTrack && player.queue.length) {
       Log.warning(
         "Waiting for Lavalink auto-skip after error",
         "",
@@ -139,18 +145,13 @@ function createPoru(client) {
       `queueLength=${player.queue.length}`
     );
 
-    try 
-    {
-      const voiceChannel = player.poru.client.guilds.cache
-        .get(player.guildId)?.channels.cache
-        .get(player.voiceChannel);
-      
-      const listenerCount = voiceChannel?.members?.filter(m => !m.user.bot).size || 0;
-      
+    try {
+      const voiceChannel = player.poru.client.guilds.cache.get(player.guildId)?.channels.cache.get(player.voiceChannel);
+
+      const listenerCount = voiceChannel?.members?.filter((m) => !m.user.bot).size || 0;
+
       statsStore.beginTrackSession(player.guildId, track, listenerCount);
-    } 
-    catch(err) 
-    {
+    } catch (err) {
       Log.error(`Failed to begin track session for guild ${player.guildId}`, err);
     }
   });
@@ -170,16 +171,14 @@ function createPoru(client) {
 
     clearProgressInterval(player.guildId);
 
-    if(!player.currentTrack && player.queue.length === 0)
-    {
+    if (!player.currentTrack && player.queue.length === 0) {
       scheduleInactivityDisconnect(player, "trackEnd");
     }
 
     const state = ensurePlaybackState(player.guildId);
     const reasonCode = typeof reason === "string" ? reason : reason?.reason ?? null;
 
-    if(track?.track && reasonCode !== "replaced" && reasonCode !== "load_failed")
-    {
+    if (track?.track && reasonCode !== "replaced" && reasonCode !== "load_failed") {
       pushTrackHistory(player.guildId, track);
     }
 
@@ -187,24 +186,19 @@ function createPoru(client) {
     playbackState.set(player.guildId, state);
     clearLyricsState(player.guildId);
 
-    if(player.queue.length === 0)
-    {
+    if (player.queue.length === 0) {
       player.currentTrack = null;
       player.isPlaying = false;
       player.position = 0;
     }
 
-    if(!player.currentTrack && player.queue.length === 0)
-    {
+    if (!player.currentTrack && player.queue.length === 0) {
       scheduleInactivityDisconnect(player, "trackEndEmpty");
     }
 
-    try
-    {
-      statsStore.finishTrackSession(player.guildId, track, reasonCode)
-    }
-    catch(err)
-    {
+    try {
+      statsStore.finishTrackSession(player.guildId, track, reasonCode);
+    } catch (err) {
       Log.error(`Failed to finish track session for guild ${player.guildId}`, err);
     }
   });
@@ -226,30 +220,25 @@ function createPoru(client) {
     clearProgressInterval(player.guildId);
     clearLyricsState(player.guildId);
 
-    try
-    {
+    try {
       statsStore.abortSession(player.guildId);
-    }
-    catch(err)
-    {
+    } catch (err) {
       Log.error(`Failed to abort track session for guild ${player.guildId}`, err);
     }
 
     const guildSettings = getGuildState(player.guildId);
 
-    if(guildSettings?.autoplay && lastTrack)
-    {
+    if (guildSettings?.autoplay && lastTrack) {
       Log.info("Autoplay enabled, fetching related track", "", `guild=${player.guildId}`);
 
       const { queueAutoplayTrack } = require("./autoplay");
       const added = await queueAutoplayTrack(player, lastTrack, player.textChannel);
 
-      if(added)
-      {
+      if (added) {
         return;
       }
     }
-    
+
     scheduleInactivityDisconnect(player, "queueEnd");
   });
 
@@ -259,12 +248,9 @@ function createPoru(client) {
     state.lastTimestamp = Date.now();
     playbackState.set(player.guildId, state);
 
-    try
-    {
-      statsStore.updateProgress(player.guildId, player.position)
-    }
-    catch(err)
-    {
+    try {
+      statsStore.updateProgress(player.guildId, player.position);
+    } catch (err) {
       Log.error(`Failed to update track session for guild ${player.guildId}`, err);
     }
   });
@@ -274,5 +260,7 @@ function createPoru(client) {
 
 module.exports = {
   createPoru,
-  get poru() { return poru; },
+  get poru() {
+    return poru;
+  },
 };

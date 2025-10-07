@@ -3,7 +3,8 @@ const fetch = require("node-fetch");
 const Log = require("../logs/log");
 
 const PAREN_CONTENT = /\([^)]*\)|\[[^\]]*\]/g;
-const UNWANTED_TAGS = /\b(official|audio|video|lyric[s]?|visualizer|mv|hd|4k|explicit|clean|remastered|prod\.?|version)\b/gi;
+const UNWANTED_TAGS =
+  /\b(official|audio|video|lyric[s]?|visualizer|mv|hd|4k|explicit|clean|remastered|prod\.?|version)\b/gi;
 const MULTISPACE = /\s+/g;
 const MULTILINE_BLANKS = /\n{3,}/g;
 
@@ -11,17 +12,11 @@ const normalizeWhitespace = (value = "") => value.replace(MULTISPACE, " ").trim(
 const stripAnnotations = (value = "") => normalizeWhitespace(value.replace(PAREN_CONTENT, ""));
 const stripUnwantedTags = (value = "") => normalizeWhitespace(value.replace(UNWANTED_TAGS, " "));
 
-function camelToWords(value = "") 
-{
-  return normalizeWhitespace(
-    value
-      .replace(/VEVO$/i, "")
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-  );
+function camelToWords(value = "") {
+  return normalizeWhitespace(value.replace(/VEVO$/i, "").replace(/([a-z])([A-Z])/g, "$1 $2"));
 }
 
-function deriveArtist(trackInfo = {}) 
-{
+function deriveArtist(trackInfo = {}) {
   const { author = "", title = "" } = trackInfo;
   const fromTitle = title.includes("-") ? title.split("-")[0] : "";
   const cleanedTitleArtist = stripUnwantedTags(stripAnnotations(fromTitle));
@@ -31,8 +26,7 @@ function deriveArtist(trackInfo = {})
   return camelToWords(author);
 }
 
-function deriveSongTitle(trackInfo = {}) 
-{
+function deriveSongTitle(trackInfo = {}) {
   let { title = "" } = trackInfo;
 
   if (!title) return "";
@@ -44,8 +38,7 @@ function deriveSongTitle(trackInfo = {})
   return stripUnwantedTags(stripAnnotations(title));
 }
 
-function buildSearchTerm(trackInfo = {}) 
-{
+function buildSearchTerm(trackInfo = {}) {
   const artist = deriveArtist(trackInfo);
   const songTitle = deriveSongTitle(trackInfo);
 
@@ -54,8 +47,7 @@ function buildSearchTerm(trackInfo = {})
   return (artist || songTitle).trim();
 }
 
-function pickSongHit(hits, trackInfo) 
-{
+function pickSongHit(hits, trackInfo) {
   const norm = (val) => (val || "").toLowerCase();
   const targetArtist = norm(deriveArtist(trackInfo));
   const targetTitle = norm(deriveSongTitle(trackInfo) || trackInfo?.title || trackInfo?.identifier);
@@ -67,22 +59,17 @@ function pickSongHit(hits, trackInfo)
       const primaryArtist = norm(result.primary_artist?.name);
       const resultTitle = norm(result.title);
 
-      const artistMatch =
-        !targetArtist ||
-        primaryArtist.includes(targetArtist) ||
-        targetArtist.includes(primaryArtist);
+      const artistMatch = !targetArtist || primaryArtist.includes(targetArtist) || targetArtist.includes(primaryArtist);
 
-      const titleMatch =
-        !targetTitle || resultTitle.includes(targetTitle) || targetTitle.includes(resultTitle);
+      const titleMatch = !targetTitle || resultTitle.includes(targetTitle) || targetTitle.includes(resultTitle);
 
       return artistMatch && titleMatch;
     }) || hits.find(({ type }) => type === "song")
   );
 }
 
-function extractFormattedLyrics($) 
-{
-  const sections = $("[data-lyrics-container=\"true\"]")
+function extractFormattedLyrics($) {
+  const sections = $('[data-lyrics-container="true"]')
     .map((_, el) => {
       const clone = $(el).clone();
       clone.find("br").replaceWith("\n");
@@ -113,14 +100,13 @@ function extractFormattedLyrics($)
 
   const firstBracket = text.indexOf("[");
   if (firstBracket > 0) text = text.slice(firstBracket).trim();
-  
+
   text = text.replace(/^lyrics\s*/i, "").trim();
-  
+
   return text;
 }
 
-async function fetchLyricsFromGenius(searchTerm, trackInfo = {}) 
-{
+async function fetchLyricsFromGenius(searchTerm, trackInfo = {}) {
   const key = process.env.GENIUS_API_KEY;
 
   if (!key) return null;
@@ -143,12 +129,7 @@ async function fetchLyricsFromGenius(searchTerm, trackInfo = {})
   })
     .then((r) => r.text())
     .catch((err) => {
-      Log.warning(
-        "Genius lyric page fetch failed",
-        "",
-        `url=${hit.result.url}`,
-        `error=${err?.message || err}`
-      );
+      Log.warning("Genius lyric page fetch failed", "", `url=${hit.result.url}`, `error=${err?.message || err}`);
       return null;
     });
 
@@ -156,30 +137,27 @@ async function fetchLyricsFromGenius(searchTerm, trackInfo = {})
 
   const $ = cheerio.load(html);
   const formatted = extractFormattedLyrics($);
-  
+
   return formatted || null;
 }
 
-async function fetchLyrics(player, trackInfo = {}) 
-{
+async function fetchLyrics(player, trackInfo = {}) {
   const searchTerm = buildSearchTerm(trackInfo);
 
-  if (!searchTerm) 
-  {
+  if (!searchTerm) {
     Log.warning("Lyrics search skipped", "", `guild=${player?.guildId || "unknown"}`, "reason=missing-metadata");
     return null;
   }
 
   const lyrics = await fetchLyricsFromGenius(searchTerm, trackInfo);
 
-  if (lyrics) 
-  {
+  if (lyrics) {
     Log.info("Lyrics fetched from Genius", "", `guild=${player.guildId}`, `query=${searchTerm}`);
     return { source: "genius", lyrics, url: null };
   }
 
   Log.warning("Lyrics not found", "", `guild=${player.guildId}`, `query=${searchTerm}`);
-  
+
   return null;
 }
 

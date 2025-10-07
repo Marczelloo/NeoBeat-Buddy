@@ -12,11 +12,10 @@ const getRefreshHelper = () => {
   return refreshNowPlayingMessageCached;
 };
 
-
 const clearInactivityTimer = (guildId, reason = "unspecified") => {
   const timer = inactivityTimers.get(guildId);
   if (!timer) return;
-  
+
   clearTimeout(timer);
   inactivityTimers.delete(guildId);
   Log.info("Cleared inactivity timer", "", `guild=${guildId}`, `reason=${reason}`);
@@ -30,13 +29,11 @@ const scheduleInactivityDisconnect = (player, reason = "queueEnd") => {
   clearInactivityTimer(player.guildId);
   const timeout = setTimeout(async () => {
     inactivityTimers.delete(player.guildId);
-    try
-    {
+    try {
       const current = poru?.players.get(player.guildId);
-      
-      if(!current) return;
-      if(current.isPlaying || current.queue.length > 0)
-      {
+
+      if (!current) return;
+      if (current.isPlaying || current.queue.length > 0) {
         Log.info("Skipped inactivity disconnect (player active", "", `guild=${player.guildId}`);
         return;
       }
@@ -44,16 +41,15 @@ const scheduleInactivityDisconnect = (player, reason = "queueEnd") => {
       Log.info("Disconnecting due to inactivity", "", `guild=${player.guildId}`, `reason=${reason}`);
       const channel = await poru.client.channels.fetch(current.textChannel).catch(() => null);
 
-      if(channel)
-      {
-        await channel.send("Disconnecting due to inactivity. Start playing a new track to bring me back.").catch(() => null);  
+      if (channel) {
+        await channel
+          .send("Disconnecting due to inactivity. Start playing a new track to bring me back.")
+          .catch(() => null);
       }
 
       await current.destroy();
       playbackState.delete(player.guildId);
-    }
-    catch(error)
-    {
+    } catch (error) {
       const summary = error instanceof Error ? error.message : inspect(error, { depth: 1 });
       Log.error("Failed to disconnect after inactivity", "", `guild=${player.guildId}`, `error=${summary}`);
     }
@@ -61,7 +57,13 @@ const scheduleInactivityDisconnect = (player, reason = "queueEnd") => {
 
   timeout.unref?.();
   inactivityTimers.set(player.guildId, timeout);
-  Log.info("Scheduled inactivity disconnect", "", `guild=${player.guildId}`, `timeoutMs=${INACTIVITY_TIMEOUT_MS}`, `reason=${reason}`);
+  Log.info(
+    "Scheduled inactivity disconnect",
+    "",
+    `guild=${player.guildId}`,
+    `timeoutMs=${INACTIVITY_TIMEOUT_MS}`,
+    `reason=${reason}`
+  );
 };
 
 const clearProgressInterval = (guildId) => {
@@ -94,15 +96,12 @@ const scheduleProgressUpdates = (player) => {
     state.lastTimestamp = now;
     playbackState.set(player.guildId, state);
 
-    try 
-    {
+    try {
       const refresh = getRefreshHelper();
       if (!refresh) return;
 
       await refresh(player.poru.client, player.guildId, player, undefined, estimated);
-    } 
-    catch (err) 
-    {
+    } catch (err) {
       const summary = err instanceof Error ? err.message : inspect(err, { depth: 1 });
       Log.error("Failed to refresh now playing message", "", `guild=${player.guildId}`, `error=${summary}`);
       clearProgressInterval(player.guildId); // stop if message vanished
@@ -116,8 +115,8 @@ const scheduleProgressUpdates = (player) => {
 };
 
 module.exports = {
-    clearInactivityTimer,
-    scheduleInactivityDisconnect,
-    clearProgressInterval,
-    scheduleProgressUpdates,
+  clearInactivityTimer,
+  scheduleInactivityDisconnect,
+  clearProgressInterval,
+  scheduleProgressUpdates,
 };

@@ -1,5 +1,6 @@
 const { inspect } = require("util");
-const Log = require("../logs/log");const { MAX_FALLBACK_ATTEMPTS } = require("./constants");
+const Log = require("../logs/log");
+const { MAX_FALLBACK_ATTEMPTS } = require("./constants");
 
 const describeTrack = (track) => {
   if (!track) return "unknown";
@@ -49,23 +50,13 @@ async function tryQueueFallbackTrack(player, failedTrack) {
   const previousAttempts = failedTrack.userData.fallbackAttempts || 0;
 
   if (previousAttempts >= MAX_FALLBACK_ATTEMPTS) {
-    Log.warning(
-      "Fallback attempts exhausted",
-      "",
-      `guild=${player.guildId}`,
-      `track=${describeTrack(failedTrack)}`
-    );
+    Log.warning("Fallback attempts exhausted", "", `guild=${player.guildId}`, `track=${describeTrack(failedTrack)}`);
     return null;
   }
 
   const queries = buildFallbackQueries(info);
   if (!queries.length) {
-    Log.warning(
-      "No fallback query candidates",
-      "",
-      `guild=${player.guildId}`,
-      `track=${describeTrack(failedTrack)}`
-    );
+    Log.warning("No fallback query candidates", "", `guild=${player.guildId}`, `track=${describeTrack(failedTrack)}`);
     failedTrack.userData.fallbackAttempts = previousAttempts + 1;
     return null;
   }
@@ -85,8 +76,8 @@ async function tryQueueFallbackTrack(player, failedTrack) {
         fallbackAttempts: previousAttempts + 1,
       };
 
-      const queueWasEmpty = player.queue.length === 0 &&
-        (!player.currentTrack || player.currentTrack.track === failedTrack?.track);
+      const queueWasEmpty =
+        player.queue.length === 0 && (!player.currentTrack || player.currentTrack.track === failedTrack?.track);
 
       player.queue.unshift(fallbackTrack);
       failedTrack.userData.fallbackAttempts = previousAttempts + 1;
@@ -103,12 +94,7 @@ async function tryQueueFallbackTrack(player, failedTrack) {
       if (queueWasEmpty) {
         try {
           await player.play();
-          Log.info(
-            "Started fallback playback",
-            "",
-            `guild=${player.guildId}`,
-            `track=${describeTrack(fallbackTrack)}`
-          );
+          Log.info("Started fallback playback", "", `guild=${player.guildId}`, `track=${describeTrack(fallbackTrack)}`);
         } catch (playErr) {
           const summary = playErr instanceof Error ? playErr.message : inspect(playErr, { depth: 1 });
           Log.error(
@@ -140,8 +126,8 @@ async function tryQueueFallbackTrack(player, failedTrack) {
 }
 
 module.exports = {
-    tryQueueFallbackTrack,
-    describeTrack,
-    buildFallbackQueries,
-    copyRequesterMetadata
+  tryQueueFallbackTrack,
+  describeTrack,
+  buildFallbackQueries,
+  copyRequesterMetadata,
 };

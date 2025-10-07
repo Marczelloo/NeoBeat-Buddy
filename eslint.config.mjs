@@ -12,15 +12,15 @@ export default defineConfig([
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "commonjs",
-      globals: globals.node
+      globals: globals.node,
     },
     plugins: {
       import: importPlugin,
       n,
-      "unused-imports": unusedImports
+      "unused-imports": unusedImports,
     },
     settings: {
-      "import/resolver": { node: { extensions: [".js", ".cjs", ".mjs", ".json"] } }
+      "import/resolver": { node: { extensions: [".js", ".cjs", ".mjs", ".json"] } },
     },
     rules: {
       "import/no-unresolved": "error",
@@ -30,7 +30,7 @@ export default defineConfig([
       "import/newline-after-import": "warn",
       "n/no-missing-import": "error",
       "n/no-missing-require": "error",
-      "unused-imports/no-unused-imports": "error"
-    }
-  }
+      "unused-imports/no-unused-imports": "error",
+    },
+  },
 ]);

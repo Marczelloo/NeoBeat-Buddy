@@ -5,7 +5,12 @@ const { getEqualizerState } = require("./equalizerStore");
 const { describeTrack } = require("./fallbacks");
 const { getPlayer, getPoru } = require("./players");
 const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
-const { clearInactivityTimer, clearProgressInterval, scheduleInactivityDisconnect, scheduleProgressUpdates } = require("./timers");
+const {
+  clearInactivityTimer,
+  clearProgressInterval,
+  scheduleInactivityDisconnect,
+  scheduleProgressUpdates,
+} = require("./timers");
 const statsStore = require("../stats/store");
 
 async function ensurePlayer(guildId, voiceId, textId) {
@@ -23,25 +28,21 @@ async function ensurePlayer(guildId, voiceId, textId) {
 
   const defaultVolume = Number(process.env.DEFAULT_VOLUME ?? 50);
   const target = Number.isFinite(defaultVolume) ? Math.max(0, Math.min(defaultVolume, 1000)) : 50;
-  
+
   await player.setVolume(target);
   player.volume = target;
 
   const savedEq = getEqualizerState(guildId);
 
-  if (savedEq?.equalizer?.length) 
-  {
-    try 
-    {
+  if (savedEq?.equalizer?.length) {
+    try {
       await player.node.rest.updatePlayer({
         guildId,
-        data: { filters: savedEq }
+        data: { filters: savedEq },
       });
       player.filters = savedEq;
-    } 
-    catch (err) 
-    {
-      Log.error('Failed to restore EQ settings', err, `guild=${guildId}`);
+    } catch (err) {
+      Log.error("Failed to restore EQ settings", err, `guild=${guildId}`);
     }
   }
   return player;
@@ -49,21 +50,17 @@ async function ensurePlayer(guildId, voiceId, textId) {
 
 async function lavalinkResolveTracks(query) {
   const poru = getPoru();
-  let q = String(query || '').trim();
+  let q = String(query || "").trim();
   const isUrl = /^(https?:\/\/)/i.test(q);
-  if (!isUrl && q.toLowerCase().startsWith('ytsearch:')) {
-    q = q.slice('ytsearch:'.length);
+  if (!isUrl && q.toLowerCase().startsWith("ytsearch:")) {
+    q = q.slice("ytsearch:".length);
   }
 
   const res = await poru.resolve({ query: isUrl ? q : q });
 
   const validTracks = Array.isArray(res?.tracks)
-    ? res.tracks.filter((t) =>
-        t &&
-        typeof t.track === "string" &&
-        t.track.length > 0 &&
-        t.info &&
-        typeof t.info === "object"
+    ? res.tracks.filter(
+        (t) => t && typeof t.track === "string" && t.track.length > 0 && t.info && typeof t.info === "object"
       )
     : [];
 
@@ -89,14 +86,10 @@ async function lavalinkResolveTracks(query) {
   const selectedClone = cloneTrack(nowPlaying);
 
   const isPlaylist = res.loadType === "playlist";
-  const playlistInfo = isPlaylist ? (res.playlistInfo ?? {}) : null;
-  const playlistUrl = isPlaylist
-    ? (playlistInfo?.uri ?? playlistInfo?.url ?? (isUrl ? q : null))
-    : null;
+  const playlistInfo = isPlaylist ? res.playlistInfo ?? {} : null;
+  const playlistUrl = isPlaylist ? playlistInfo?.uri ?? playlistInfo?.url ?? (isUrl ? q : null) : null;
   const playlistTrackCount = clones.length;
-  const playlistDurationMs = isPlaylist
-    ? clones.reduce((sum, track) => sum + (track.info?.length ?? 0), 0)
-    : 0;
+  const playlistDurationMs = isPlaylist ? clones.reduce((sum, track) => sum + (track.info?.length ?? 0), 0) : 0;
 
   return {
     tracks: clones,
@@ -116,7 +109,7 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
   const tracksToAdd = resolution.tracks.map((track) => cloneTrack(track));
 
   if (!tracksToAdd.length) {
-    throw new Error('No playable tracks found.');
+    throw new Error("No playable tracks found.");
   }
 
   const targetEncoded = resolution.track?.track ?? tracksToAdd[0].track;
@@ -146,7 +139,7 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
     else await player.queue.add(track);
   }
 
-  const currentDescription = player.currentTrack ? describeTrack(player.currentTrack) : 'none';
+  const currentDescription = player.currentTrack ? describeTrack(player.currentTrack) : "none";
   Log.info(
     "Playback state check",
     "",
@@ -169,7 +162,7 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
     `queueLength=${player.queue.length}`
   );
 
-  clearInactivityTimer(guildId, 'playRequest');
+  clearInactivityTimer(guildId, "playRequest");
 
   return {
     track: cloneTrack(nowPlaying),
@@ -185,8 +178,8 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
 async function lavalinkStop(guildId) {
   const player = getPlayer(guildId);
 
-  if(!player) return false;
-  
+  if (!player) return false;
+
   player.queue.clear();
   await player.destroy();
   clearInactivityTimer(guildId, "stopCommand");
@@ -202,22 +195,19 @@ async function lavalinkStop(guildId) {
 async function lavalinkPause(guildId) {
   const player = getPlayer(guildId);
 
-  if (player && !player.isPaused) 
-  {
+  if (player && !player.isPaused) {
     await player.pause(true);
     clearInactivityTimer(guildId, "pauseCommand");
     return true;
   }
-  
+
   return false;
 }
 
 async function lavalinkResume(guildId) {
   const player = getPlayer(guildId);
- 
 
-  if (player && player.isPaused) 
-  {
+  if (player && player.isPaused) {
     await player.pause(false);
     clearInactivityTimer(guildId, "resumeCommand");
     return true;
@@ -232,37 +222,31 @@ async function lavalinkSkip(guildId) {
 
   const result = await player.skip();
 
-  if(!player.currentTrack && player.queue.length === 0)
-  {
+  if (!player.currentTrack && player.queue.length === 0) {
     scheduleInactivityDisconnect(player, "skipEmpty");
   }
 
-  if(result)
-  {
+  if (result) {
     statsStore.trackSkip(guildId);
   }
 
   return true;
 }
 
-async function lavalinkRemoveFromQueue(guildId, { position, title })
-{
+async function lavalinkRemoveFromQueue(guildId, { position, title }) {
   const player = getPlayer(guildId);
-  if(!player || player.queue.length === 0) return { status: "empty_queue" };
+  if (!player || player.queue.length === 0) return { status: "empty_queue" };
 
   let index = -1;
 
-  if(typeof position === 'number')
-  {
+  if (typeof position === "number") {
     index = position - 1;
-  }
-  else if(typeof title === 'string' && title.trim())
-  {
+  } else if (typeof title === "string" && title.trim()) {
     const term = title.trim().toLowerCase();
     index = player.queue.findIndex((track) => track?.info?.title?.toLowerCase().includes(term));
   }
 
-  if(index < 0 || index >= player.queue.length) return { status: "not_found" };
+  if (index < 0 || index >= player.queue.length) return { status: "not_found" };
 
   const removed = player.queue.remove(index);
   clearInactivityTimer(guildId, "removeFromQueue");
@@ -274,31 +258,27 @@ async function lavalinkRemoveFromQueue(guildId, { position, title })
   };
 }
 
-async function lavalinkPrevious(guildId)
-{
+async function lavalinkPrevious(guildId) {
   const player = getPlayer(guildId);
-  if(!player) return { status: "no_player" };
+  if (!player) return { status: "no_player" };
 
   const state = ensurePlaybackState(guildId);
   const history = state.history ?? [];
 
-  if(history.length === 0)
-  {
-    if(player.currentTrack)
-    {
+  if (history.length === 0) {
+    if (player.currentTrack) {
       await player.seekTo(0);
       clearInactivityTimer(guildId, "previousRestart");
       return { status: "restart", track: cloneTrack(player.currentTrack) };
     }
 
-    return { status: "empty"};
+    return { status: "empty" };
   }
 
   const previous = history.pop();
   const currentClone = cloneTrack(player.currentTrack);
 
-  if(currentClone?.track)
-  {
+  if (currentClone?.track) {
     player.queue.unshift(currentClone);
   }
 
@@ -306,8 +286,8 @@ async function lavalinkPrevious(guildId)
 
   await player.node.rest.updatePlayer({
     guildId,
-    data: { track: { encoded: previous.track}, position: 0 }
-  })
+    data: { track: { encoded: previous.track }, position: 0 },
+  });
 
   player.currentTrack = cloneTrack(previous);
   player.isPlaying = true;
@@ -328,37 +308,38 @@ async function lavalinkPrevious(guildId)
 
 async function lavalinkToggleLoop(guildId, mode) {
   const player = getPlayer(guildId);
-  
+
   if (!player) return null;
 
-  const next = mode && ['NONE','TRACK','QUEUE'].includes(mode)
-    ? mode
-    : player.loop === 'NONE' ? 'TRACK'
-    : player.loop === 'TRACK' ? 'QUEUE'
-    : 'NONE';
+  const next =
+    mode && ["NONE", "TRACK", "QUEUE"].includes(mode)
+      ? mode
+      : player.loop === "NONE"
+      ? "TRACK"
+      : player.loop === "TRACK"
+      ? "QUEUE"
+      : "NONE";
 
   player.loop = next;
   await player.setLoop(next);
-  clearInactivityTimer(guildId, 'toggleLoop');
+  clearInactivityTimer(guildId, "toggleLoop");
   return next;
 }
 
-async function lavalinkShuffle(guildId)
-{
+async function lavalinkShuffle(guildId) {
   const player = getPlayer(guildId);
-  
-  if(!player || player.queue.length === 0) return false;
-  
+
+  if (!player || player.queue.length === 0) return false;
+
   player.queue.shuffle();
   clearInactivityTimer(guildId, "shuffle");
   return true;
 }
 
-async function lavalinkClearQueue(guildId)
-{
+async function lavalinkClearQueue(guildId) {
   const player = getPlayer(guildId);
 
-  if(!player || player.queue.length === 0) return false;
+  if (!player || player.queue.length === 0) return false;
 
   player.queue.clear();
   clearInactivityTimer(guildId, "clearQueue");
@@ -366,17 +347,15 @@ async function lavalinkClearQueue(guildId)
 }
 
 module.exports = {
-    lavalinkPlay,
-    lavalinkStop,
-    lavalinkPause,
-    lavalinkResume,
-    lavalinkSkip,
-    lavalinkRemoveFromQueue,
-    lavalinkPrevious,
-    lavalinkToggleLoop,
-    lavalinkShuffle,
-    lavalinkClearQueue,
-    lavalinkResolveTracks
+  lavalinkPlay,
+  lavalinkStop,
+  lavalinkPause,
+  lavalinkResume,
+  lavalinkSkip,
+  lavalinkRemoveFromQueue,
+  lavalinkPrevious,
+  lavalinkToggleLoop,
+  lavalinkShuffle,
+  lavalinkClearQueue,
+  lavalinkResolveTracks,
 };
-
-

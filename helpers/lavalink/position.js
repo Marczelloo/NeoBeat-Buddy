@@ -2,8 +2,7 @@ const { getPlayer } = require("./players");
 const { ensurePlaybackState, playbackState } = require("./state");
 const { clearInactivityTimer } = require("./timers");
 
-async function lavalinkSeekTo(guildId, positionMs)
-{
+async function lavalinkSeekTo(guildId, positionMs) {
   const player = getPlayer(guildId);
 
   if (!player?.currentTrack) return false;
@@ -24,8 +23,7 @@ async function lavalinkSeekTo(guildId, positionMs)
   return true;
 }
 
-async function lavalinkGetDuration(guildId)
-{
+async function lavalinkGetDuration(guildId) {
   const player = getPlayer(guildId);
   if (!player || !player.currentTrack) return null;
 
@@ -33,6 +31,6 @@ async function lavalinkGetDuration(guildId)
 }
 
 module.exports = {
-    lavalinkSeekTo,
-    lavalinkGetDuration
-}
+  lavalinkSeekTo,
+  lavalinkGetDuration,
+};

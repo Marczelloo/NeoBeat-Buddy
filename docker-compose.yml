@@ -22,7 +22,7 @@ services:
     healthcheck:
       test:
         - "CMD-SHELL"
-        - "curl -sf -H \"Authorization: ${LAVALINK_SERVER_PASSWORD:-youshallnotpass}\" http://localhost:2333/version || exit 1"
+        - 'curl -sf -H "Authorization: ${LAVALINK_SERVER_PASSWORD:-youshallnotpass}" http://localhost:2333/version || exit 1'
       interval: 15s
       timeout: 5s
       retries: 5
@@ -37,6 +37,6 @@ services:
     environment:
       NODE_ENV: production
     volumes:
-    - ./helpers/data:/app/helpers/data  # Persist data across restarts
-    - ./logs:/app/logs   
+      - ./helpers/data:/app/helpers/data # Persist data across restarts
+      - ./logs:/app/logs
     restart: unless-stopped

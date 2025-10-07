@@ -1,4 +1,5 @@
 ## FUNCTIONALITIES
+
 - [x] play age restricted songs
 - [x] disconnecting after inactivity (when nothing is playing and queue is empty)
 - [x] update player after using commands and not buttons
@@ -27,7 +28,8 @@
 - [] other commands
 
 ## FIXES
-- [x] fix issue when playing age restricted songs and one fails then some songs are skipped 
+
+- [x] fix issue when playing age restricted songs and one fails then some songs are skipped
 - [-] fix adding youtube mix playlists, only first song is accurate from list (cant fix this cause how youtube api works and how lavalink reads these playlists)
 - [x] fix displaying queue, always does not show what is currently playing
 - [x] fix check for user to be in voice channel to be in the same as bot
@@ -41,16 +43,18 @@
 - [x] review all changes and check what can be moved to modules, reused etc.
 
 ## OTHER
+
 - [x] clean lavalinkManager and move helpers to other files !!!!
 - [x] (lavalink | rest of the files to be checked) move components/function to helpers folder/modules
 - [x] create docker file and compose lavalink and bot
-- [x] remove global.js since lavalink poru/lavalink maintain most of these functions and migrate the needed ones 
+- [x] remove global.js since lavalink poru/lavalink maintain most of these functions and migrate the needed ones
 - [] add more logging and improve track logs
 - [x] cleanup help command and sepperate it into smaller chunks
 - [] cleanup code
-- [] create website for bot 
+- [] create website for bot
 
 ## IDEAS
+
 - [] Cross-guild playlist sharing: let users export/import queues and playlists across servers so the community can share curated sets.
 - [] Smart DJ mode: analyze listening history to auto-mix genres, adjust transitions, or surface “mood” suggestions when the queue runs low.
 - [] Per-user audio profiles: remember preferred volume/filters per user and automatically apply when they join.
@@ -59,7 +63,7 @@
 - [] Adaptive queue sorting: let listeners sort by requester, duration, popularity, or sentiment so long queues stay manageable.
 - [] Audio reaction filters: trigger temporary effects (bass boost, vocal isolate, reverb) from button taps that sync to the track for a few seconds.
 - [] Collaborative DJ roles: assign rotating “DJ for the hour” roles with permissions to curate or pin queue slots, with automated reminders when it’s someone’s turn.
-- [] * History recall + requeue: expose a searchable history browser (per server) to quickly replay a track or generate a “top hits” set from past sessions.
+- [] \* History recall + requeue: expose a searchable history browser (per server) to quickly replay a track or generate a “top hits” set from past sessions.
 - [] Voice activity-triggered tips: when a lull hits, have the bot surface suggested commands (“try /radio jazz”) or poll the channel for next genre.
 
 - [] Mixer Panel Concept

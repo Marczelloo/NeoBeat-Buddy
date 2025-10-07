@@ -2,19 +2,21 @@
 
 ## THIS IS AN EDUCATIONAL PROJECT ONLY
 
-This bot is provided as a **proof-of-concept** and **educational example**. 
+This bot is provided as a **proof-of-concept** and **educational example**.
 
 ### 🚨 DO NOT USE IN PRODUCTION
 
 **Deploying this bot publicly may violate:**
+
 - YouTube Terms of Service
-- Spotify Terms of Service  
+- Spotify Terms of Service
 - Copyright laws
 - DMCA regulations
 
 ### ⚖️ Legal Risks
 
 By deploying this bot, you may face:
+
 - API access revocation
 - Account suspension
 - Legal action from content owners
@@ -24,6 +26,7 @@ By deploying this bot, you may face:
 ### 📚 Intended Use
 
 This code is meant for:
+
 - ✅ Learning how Discord bots work
 - ✅ Understanding Lavalink integration
 - ✅ Studying audio streaming architecture
@@ -40,6 +43,7 @@ This code is meant for:
 ### 🔒 Your Responsibility
 
 If you choose to deploy this bot:
+
 - YOU are responsible for all legal consequences
 - YOU must ensure compliance with all Terms of Service
 - YOU accept all risks of account suspension or legal action
@@ -138,12 +142,14 @@ pnpm deploy:dev
 - **`/dj setrole role:<role>`** — Change the DJ role.
 - **`/dj skipmode mode:<dj|vote|hybrid> [threshold:<10-100>]`**  
   Configure skip behavior:
+
   - `dj`: Only DJ can skip
   - `vote`: Vote-based skip with threshold
   - `hybrid`: Vote unless DJ overrides
 
 - **`/dj permissions strict:<true|false>`**  
   Toggle strict permissions:
+
   - `true`: Only DJ role can manage DJ settings
   - `false`: Server managers can also configure DJ mode
 
@@ -169,6 +175,7 @@ _EQ settings persist across bot restarts and are restored automatically when the
 
 - **`/stats [detailed:true]`**  
   Display per-guild and global playback statistics:
+
   - Songs played, listening hours
   - Songs skipped, playlists added
   - Unique users, peak listeners
@@ -185,17 +192,20 @@ _EQ settings persist across bot restarts and are restored automatically when the
 ### Docker Stack (Recommended)
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/Marczelloo/NeoBeat-Buddy.git
    cd NeoBeat-Buddy
    ```
 
 2. **Create `.env.prod` file:**
+
    ```bash
    cp .env-example .env.prod
    ```
 
    Edit `.env.prod` with your production credentials:
+
    ```env
    DISCORD_TOKEN=your-production-token
    CLIENT_ID=your-client-id
@@ -208,11 +218,13 @@ _EQ settings persist across bot restarts and are restored automatically when the
    ```
 
 3. **Deploy slash commands:**
+
    ```bash
    pnpm deploy:prod
    ```
 
 4. **Start the Docker stack:**
+
    ```bash
    docker compose up -d --build
    ```
@@ -254,17 +266,17 @@ docker load -i neo-bot.tar
 
 ## Scripts
 
-| Script | Description |
-|--------|-------------|
-| `pnpm start:dev` | Run bot using `.env.dev` |
-| `pnpm start:prod` | Run bot using `.env.prod` |
-| `pnpm lavalink:dev` | Start local Lavalink (`helpers/lavalink/docker-compose.yml`) |
-| `pnpm lavalink:dev:down` | Stop the local Lavalink container |
-| `pnpm docker:prod` | Build & run the production Docker stack |
-| `pnpm docker:build` | Build and push ARM64 Docker image |
-| `pnpm deploy`, `:dev`, `:prod` | Deploy slash commands (global/dev/prod) |
-| `pnpm lint` | Run ESLint checks |
-| `pnpm lint:fix` | Auto-fix ESLint issues |
+| Script                         | Description                                                  |
+| ------------------------------ | ------------------------------------------------------------ |
+| `pnpm start:dev`               | Run bot using `.env.dev`                                     |
+| `pnpm start:prod`              | Run bot using `.env.prod`                                    |
+| `pnpm lavalink:dev`            | Start local Lavalink (`helpers/lavalink/docker-compose.yml`) |
+| `pnpm lavalink:dev:down`       | Stop the local Lavalink container                            |
+| `pnpm docker:prod`             | Build & run the production Docker stack                      |
+| `pnpm docker:build`            | Build and push ARM64 Docker image                            |
+| `pnpm deploy`, `:dev`, `:prod` | Deploy slash commands (global/dev/prod)                      |
+| `pnpm lint`                    | Run ESLint checks                                            |
+| `pnpm lint:fix`                | Auto-fix ESLint issues                                       |
 
 ---
 
@@ -272,30 +284,30 @@ docker load -i neo-bot.tar
 
 ### Required
 
-| Variable | Description |
-|----------|-------------|
-| `DISCORD_TOKEN` | Your Discord bot token |
-| `CLIENT_ID` | Your Discord application client ID |
-| `LAVALINK_HOST` | Lavalink host (`127.0.0.1` for local, `lavalink` for Docker) |
-| `LAVALINK_PORT` | Lavalink port (default: `2333`) |
-| `LAVALINK_PASSWORD` | Lavalink password |
+| Variable            | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `DISCORD_TOKEN`     | Your Discord bot token                                       |
+| `CLIENT_ID`         | Your Discord application client ID                           |
+| `LAVALINK_HOST`     | Lavalink host (`127.0.0.1` for local, `lavalink` for Docker) |
+| `LAVALINK_PORT`     | Lavalink port (default: `2333`)                              |
+| `LAVALINK_PASSWORD` | Lavalink password                                            |
 
 ### Optional
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GENIUS_API_KEY` | - | Genius API key for lyrics lookup |
-| `SPOTIFY_CLIENT_ID` | - | Spotify client ID for Spotify playback |
-| `SPOTIFY_CLIENT_SECRET` | - | Spotify client secret |
-| `YOUTUBE_PO_TOKEN` | - | YouTube PO token for age-restricted content |
-| `YOUTUBE_VISITOR_DATA` | - | YouTube visitor data |
-| `YOUTUBE_REFRESH_TOKEN` | - | YouTube refresh token |
-| `DEFAULT_VOLUME` | `50` | Default playback volume (0-100) |
-| `INACTIVITY_TIMEOUT_MS` | `300000` | Inactivity timeout in ms (5 minutes) |
-| `PROGRESS_UPDATE_INTERVAL_MS` | `10000` | Player progress update interval (10 seconds) |
-| `TRACK_HISTORY_LIMIT` | `20` | Max tracks to keep in history |
-| `FAST_LOGS` | `1` | Enable fast logging (0 to disable) |
-| `LOG_TO_FILE` | `1` | Enable file logging (0 to disable) |
+| Variable                      | Default  | Description                                  |
+| ----------------------------- | -------- | -------------------------------------------- |
+| `GENIUS_API_KEY`              | -        | Genius API key for lyrics lookup             |
+| `SPOTIFY_CLIENT_ID`           | -        | Spotify client ID for Spotify playback       |
+| `SPOTIFY_CLIENT_SECRET`       | -        | Spotify client secret                        |
+| `YOUTUBE_PO_TOKEN`            | -        | YouTube PO token for age-restricted content  |
+| `YOUTUBE_VISITOR_DATA`        | -        | YouTube visitor data                         |
+| `YOUTUBE_REFRESH_TOKEN`       | -        | YouTube refresh token                        |
+| `DEFAULT_VOLUME`              | `50`     | Default playback volume (0-100)              |
+| `INACTIVITY_TIMEOUT_MS`       | `300000` | Inactivity timeout in ms (5 minutes)         |
+| `PROGRESS_UPDATE_INTERVAL_MS` | `10000`  | Player progress update interval (10 seconds) |
+| `TRACK_HISTORY_LIMIT`         | `20`     | Max tracks to keep in history                |
+| `FAST_LOGS`                   | `1`      | Enable fast logging (0 to disable)           |
+| `LOG_TO_FILE`                 | `1`      | Enable file logging (0 to disable)           |
 
 ---
 
@@ -338,11 +350,13 @@ NeoBeat-Buddy/
 ### Configuration
 
 1. **Enable DJ mode:**
+
    ```
    /dj enable role:@DJ skipmode:hybrid threshold:50
    ```
 
 2. **How it works:**
+
    - Users with the DJ role have full control
    - Non-DJs use `/play` to submit suggestions (appear in `/queue`)
    - DJ can approve/reject suggestions via buttons
@@ -360,26 +374,31 @@ NeoBeat-Buddy/
 ## Troubleshooting
 
 ### Bot doesn't come online
+
 - Check Docker logs: `docker compose logs -f bot`
 - Verify `DISCORD_TOKEN` and `CLIENT_ID` in `.env.prod`
 - Ensure bot has been invited with `applications.commands` scope
 
 ### Slash commands don't appear
+
 - Run `pnpm deploy:prod` to register commands
 - Wait up to 1 hour for global commands to propagate
 - For instant updates, use guild-specific deployment
 
 ### Lavalink connection fails
+
 - Check Lavalink logs: `docker compose logs -f lavalink`
 - Verify `LAVALINK_HOST=lavalink` in `.env.prod` (for Docker)
 - Ensure health check passes: `docker compose ps`
 
 ### Music playback issues
+
 - Verify Lavalink is healthy and connected
 - Check for age-restricted content (requires YouTube tokens)
 - Review bot logs for fallback attempts
 
 ### Data not persisting
+
 - Ensure volume mounts in `docker-compose.yml`:
   ```yaml
   volumes:
@@ -393,6 +412,7 @@ NeoBeat-Buddy/
 ## Contributing
 
 Contributions are welcome! Please:
+
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
@@ -406,6 +426,7 @@ Contributions are welcome! Please:
 This project is licensed under the **Educational & Research License** - see the [LICENSE](LICENSE) file for details.
 
 ⚠️ **Important:** This license restricts use to educational and research purposes only. It is NOT an open-source license and does NOT permit:
+
 - Commercial use
 - Public deployment
 - Distribution as a service

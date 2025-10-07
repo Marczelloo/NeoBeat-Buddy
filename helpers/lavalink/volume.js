@@ -1,7 +1,6 @@
 const { getPlayer } = require("./players");
 
-async function lavalinkSetVolume(guildId, volume) 
-{
+async function lavalinkSetVolume(guildId, volume) {
   const player = getPlayer(guildId);
 
   if (!player) return null;
@@ -12,13 +11,12 @@ async function lavalinkSetVolume(guildId, volume)
   return clamped;
 }
 
-async function lavalinkGetVolume(guildId) 
-{
+async function lavalinkGetVolume(guildId) {
   const player = getPlayer(guildId);
   return player ? player.volume ?? 100 : null;
 }
 
 module.exports = {
-    lavalinkSetVolume,
-    lavalinkGetVolume
+  lavalinkSetVolume,
+  lavalinkGetVolume,
 };
