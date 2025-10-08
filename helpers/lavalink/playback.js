@@ -1,6 +1,7 @@
 const djProposals = require("../dj/proposals");
 const skipVotes = require("../dj/skipVotes");
 const Log = require("../logs/log");
+const statsStore = require("../stats/store");
 const { getEqualizerState } = require("./equalizerStore");
 const { describeTrack } = require("./fallbacks");
 const { getPlayer, getPoru } = require("./players");
@@ -11,7 +12,6 @@ const {
   scheduleInactivityDisconnect,
   scheduleProgressUpdates,
 } = require("./timers");
-const statsStore = require("../stats/store");
 
 async function ensurePlayer(guildId, voiceId, textId) {
   let player = getPlayer(guildId);
@@ -25,6 +25,8 @@ async function ensurePlayer(guildId, voiceId, textId) {
     textChannel: textId,
     deaf: true,
   });
+
+  statsStore.beginSession(guildId);
 
   const defaultVolume = Number(process.env.DEFAULT_VOLUME ?? 50);
   const target = Number.isFinite(defaultVolume) ? Math.max(0, Math.min(defaultVolume, 1000)) : 50;
