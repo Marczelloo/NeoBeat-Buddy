@@ -53,17 +53,18 @@ If you choose to deploy this bot:
 
 # Neo Beat Buddy
 
-A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, advanced statistics, persistent EQ settings, and seamless playlist support.
+A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, smart autoplay, advanced statistics, persistent EQ settings, and seamless playlist support.
 
 ## Features
 
 - **Slash-only interface** for queueing, playback, and moderation safeguards.
+- **Smart autoplay** with Spotify recommendations and YouTube Mix — learns from listening patterns, avoids artist clustering, and filters non-music content.
 - **DJ mode** with role-based permissions, skip voting (dj/vote/hybrid modes), and track suggestion approval workflow.
 - **Real-time statistics** per guild and globally via `/stats` — tracks songs played, listening hours, unique users, peak listeners, top sources, and hourly activity patterns.
 - **Lyrics lookup** for the current track with `/lyrics` (powered by Genius API).
 - **Interactive queue management** with pagination, track removal by position or keyword, and shuffle.
 - **Live equalizer** with presets (bass, nightcore, lofi, etc.) and per-band fine-tuning — settings persist across bot restarts.
-- **Persistent state** — now playing messages, EQ configurations, DJ settings, and guild stats survive restarts.
+- **Persistent state** — now playing messages, EQ configurations, DJ settings, guild stats, and autoplay preferences survive restarts.
 - **Age-restricted content handling** with automatic fallback to alternate sources.
 - **Track history** with `/previous` command to replay or rewind.
 - **Docker-based production stack** with health checks and auto-restart policies.
@@ -75,7 +76,7 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, adv
 - **Docker** & **Docker Compose** (for hosting Lavalink or the full stack)
 - **Lavalink** 4.x credentials (see `.env-example`)
 - **Genius API key** (optional, for lyrics)
-- **Spotify credentials** (optional, for Spotify playback)
+- **Spotify credentials** (recommended for autoplay, enables Spotify playback)
 
 ## Quick Start
 
@@ -120,6 +121,7 @@ pnpm deploy:dev
 - **`/seekto position:<seconds|mm:ss|hh:mm:ss>`** — Jump to a specific timestamp in the current track (DJ restricted in DJ mode).
 - **`/volume level:<0-100>`** — Set the playback volume (DJ only in DJ mode).
 - **`/lyrics`** — Display lyrics for the currently playing song.
+- **`/autoplay`** — Toggle smart autoplay mode that automatically queues similar tracks when the queue ends (DJ only).
 
 ---
 
@@ -130,6 +132,43 @@ pnpm deploy:dev
 - **`/clearqueue`** — Remove every track from the queue (DJ only while DJ mode is enabled).
 - **`/shuffle`** — Randomize the queue order (DJ restricted in DJ mode).
 - **`/loop [mode:<NONE|TRACK|QUEUE>]`** — Toggle loop modes (DJ restricted in DJ mode).
+
+---
+
+### 🤖 Smart Autoplay
+
+**Autoplay automatically discovers and queues music when your queue is empty.**
+
+#### How It Works
+
+1. **Analyzes your listening history** — Tracks the last 15 songs played to understand your music taste.
+2. **Multi-source recommendations** — Pulls suggestions from:
+   - **Spotify** — Genre-aware recommendations using Spotify's algorithm
+   - **YouTube Mix** — Related tracks from YouTube's radio feature
+   - **Top artist search** — Songs from your most-played artists
+3. **Smart scoring system** — Ranks candidates using 6 factors:
+   - Artist familiarity (how often you've played them)
+   - Duration similarity (matches average song length)
+   - Source quality (Spotify > YouTube Mix > Search)
+   - Diversity bonus (avoids artist clustering)
+   - Skip learning (downweights artists you skip frequently)
+   - Duplicate prevention (never plays the same song twice)
+4. **Quality filtering** — Automatically rejects:
+   - Non-music content (tutorials, poetry, spoken word)
+   - Short clips (<30 seconds)
+   - Videos with excessive hashtags or emojis
+   - Known non-music channels
+
+#### Usage
+
+```bash
+# Enable autoplay (DJ permission required)
+/autoplay
+
+# Autoplay status shows in the now-playing message
+```
+
+**When enabled**, autoplay triggers automatically when the queue ends, seamlessly continuing your listening session with curated recommendations.
 
 ---
 
@@ -277,6 +316,8 @@ docker load -i neo-bot.tar
 | `pnpm deploy`, `:dev`, `:prod` | Deploy slash commands (global/dev/prod)                      |
 | `pnpm lint`                    | Run ESLint checks                                            |
 | `pnpm lint:fix`                | Auto-fix ESLint issues                                       |
+| `pnpm test`                    | Run all tests                                                |
+| `pnpm test:autoplay`           | Run autoplay tests only                                      |
 
 ---
 
@@ -297,7 +338,7 @@ docker load -i neo-bot.tar
 | Variable                      | Default  | Description                                  |
 | ----------------------------- | -------- | -------------------------------------------- |
 | `GENIUS_API_KEY`              | -        | Genius API key for lyrics lookup             |
-| `SPOTIFY_CLIENT_ID`           | -        | Spotify client ID for Spotify playback       |
+| `SPOTIFY_CLIENT_ID`           | -        | Spotify client ID (for autoplay and Spotify) |
 | `SPOTIFY_CLIENT_SECRET`       | -        | Spotify client secret                        |
 | `YOUTUBE_PO_TOKEN`            | -        | YouTube PO token for age-restricted content  |
 | `YOUTUBE_VISITOR_DATA`        | -        | YouTube visitor data                         |
@@ -316,7 +357,7 @@ docker load -i neo-bot.tar
 ```
 NeoBeat-Buddy/
 ├── commands/
-│   ├── music/          # Playback, queue, and DJ commands
+│   ├── music/          # Playback, queue, autoplay, and DJ commands
 │   └── utility/        # Stats, help, user commands
 ├── events/             # Discord.js event handlers
 ├── helpers/
@@ -330,16 +371,57 @@ NeoBeat-Buddy/
 │   ├── equalizer/      # EQ presets and messages
 │   ├── help/           # Help command categories
 │   ├── interactions/   # Guards (DJ, voice channel)
-│   ├── lavalink/       # Lavalink client, filters, playback
+│   ├── lavalink/       # Lavalink client, filters, playback, autoplay
 │   ├── logs/           # Logging utilities
 │   └── stats/          # Statistics tracking
+├── tests/              # Unit and integration tests
+│   └── helpers/
+│       └── lavalink/
+│           └── smartAutoplay.test.js
 ├── logs/               # Log files (git-ignored)
+├── .github/
+│   └── workflows/
+│       └── ci.yml      # GitHub Actions CI pipeline
 ├── docker-compose.yml  # Production stack (bot + Lavalink)
 ├── dockerfile          # Bot container definition
 ├── .env-example        # Environment template
 ├── package.json
 └── pnpm-lock.yaml
 ```
+
+---
+
+## Smart Autoplay Technical Details
+
+### Architecture
+
+- **Session profiling** — Analyzes last 15 tracks for artist frequency and average duration
+- **Multi-source candidates** — Gathers recommendations from Spotify, YouTube Mix, and top artist searches
+- **6-factor scoring algorithm**:
+  1. Artist familiarity (+5 per occurrence)
+  2. Duration similarity (+10 within 20%, +5 within 40%)
+  3. Source preference (Spotify +25, YouTube Mix +15, Search +10)
+  4. Diversity bonus (+20 for artists not in top 3)
+  5. Skip learning (-20 per recent skip)
+  6. Duplicate prevention (-1000 for played tracks)
+- **Skip tracking** — Remembers last 50 skips (30-minute window) to learn preferences
+- **Quality validation** — Filters tracks by duration, keywords, channels, and special characters
+
+### Data Persistence
+
+- **Autoplay state** — Stored in `helpers/data/guildState.json` per guild
+- **Playback history** — Last 20 tracks kept in memory (used for profiling)
+- **Skip patterns** — In-memory Map with 30-minute expiry
+
+### Testing
+
+Run the autoplay test suite:
+
+```bash
+pnpm test:autoplay
+```
+
+Tests cover session profiling, duplicate detection, artist weight calculation, and edge cases.
 
 ---
 
@@ -397,6 +479,13 @@ NeoBeat-Buddy/
 - Check for age-restricted content (requires YouTube tokens)
 - Review bot logs for fallback attempts
 
+### Autoplay not working
+
+- Ensure `/autoplay` is enabled (check now-playing message)
+- Verify Spotify credentials in `.env` (optional but recommended)
+- Check logs for "Starting smart autoplay" messages
+- Autoplay only triggers when queue is completely empty
+
 ### Data not persisting
 
 - Ensure volume mounts in `docker-compose.yml`:
@@ -418,6 +507,13 @@ Contributions are welcome! Please:
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+### Development Workflow
+
+1. Write tests for new features (`*.test.js`)
+2. Run tests: `pnpm test`
+3. Fix linting issues: `pnpm lint:fix`
+4. Update help command and README if adding new commands
 
 ---
 
@@ -442,6 +538,7 @@ This project is licensed under the **Educational & Research License** - see the 
 - **Poru** - Lavalink client for Node.js
 - **Discord.js** - Discord API library
 - **Genius API** - Lyrics provider
+- **Spotify Web API** - Recommendations engine
 
 ---
 

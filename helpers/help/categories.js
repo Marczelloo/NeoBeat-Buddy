@@ -51,6 +51,12 @@
           description: "Display lyrics for the currently playing song.",
           usage: "/lyrics",
         },
+        {
+          name: "autoplay",
+          description:
+            "Toggle smart autoplay mode that automatically queues similar tracks when the queue ends (DJ only).",
+          usage: "/autoplay",
+        },
       ],
     },
     queue: {
@@ -83,6 +89,19 @@
           name: "loop",
           description: "Toggle loop mode for the current track or queue (DJ restricted in DJ mode).",
           usage: "/loop [mode:<NONE|TRACK|QUEUE>]",
+        },
+      ],
+      notes: [
+        {
+          name: "Smart Autoplay",
+          value: [
+            "- Autoplay automatically finds and queues similar tracks when your queue is empty.",
+            "- Uses Spotify recommendations and YouTube Mix to discover music matching your listening history.",
+            "- Learns from your listening patterns: tracks last 15 songs played and avoids artist clustering.",
+            "- Filters out non-music content (tutorials, poetry, shorts) for quality recommendations.",
+            "- Learns from skips: tracks you skip are downweighted in future recommendations.",
+            "- Toggle with `/autoplay` (DJ permission required).",
+          ].join("\n"),
         },
       ],
     },
@@ -120,7 +139,7 @@
         },
         {
           name: "user",
-          description: "Inspect a user’s profile, flags, and status.",
+          description: "Inspect a user's profile, flags, and status.",
           usage: "/user user:<member>",
         },
         {
