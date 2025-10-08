@@ -21,7 +21,7 @@
 - [x] add dj role, only users with dj role can add songs to queue, use player, handle queue etc.
 - [x] stats tracking per guild and globa (hours played, songs played etc.)
 - [x] autoplay (automatically searches for next song based on current one)
-- [] adjust autoplay to count track history for better picking better song, include suggestions from spotify
+- [x] adjust autoplay to count track history for better picking better song, include suggestions from spotify
 - [] 24/7 command
 - [] server playlists, user playlists
 - [] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )
@@ -41,6 +41,7 @@
 - [x] fix double player message on pi after adding one song to queue and it stopping playing and then adding another song to queue
 - [x] fix lyrics check if found are for proper song (not offical songs without posted lyrics have lyrics from different songs) | switched to genius api instead of lavalinks
 - [x] review all changes and check what can be moved to modules, reused etc.
+- [] fix server sessions and avg sessions playtime
 
 ## OTHER
 

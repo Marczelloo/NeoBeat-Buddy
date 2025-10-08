@@ -14,6 +14,7 @@ const {
   getLyricsState,
 } = require("./lavalink/index");
 const { buildLyricsResponse } = require("./lavalink/lyricsFormatter");
+const { recordSkip } = require("./lavalink/smartAutoplay");
 const Log = require("./logs/log");
 const { formatDuration } = require("./utils");
 
@@ -90,9 +91,13 @@ async function handleControlButtons(interaction, player) {
   let loopMode = player.loop ?? "NONE";
 
   if (customId === "skip-button") {
+    const poru = createPoru(interaction.client);
+    const livePlayer = poru.players.get(guildId);
+
     if (!config.enabled || isDj) {
       await interaction.deferUpdate();
       await lavalinkSkip(guildId);
+      if (livePlayer?.currentTrack) recordSkip(guildId, livePlayer.currentTrack, "manual_skip");
       skipVotes.clear(guildId);
 
       const loopToDisplay = player.loop ?? "NONE";
@@ -103,8 +108,6 @@ async function handleControlButtons(interaction, player) {
     }
 
     const settings = djStore.getSkipSettings(guildId);
-    const poru = createPoru(interaction.client);
-    const livePlayer = poru.players.get(guildId);
 
     if (!livePlayer || (!livePlayer.currentTrack && livePlayer.queue.length === 0)) {
       await interaction.reply({ content: "Nothing is playing right now.", ephemeral: true });
@@ -133,6 +136,7 @@ async function handleControlButtons(interaction, player) {
       const skipped = await lavalinkSkip(guildId);
       if (skipped) {
         skipVotes.clear(guildId);
+        if (livePlayer?.currentTrack) recordSkip(guildId, livePlayer.currentTrack, "manual_skip");
         await interaction.reply({ content: "Song skipped.", ephemeral: true });
       }
 
@@ -145,6 +149,7 @@ async function handleControlButtons(interaction, player) {
     if (eligibleCount <= 1) {
       await lavalinkSkip(guildId);
       skipVotes.clear(guildId);
+      if (livePlayer?.currentTrack) recordSkip(guildId, livePlayer.currentTrack, "manual_skip");
       await interaction.reply({ content: "Song skipped.", ephemeral: true });
 
       const loopToDisplay = player.loop ?? "NONE";
@@ -172,6 +177,7 @@ async function handleControlButtons(interaction, player) {
     if (result.status === "passed") {
       await lavalinkSkip(guildId);
       skipVotes.clear(guildId);
+      if (livePlayer?.currentTrack) recordSkip(guildId, livePlayer.currentTrack, "manual_skip");
       await interaction.reply({ content: "Vote passed. Song skipped.", ephemeral: true });
 
       const loopToDisplay = player.loop ?? "NONE";

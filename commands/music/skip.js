@@ -4,6 +4,7 @@ const djStore = require("../../helpers/dj/store");
 const { errorEmbed, successEmbed } = require("../../helpers/embeds");
 const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { lavalinkSkip, createPoru } = require("../../helpers/lavalink/index");
+const { recordSkip } = require("../../helpers/lavalink/smartAutoplay");
 const Log = require("../../helpers/logs/log");
 
 module.exports = {
@@ -20,9 +21,13 @@ module.exports = {
     const config = djStore.getGuildConfig(interaction.guild.id);
     const isDj = djStore.hasDjPermissions(interaction.member, config);
 
+    const poru = createPoru(interaction.client);
+    const player = poru.players.get(interaction.guild.id);
+
     if (!config.enabled || isDj) {
       const skipped = await lavalinkSkip(interaction.guild.id);
       if (skipped) {
+        if (player?.currentTrack) recordSkip(interaction.guild.id, player.currentTrack, "command_skip");
         skipVotes.clear(interaction.guild.id);
         return interaction.editReply({ embeds: [successEmbed("Song skipped.")] });
       }
@@ -31,8 +36,6 @@ module.exports = {
     }
 
     const settings = djStore.getSkipSettings(interaction.guild.id);
-    const poru = createPoru(interaction.client);
-    const player = poru.players.get(interaction.guild.id);
 
     if (!player || (!player.currentTrack && player.queue.length === 0)) {
       return interaction.editReply({ embeds: [errorEmbed("Nothing is playing right now.")] });
@@ -59,6 +62,7 @@ module.exports = {
     if (settings.mode === "hybrid" && isDj) {
       const skipped = await lavalinkSkip(interaction.guild.id);
       if (skipped) {
+        if (player?.currentTrack) recordSkip(interaction.guild.id, player.currentTrack, "command_skip");
         skipVotes.clear(interaction.guild.id);
         return interaction.editReply({ embeds: [successEmbed("Song skipped.")] });
       }
@@ -69,6 +73,7 @@ module.exports = {
     if (eligibleCount <= 1) {
       const skipped = await lavalinkSkip(interaction.guild.id);
       if (skipped) {
+        if (player?.currentTrack) recordSkip(interaction.guild.id, player.currentTrack, "command_skip");
         skipVotes.clear(interaction.guild.id);
         return interaction.editReply({ embeds: [successEmbed("Song skipped.")] });
       }
@@ -100,6 +105,7 @@ module.exports = {
       skipVotes.clear(interaction.guild.id);
 
       if (skipped) {
+        if (player?.currentTrack) recordSkip(interaction.guild.id, player.currentTrack, "command_skip");
         return interaction.editReply({ embeds: [successEmbed("Vote passed. Song skipped.")] });
       }
 

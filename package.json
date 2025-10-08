@@ -17,7 +17,10 @@
     "lavalink:dev": "docker compose -f helpers/lavalink/docker-compose.yml --env-file .env.dev up -d",
     "lavalink:dev:down": "docker compose -f helpers/lavalink/docker-compose.yml down",
     "lint": "eslint . --ext .js,.cjs,.mjs",
-    "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix"
+    "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix",
+    "test": "node --test tests/**/*.test.js",
+    "test:watch": "node --test --watch tests/**/*.test.js",
+    "test:autoplay": "node --test tests/helpers/lavalink/smartAutoplay.test.js"
   },
   "repository": {
     "type": "git",

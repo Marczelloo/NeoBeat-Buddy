@@ -125,6 +125,11 @@ function createPoru(client) {
   });
 
   poru.on("trackStart", async (player, track) => {
+    if (!track) {
+      Log.warning("Lavalink trackStart event without track", "", `guild=${player.guildId}`);
+      return;
+    }
+
     clearInactivityTimer(player.guildId, "trackStart");
     scheduleProgressUpdates(player);
 
