@@ -16,6 +16,20 @@ async function queueAutoplayTrack(player, lastTrack, textChannelId) {
       return false;
     }
 
+    const voiceChannel = player.poru.client.guilds.cache.get(player.guildId)?.channels.cache.get(player.voiceChannel);
+
+    const botIsInChannel = voiceChannel?.members?.has(player.poru.client.user.id);
+
+    if (!botIsInChannel) {
+      Log.debug(
+        "Aborting autoplay - bot left voice channel during fetch",
+        "",
+        `guild=${player.guildId}`,
+        `track=${relatedTrack.info?.title}`
+      );
+      return false;
+    }
+
     const cloned = cloneTrack(relatedTrack);
 
     cloned.info = {

@@ -1,27 +1,17 @@
 const Log = require("../logs/log");
 
-/**
- * Validates if a track is likely a real song (not a short clip, tutorial, etc.)
- * @param {Object} trackInfo - Track information
- * @param {Object} options - Validation options
- * @param {boolean} options.allowStreams - Allow live streams (default: true)
- * @param {boolean} options.strictDuration - Enforce strict duration limits (default: false)
- */
 function isValidSong(trackInfo, options = {}) {
   if (!trackInfo) return false;
 
   const { allowStreams = true, strictDuration = false } = options;
   const { title, author, length, isStream } = trackInfo;
 
-  // Allow streams by default (user can manually add them)
   if (isStream && !allowStreams) {
     Log.warning("Track validation failed: is a stream", "", `title=${title}`);
     return false;
   }
 
-  // Skip duration check for streams
   if (!isStream) {
-    // Duration checks (in milliseconds)
     const MIN_DURATION = 30 * 1000; // 30 seconds
 
     if (length < MIN_DURATION) {
@@ -29,7 +19,6 @@ function isValidSong(trackInfo, options = {}) {
       return false;
     }
 
-    // Only enforce max duration if strictDuration is enabled
     if (strictDuration) {
       const MAX_DURATION = 20 * 60 * 1000; // 20 minutes
       if (length > MAX_DURATION) {
@@ -44,7 +33,6 @@ function isValidSong(trackInfo, options = {}) {
     }
   }
 
-  // Filter out common non-song indicators in title (case insensitive)
   const titleLower = (title || "").toLowerCase();
   const blacklistedKeywords = [
     "tutorial",
@@ -92,14 +80,12 @@ function isValidSong(trackInfo, options = {}) {
     }
   }
 
-  // Filter out titles with excessive hashtags or emojis (usually not real music)
   const hashtagCount = (title.match(/#/g) || []).length;
   if (hashtagCount > 3) {
     Log.warning("Track validation failed: excessive hashtags", "", `title=${title}`, `count=${hashtagCount}`);
     return false;
   }
 
-  // Filter out author/channel names that indicate non-music content
   const authorLower = (author || "").toLowerCase();
   const blacklistedChannels = [
     "tutorial",
@@ -107,7 +93,7 @@ function isValidSong(trackInfo, options = {}) {
     "podcast network",
     "news channel",
     "radio show",
-    "write about now", // The poetry channel from your logs
+    "write about now",
     "poetry",
     "spoken word",
     "motivational",
@@ -120,7 +106,6 @@ function isValidSong(trackInfo, options = {}) {
     return false;
   }
 
-  // Additional check: prefer official music channels/topics
   const hasOfficialIndicators =
     titleLower.includes("official") ||
     titleLower.includes("music video") ||
@@ -130,9 +115,8 @@ function isValidSong(trackInfo, options = {}) {
     titleLower.includes("lyrics") ||
     authorLower.includes("vevo") ||
     authorLower.includes("official") ||
-    authorLower.includes(" - topic"); // YouTube auto-generated artist channels
+    authorLower.includes(" - topic");
 
-  // If track has excessive special characters and no official indicators, it's suspicious
   const specialCharPattern = /[@#🎀🗿🕷✨💫]/g;
   const specialCharCount = (title.match(specialCharPattern) || []).length;
 
@@ -149,11 +133,6 @@ function isValidSong(trackInfo, options = {}) {
   return true;
 }
 
-/**
- * Filter an array of tracks to only include valid songs
- * @param {Array} tracks - Array of tracks to filter
- * @param {Object} options - Validation options (passed to isValidSong)
- */
 function filterValidSongs(tracks, options = {}) {
   return tracks.filter((track) => isValidSong(track.info, options));
 }

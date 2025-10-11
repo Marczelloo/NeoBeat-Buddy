@@ -3,11 +3,7 @@ const Log = require("../logs/log");
 let spotifyAccessToken = null;
 let spotifyTokenExpiry = 0;
 
-/**
- * Get Spotify access token (cached)
- */
 async function getSpotifyToken() {
-  // Return cached token if still valid
   if (spotifyAccessToken && Date.now() < spotifyTokenExpiry) {
     return spotifyAccessToken;
   }
@@ -37,7 +33,7 @@ async function getSpotifyToken() {
 
     const data = await response.json();
     spotifyAccessToken = data.access_token;
-    spotifyTokenExpiry = Date.now() + data.expires_in * 1000 - 60000; // Refresh 1 min before expiry
+    spotifyTokenExpiry = Date.now() + data.expires_in * 1000 - 60000;
 
     Log.info("Spotify access token obtained");
     return spotifyAccessToken;
@@ -47,9 +43,6 @@ async function getSpotifyToken() {
   }
 }
 
-/**
- * Search for a track on Spotify to get its ID
- */
 async function searchSpotifyTrack(trackTitle, artistName) {
   const token = await getSpotifyToken();
   if (!token) return null;
@@ -125,15 +118,11 @@ async function getSpotifyRecommendations(seedTrackId, limit = 5) {
   }
 }
 
-/**
- * Get song suggestions based on a reference track using Spotify
- */
 async function getSpotifyBasedSuggestions(referenceTrack) {
   if (!referenceTrack?.info) return [];
 
   const { title, author } = referenceTrack.info;
 
-  // Search for the track on Spotify
   const trackId = await searchSpotifyTrack(title, author);
 
   if (!trackId) {
@@ -141,7 +130,6 @@ async function getSpotifyBasedSuggestions(referenceTrack) {
     return [];
   }
 
-  // Get recommendations
   const recommendations = await getSpotifyRecommendations(trackId, 5);
 
   return recommendations;

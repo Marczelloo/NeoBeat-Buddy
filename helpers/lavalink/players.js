@@ -24,7 +24,7 @@ async function ensurePlayer(guildId, voiceChannelId, textChannelId) {
     deaf: true,
   });
 
-  ensurePlaybackState(guildId); // make sure a state entry exists
+  ensurePlaybackState(guildId);
   return player;
 }
 

@@ -159,20 +159,13 @@ function createPoru(client) {
     } catch (err) {
       Log.error(`Failed to begin track session for guild ${player.guildId}`, err);
     }
+
+    poru.emit("trackStartUI", player, track);
   });
 
   poru.on("trackEnd", (player, track, reason) => {
     const reasonSummary = typeof reason === "string" ? reason : inspect(reason, { depth: 1 });
     const nextTrack = player.currentTrack ? describeTrack(player.currentTrack) : "none";
-    Log.info(
-      "Lavalink track ended",
-      "",
-      `guild=${player.guildId}`,
-      `track=${describeTrack(track)}`,
-      `reason=${reasonSummary}`,
-      `queueLength=${player.queue.length}`,
-      `next=${nextTrack}`
-    );
 
     clearProgressInterval(player.guildId);
 
@@ -185,7 +178,30 @@ function createPoru(client) {
 
     if (track?.track && reasonCode !== "replaced" && reasonCode !== "load_failed") {
       pushTrackHistory(player.guildId, track);
+
+      const updatedState = playbackState.get(player.guildId);
+      Log.debug(
+        "Track added to history (trackEnd)",
+        "",
+        `guild=${player.guildId}`,
+        `track=${describeTrack(track)}`,
+        `historyLength=${updatedState?.history?.length || 0}`,
+        `recentHistory=${(updatedState?.history || [])
+          .slice(-3)
+          .map((t) => t.info?.title || "unknown")
+          .join(" → ")}`
+      );
     }
+
+    Log.info(
+      "Lavalink track ended",
+      "",
+      `guild=${player.guildId}`,
+      `track=${describeTrack(track)}`,
+      `reason=${reasonSummary}`,
+      `queueLength=${player.queue.length}`,
+      `next=${nextTrack}`
+    );
 
     state.currentTrack = null;
     playbackState.set(player.guildId, state);
@@ -213,6 +229,43 @@ function createPoru(client) {
 
     const state = ensurePlaybackState(player.guildId);
     const lastTrack = state.currentTrack;
+
+    Log.debug(
+      "Queue end state",
+      "",
+      `guild=${player.guildId}`,
+      `lastTrack=${lastTrack?.info?.title || "none"}`,
+      `historyLength=${state.history?.length || 0}`,
+      `lastHistoryTrack=${state.history?.[state.history.length - 1]?.info?.title || "none"}`
+    );
+
+    if (lastTrack?.track) {
+      const alreadyInHistory = state.history?.some((t) => t.track === lastTrack.track);
+
+      if (!alreadyInHistory) {
+        pushTrackHistory(player.guildId, lastTrack);
+
+        const updatedState = playbackState.get(player.guildId);
+        Log.debug(
+          "Track added to history (queueEnd)",
+          "",
+          `guild=${player.guildId}`,
+          `track=${describeTrack(lastTrack)}`,
+          `historyLength=${updatedState?.history?.length || 0}`,
+          `recentHistory=${(updatedState?.history || [])
+            .slice(-3)
+            .map((t) => t.info?.title || "unknown")
+            .join(" → ")}`
+        );
+      } else {
+        Log.debug(
+          "Track already in history, skipping",
+          "",
+          `guild=${player.guildId}`,
+          `track=${describeTrack(lastTrack)}`
+        );
+      }
+    }
 
     state.currentTrack = null;
     playbackState.set(player.guildId, state);

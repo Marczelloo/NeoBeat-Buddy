@@ -44,12 +44,17 @@ const spacerHalf = "  ";
 
 const reset = "\x1b[0m";
 
-// Fast logs by default (skip expensive caller-file stack and progress redraws)
-// Set FAST_LOGS=0 to restore full logging detail
 const fastLogsEnabled = () => process.env.FAST_LOGS !== "0";
+
+const getLogLevel = () => {
+  const level = parseInt(process.env.LOG_LEVEL, 10);
+  return isNaN(level) ? 2 : level;
+};
 
 class Log {
   static info(message, arg, ...additionalInfo) {
+    if (getLogLevel() < 2) return;
+
     const now = new Date();
     const currentDate = now.toLocaleDateString();
     const currentTime = now.toLocaleTimeString();
@@ -78,7 +83,40 @@ class Log {
     console.log(formattedMessage);
   }
 
+  static debug(message, arg, ...additionalInfo) {
+    if (getLogLevel() < 3) return;
+
+    const now = new Date();
+    const currentDate = now.toLocaleDateString();
+    const currentTime = now.toLocaleTimeString();
+    const ms = String(now.getMilliseconds()).padStart(3, "0");
+    const time = `${currentDate} ${currentTime}.${ms}`;
+    const callerFile = fastLogsEnabled() ? "-" : Log.getCallerFile();
+    let formattedMessage = "";
+    formattedMessage += `${bright}${LogTextColor.WHITE}${LogBackgroundColor.MAGENTA} ${Blocks.LEFTHALF}DEBUG${spacer}  ${reset}`;
+    formattedMessage += `${LogTextColor.WHITE}${LogBackgroundColor.GRAY} ${time} ${Blocks.FULL} ${callerFile} `;
+    if (additionalInfo.length != 0) {
+      formattedMessage += `${Blocks.FULL} `;
+      const infoString = additionalInfo
+        .map((info, index) => {
+          if (index === additionalInfo.length - 1) {
+            return `${info} ${reset}`;
+          } else {
+            return `${info} ${Blocks.FULL} `;
+          }
+        })
+        .join("");
+
+      formattedMessage += infoString;
+    }
+    formattedMessage += `${LogBackgroundColor.MAGENTA} ${reset}`;
+    formattedMessage += `${bright}${LogTextColor.MAGENTA} ${spacerHalf} ${message}${arg ? ` ${arg}` : ""}${reset}`;
+    console.log(formattedMessage);
+  }
+
   static success(message, arg, ...additionalInfo) {
+    if (getLogLevel() < 2) return;
+
     const now = new Date();
     const currentDate = now.toLocaleDateString();
     const currentTime = now.toLocaleTimeString();
@@ -108,6 +146,8 @@ class Log {
   }
 
   static warning(message, arg = null, ...additionalInfo) {
+    if (getLogLevel() < 1) return;
+
     const now = new Date();
     const currentDate = now.toLocaleDateString();
     const currentTime = now.toLocaleTimeString();
@@ -170,7 +210,7 @@ class Log {
   }
 
   static progress(message, progress, ...additionalInfo) {
-    if (fastLogsEnabled()) return; // suppress progress redraws
+    if (fastLogsEnabled()) return;
     if (progress > 100) {
       progress = 100;
     }
@@ -190,11 +230,11 @@ class Log {
     if (progress === 100) {
       progressBar = ProgressBarBlocks[8].repeat(progressBarLength);
     } else {
-      const totalBlocks = progressBarLength * 8; // Total number of sub-blocks
+      const totalBlocks = progressBarLength * 8;
       const filledBlocks = Math.floor((totalBlocks * progress) / 100);
-      const fullBlockCount = Math.floor(filledBlocks / 8); // Full blocks
-      const partialBlockIndex = filledBlocks % 8; // Index for the partial block
-      const emptyBlockCount = progressBarLength - fullBlockCount - (partialBlockIndex > 0 ? 1 : 0); // Calculate empty blocks
+      const fullBlockCount = Math.floor(filledBlocks / 8);
+      const partialBlockIndex = filledBlocks % 8;
+      const emptyBlockCount = progressBarLength - fullBlockCount - (partialBlockIndex > 0 ? 1 : 0);
 
       progressBar = `${ProgressBarBlocks[8].repeat(fullBlockCount)}${
         ProgressBarBlocks[partialBlockIndex]
@@ -258,16 +298,14 @@ class Log {
 
   static saveLogsToFile(log) {
     if (process.env.LOG_TO_FILE === "0") return;
-    const logWithoutFormatting = log.replace(/\d+m/g, "");
+    const logWithoutFormatting = log.replace(/\x1b\[\d+m/g, "");
     const logsPath = path.resolve(__dirname, "../../logs/logs.txt");
     const logsFolder = path.dirname(logsPath);
-    // Fire-and-forget async; avoid blocking the event loop
     (async () => {
       try {
         await fsp.mkdir(logsFolder, { recursive: true });
         await fsp.appendFile(logsPath, logWithoutFormatting + "\n");
       } catch (error) {
-        // Log to console only to avoid recursion
         console.error("Error saving logs to file", error?.message || error);
       }
     })();

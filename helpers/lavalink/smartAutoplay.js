@@ -11,6 +11,18 @@ function buildSessionProfile(guildId, referenceTrack) {
   const state = playbackState.get(guildId);
   const history = state?.history || [];
 
+  Log.debug(
+    "Building session profile",
+    "",
+    `guild=${guildId}`,
+    `historyLength=${history.length}`,
+    `referenceTrack=${referenceTrack?.info?.title || "none"}`,
+    `historyTracks=${history
+      .slice(-5)
+      .map((t) => t.info?.title || "unknown")
+      .join(" → ")}`
+  );
+
   const recentTracks = [...history.slice(-14), referenceTrack].filter(Boolean);
 
   if (recentTracks.length === 0) {
@@ -43,6 +55,14 @@ function buildSessionProfile(guildId, referenceTrack) {
     .map(([artist, count]) => ({ artist, count, weight: count / recentTracks.length }));
 
   const avgDuration = totalDuration / recentTracks.length;
+
+  Log.debug(
+    "Duplicate detection identifiers",
+    "",
+    `guild=${guildId}`,
+    `count=${identifiers.length}`,
+    `recent10=${identifiers.slice(-10).join(", ")}`
+  );
 
   return {
     topArtists,
@@ -205,7 +225,16 @@ function scoreCandidates(candidates, profile, skipPatterns) {
     const skipCount = skipPatterns.skippedArtists[candidate.artist] || 0;
     score -= skipCount * 20;
 
-    if (profile.recentIdentifiers.includes(candidate.identifier)) {
+    const isDuplicate = profile.recentIdentifiers.includes(candidate.identifier);
+    if (isDuplicate) {
+      Log.debug(
+        "Duplicate detected",
+        "",
+        `guild=${profile.guildId}`,
+        `track=${candidate.title}`,
+        `id=${candidate.identifier}`,
+        `penaltyApplied=-1000`
+      );
       score -= 1000;
     }
 
@@ -213,6 +242,24 @@ function scoreCandidates(candidates, profile, skipPatterns) {
   });
 
   candidates.sort((a, b) => b.score - a.score);
+
+  const topScore = candidates.length > 0 ? candidates[0].score : 0;
+  const topCandidates = candidates.filter((c) => c.score >= topScore - 15 && c.score > 0);
+
+  if (topCandidates.length > 1) {
+    topCandidates.forEach((c) => {
+      c.score += Math.random() * 10;
+    });
+
+    candidates.sort((a, b) => b.score - a.score);
+
+    Log.debug(
+      "Added variety to top candidates",
+      "",
+      `topCount=${topCandidates.length}`,
+      `selected=${candidates[0]?.title || "none"}`
+    );
+  }
 
   return candidates;
 }

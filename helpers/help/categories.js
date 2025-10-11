@@ -55,7 +55,7 @@
           name: "autoplay",
           description:
             "Toggle smart autoplay mode that automatically queues similar tracks when the queue ends (DJ only).",
-          usage: "/autoplay",
+          usage: "/autoplay enable:<true|false>",
         },
       ],
     },

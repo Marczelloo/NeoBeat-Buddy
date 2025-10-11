@@ -137,7 +137,7 @@ function reconnectClient() {
     setTimeout(connectClient, 5000);
   } else {
     Log.error("Failed to reconnect to Discord after several attempts.");
-    process.exit(1); // Exit the process to allow a restart
+    process.exit(1);
   }
 }
 

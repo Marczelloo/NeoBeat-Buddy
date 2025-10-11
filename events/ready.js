@@ -17,8 +17,19 @@ module.exports = {
       const poru = createPoru(client);
       poru.init(client);
 
-      poru.on("trackStart", async (player) => {
-        const info = player.currentTrack?.info || {};
+      poru.on("trackStartUI", async (player, track) => {
+        const info = track?.info || {};
+
+        if (!info.title) {
+          Log.warning(
+            "trackStartUI fired with track missing title",
+            "",
+            `guild=${player.guildId}`,
+            `track=${track?.track?.substring(0, 20) || "unknown"}`
+          );
+          return;
+        }
+
         const state = getGuildState(player.guildId) ?? {};
         const channelId = state.nowPlayingChannel ?? player.textChannel;
         if (!channelId) return;
@@ -80,28 +91,30 @@ module.exports = {
           if (err?.code !== 10008) Log.error("Failed to delete now-playing message on track end", err);
         });
 
-        updateGuildState(player.guildId, { nowPlayingMessage: null });
+        updateGuildState(player.guildId, {
+          nowPlayingMessage: null,
+        });
       });
 
       poru.on("queueEnd", async (player) => {
-        const server = getGuildState(player.guildId);
-        const messageId = server?.nowPlayingMessage;
-        const channelId = server?.nowPlayingChannel;
+        const state = getGuildState(player.guildId);
+        const channelId = state?.nowPlayingChannel;
+        const messageId = state?.nowPlayingMessage;
+        if (!channelId || !messageId) return;
 
-        if (!messageId || !channelId) return;
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel) return;
 
-        const channel = await client.channels.fetch(channelId);
-        await channel.messages.delete(messageId).catch(() => {});
-        server.nowPlayingMessage = null;
+        await channel.messages.delete(messageId).catch((err) => {
+          if (err?.code !== 10008) Log.error("Failed to delete now-playing message on queue end", err);
+        });
+
+        updateGuildState(player.guildId, {
+          nowPlayingMessage: null,
+        });
       });
-
-      if (!client._poruRawHooked) {
-        client.on("raw", (d) => poru.packetUpdate(d));
-        client._poruRawHooked = true;
-      }
-      Log.success("Poru (Lavalink) initialized in ready event");
-    } catch (e) {
-      Log.error("Failed to initialize Poru in ready", e);
+    } catch (err) {
+      Log.error("Failed to initialize Poru in ready event", err);
     }
   },
 };

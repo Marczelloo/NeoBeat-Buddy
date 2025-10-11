@@ -9,7 +9,6 @@ async function init() {
   try {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
 
-    // Handle empty files
     if (!raw || raw.trim() === "") {
       Log.info("Equalizer state file is empty, initializing with defaults");
       await persist();
@@ -27,11 +26,9 @@ async function init() {
     }
   } catch (err) {
     if (err.code === "ENOENT") {
-      // File doesn't exist, create it
       await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
       await persist();
     } else if (err instanceof SyntaxError) {
-      // JSON parse error, reset file
       Log.warning("Equalizer state file corrupted, resetting");
       await persist();
     } else {

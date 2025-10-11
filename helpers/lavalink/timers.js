@@ -104,7 +104,7 @@ const scheduleProgressUpdates = (player) => {
     } catch (err) {
       const summary = err instanceof Error ? err.message : inspect(err, { depth: 1 });
       Log.error("Failed to refresh now playing message", "", `guild=${player.guildId}`, `error=${summary}`);
-      clearProgressInterval(player.guildId); // stop if message vanished
+      clearProgressInterval(player.guildId);
     }
   }, PROGRESS_UPDATE_INTERVAL_MS);
 

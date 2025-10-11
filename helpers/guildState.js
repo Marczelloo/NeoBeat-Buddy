@@ -24,11 +24,9 @@ async function init() {
     }
   } catch (err) {
     if (err.code === "ENOENT") {
-      // File doesn't exist, create it
       await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
       await persist();
     } else if (err instanceof SyntaxError) {
-      // JSON parse error, reset file
       Log.warning("Guild state file corrupted, resetting");
       await persist();
     } else {

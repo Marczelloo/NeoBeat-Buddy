@@ -22,10 +22,10 @@
 - [x] stats tracking per guild and globa (hours played, songs played etc.)
 - [x] autoplay (automatically searches for next song based on current one)
 - [x] adjust autoplay to count track history for better picking better song, include suggestions from spotify
-- [] 24/7 command
-- [] server playlists, user playlists
-- [] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )
-- [] other commands
+- [ ] 24/7 command
+- [ ] server playlists, user playlists
+- [ ] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )
+- [ ] other commands
 
 ## FIXES
 
@@ -41,7 +41,8 @@
 - [x] fix double player message on pi after adding one song to queue and it stopping playing and then adding another song to queue
 - [x] fix lyrics check if found are for proper song (not offical songs without posted lyrics have lyrics from different songs) | switched to genius api instead of lavalinks
 - [x] review all changes and check what can be moved to modules, reused etc.
-- [] fix server sessions and avg sessions playtime
+- [x] fix server sessions and avg sessions playtime
+- [x] fix autoplay after some while starts playing the same 2 tracks in loop
 
 ## OTHER
 
@@ -56,18 +57,18 @@
 
 ## IDEAS
 
-- [] Cross-guild playlist sharing: let users export/import queues and playlists across servers so the community can share curated sets.
-- [] Smart DJ mode: analyze listening history to auto-mix genres, adjust transitions, or surface “mood” suggestions when the queue runs low.
-- [] Per-user audio profiles: remember preferred volume/filters per user and automatically apply when they join.
-- [] Queue voting + skip threshold tuning: allow members to up/down vote songs and dynamically adjust skip requirements based on active listeners.
-- [] Listening parties with synced lyrics/cards: schedule sessions that show upcoming tracks, synced trivia, or karaoke-friendly overlays in a companion channel.
-- [] Adaptive queue sorting: let listeners sort by requester, duration, popularity, or sentiment so long queues stay manageable.
-- [] Audio reaction filters: trigger temporary effects (bass boost, vocal isolate, reverb) from button taps that sync to the track for a few seconds.
-- [] Collaborative DJ roles: assign rotating “DJ for the hour” roles with permissions to curate or pin queue slots, with automated reminders when it’s someone’s turn.
-- [] \* History recall + requeue: expose a searchable history browser (per server) to quickly replay a track or generate a “top hits” set from past sessions.
-- [] Voice activity-triggered tips: when a lull hits, have the bot surface suggested commands (“try /radio jazz”) or poll the channel for next genre.
+- [ ] Cross-guild playlist sharing: let users export/import queues and playlists across servers so the community can share curated sets.
+- [ ] Smart DJ mode: analyze listening history to auto-mix genres, adjust transitions, or surface “mood” suggestions when the queue runs low.
+- [ ] Per-user audio profiles: remember preferred volume/filters per user and automatically apply when they join.
+- [ ] Queue voting + skip threshold tuning: allow members to up/down vote songs and dynamically adjust skip requirements based on active listeners.
+- [ ] Listening parties with synced lyrics/cards: schedule sessions that show upcoming tracks, synced trivia, or karaoke-friendly overlays in a companion channel.
+- [ ] Adaptive queue sorting: let listeners sort by requester, duration, popularity, or sentiment so long queues stay manageable.
+- [ ] Audio reaction filters: trigger temporary effects (bass boost, vocal isolate, reverb) from button taps that sync to the track for a few seconds.
+- [ ] Collaborative DJ roles: assign rotating “DJ for the hour” roles with permissions to curate or pin queue slots, with automated reminders when it’s someone’s turn.
+- [ ] \* History recall + requeue: expose a searchable history browser (per server) to quickly replay a track or generate a “top hits” set from past sessions.
+- [ ] Voice activity-triggered tips: when a lull hits, have the bot surface suggested commands (“try /radio jazz”) or poll the channel for next genre.
 
-- [] Mixer Panel Concept
+- [ ] Mixer Panel Concept
 
 Slash command /eqpanel (DJ only) posts/refreshes a persistent control message in the music text channel. Store panel state in a map keyed by guild (bands[15], page, savedSnapshot, abToggle, lastInteractionUserId, etc.).
 Embed layout: title with current preset name, footer with “Page 1/3 • 60Hz–1kHz”, and a field rendering live band values (▁▂▃▄▅▆▇ scaled from ‑0.25 to +1 or a formatted +1.5 dB). Pull the numbers from your equalizerState map so it stays in sync with node updates.
