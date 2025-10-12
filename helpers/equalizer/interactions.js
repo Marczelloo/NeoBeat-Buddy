@@ -1,10 +1,10 @@
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require("discord.js");
-const { lavalinkSetEqualizer, lavalinkResetFilters } = require("../lavalink/filters");
-const PRESETS = require("./messages");
 const { getEqualizerState } = require("../lavalink/equalizerStore");
+const { lavalinkSetEqualizer, lavalinkResetFilters } = require("../lavalink/filters");
+const Log = require("../logs/log");
+const { saveUserPreset } = require("./customPresets");
 const { buildPanelEmbed, buildPanelComponents, updatePanelState, getPanelState, TOTAL_BANDS } = require("./panel");
 const { throttleEqUpdate } = require("./throttle");
-const Log = require("../logs/log");
 
 function bandsArrayToLavalink(bandsArray) {
   return bandsArray.map((gain, band) => ({ band, gain }));
@@ -56,6 +56,16 @@ async function handlePanelInteraction(interaction) {
 
   if (customId === "eq:finetune:submit") {
     await handleFineTuneSubmit(interaction, guildId);
+    return;
+  }
+
+  if (customId === "eq:savepreset") {
+    await showSavePresetModal(interaction);
+    return;
+  }
+
+  if (customId === "eq:savepreset:submit") {
+    await handleSavePresetSubmit(interaction, guildId);
     return;
   }
 }
@@ -130,6 +140,7 @@ async function handleGainNudge(interaction, guildId, direction, isShift) {
 
       await message.edit({ embeds: [embed], components });
     } catch (err) {
+      Log.error(`[EQ PANEL] Failed to refresh panel: ${err.message}`);
       // Ignore errors from refreshing
     }
   }, 250);
@@ -170,7 +181,6 @@ async function handleSaveSnapshot(interaction, guildId) {
 
   updatePanelState(guildId, { savedSnapshot: [...bands] });
 
-  const state = getPanelState(guildId);
   const embed = buildPanelEmbed(guildId);
   const components = buildPanelComponents(guildId);
 
@@ -237,6 +247,57 @@ async function handleFineTuneSubmit(interaction, guildId) {
   }
 
   await interaction.reply({ content: "✅ Equalizer updated!", ephemeral: true });
+}
+
+async function showSavePresetModal(interaction) {
+  const modal = new ModalBuilder().setCustomId("eq:savepreset:submit").setTitle("Save Custom Preset");
+
+  const input = new TextInputBuilder()
+    .setCustomId("eq:preset:name")
+    .setLabel("Preset Name (alphanumeric, no spaces)")
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder("mypreset")
+    .setMinLength(3)
+    .setMaxLength(20)
+    .setRequired(true);
+
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+  await interaction.showModal(modal);
+}
+
+async function handleSavePresetSubmit(interaction, guildId) {
+  const presetName = interaction.fields.getTextInputValue("eq:preset:name").trim().toLowerCase();
+
+  if (!/^[a-z0-9]+$/.test(presetName)) {
+    await interaction.reply({
+      content: "❌ Preset name must be alphanumeric with no spaces (e.g., 'mybass', 'gaming1')",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const eqState = getEqualizerState(guildId);
+  const currentBands = eqState?.equalizer || [];
+
+  const bands = Array(15).fill(0);
+  currentBands.forEach(({ band, gain }) => {
+    if (band >= 0 && band < 15) bands[band] = gain;
+  });
+
+  const result = saveUserPreset(interaction.user.id, presetName, bands);
+
+  if (!result.success) {
+    await interaction.reply({
+      content: `❌ ${result.error}`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.reply({
+    content: `✅ Custom preset **${presetName}** saved! Use \`/eq preset name:${presetName}\` to load it.`,
+    ephemeral: true,
+  });
 }
 
 module.exports = {

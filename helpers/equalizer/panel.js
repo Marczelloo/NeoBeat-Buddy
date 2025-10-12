@@ -157,7 +157,8 @@ function buildUtilityRow(hasSnapshot) {
       .setLabel("A/B")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!hasSnapshot),
-    new ButtonBuilder().setCustomId("eq:save").setLabel("💾 Save").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("eq:save").setLabel("💾 Snapshot").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("eq:savepreset").setLabel("📁 Save Preset").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId("eq:reset").setLabel("🔄 Reset").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId("eq:modal").setLabel("⚙️ Fine Tune").setStyle(ButtonStyle.Secondary)
   );

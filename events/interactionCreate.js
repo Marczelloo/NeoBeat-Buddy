@@ -11,6 +11,21 @@ const Log = require("../helpers/logs/log");
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction) {
+    if (interaction.isAutocomplete()) {
+      const command = interaction.client.commands.get(interaction.commandName);
+
+      if (!command || !command.autocomplete) {
+        return;
+      }
+
+      try {
+        await command.autocomplete(interaction);
+      } catch (error) {
+        Log.error(`Error handling autocomplete for ${interaction.commandName}`, error);
+      }
+      return;
+    }
+
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "help-category" && typeof helpCommand.handleCategorySelect === "function") {
         await helpCommand.handleCategorySelect(interaction);
@@ -93,12 +108,6 @@ module.exports = {
     }
 
     if (interaction.isModalSubmit()) {
-      if (interaction.customId.startsWith("eq:")) {
-        const { handlePanelInteraction } = require("../helpers/equalizer/interactions");
-        await handlePanelInteraction(interaction);
-        return;
-      }
-
       if (interaction.customId !== "player-volume-modal") return;
 
       const rawValue = interaction.fields.getTextInputValue("player-volume-value").trim();

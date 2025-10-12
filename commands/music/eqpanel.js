@@ -8,6 +8,7 @@ const {
 const { requireDj } = require("../../helpers/interactions/djGuards");
 const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { getPlayer } = require("../../helpers/lavalink");
+const Log = require("../../helpers/logs/log");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -47,6 +48,7 @@ module.exports = {
           content: `✅ Refreshed [existing mixer panel](https://discord.com/channels/${guildId}/${state.channelId}/${state.messageId})`,
         });
       } catch (err) {
+        Log.error(`[EQ PANEL] Failed to refresh existing panel: ${err.message}`);
         // Panel message was deleted, create new one
       }
     }
