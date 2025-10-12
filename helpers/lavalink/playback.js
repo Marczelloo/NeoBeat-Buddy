@@ -1,5 +1,7 @@
 const djProposals = require("../dj/proposals");
 const skipVotes = require("../dj/skipVotes");
+const { deletePanelState } = require("../equalizer/panel");
+const { clearPendingUpdates } = require("../equalizer/throttle");
 const Log = require("../logs/log");
 const statsStore = require("../stats/store");
 const { getEqualizerState } = require("./equalizerStore");
@@ -190,6 +192,8 @@ async function lavalinkStop(guildId) {
   playbackState.delete(guildId);
   skipVotes.clear(guildId);
   djProposals.clearGuild(guildId);
+  deletePanelState(guildId);
+  clearPendingUpdates(guildId);
 
   return true;
 }

@@ -15,11 +15,23 @@ module.exports = {
       if (interaction.customId === "help-category" && typeof helpCommand.handleCategorySelect === "function") {
         await helpCommand.handleCategorySelect(interaction);
       }
+      ``;
+      if (interaction.customId.startsWith("eq:")) {
+        const { handlePanelInteraction } = require("../helpers/equalizer/interactions");
+        await handlePanelInteraction(interaction);
+        return;
+      }
 
       return;
     }
 
     if (interaction.isButton()) {
+      if (interaction.customId.startsWith("eq:")) {
+        const { handlePanelInteraction } = require("../helpers/equalizer/interactions");
+        await handlePanelInteraction(interaction);
+        return;
+      }
+
       if (interaction.customId.startsWith("dj|")) {
         await handleProposalInteraction(interaction);
         return;
@@ -81,6 +93,12 @@ module.exports = {
     }
 
     if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith("eq:")) {
+        const { handlePanelInteraction } = require("../helpers/equalizer/interactions");
+        await handlePanelInteraction(interaction);
+        return;
+      }
+
       if (interaction.customId !== "player-volume-modal") return;
 
       const rawValue = interaction.fields.getTextInputValue("player-volume-value").trim();
