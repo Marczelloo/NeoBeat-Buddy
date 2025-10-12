@@ -68,7 +68,7 @@
 - [ ] \* History recall + requeue: expose a searchable history browser (per server) to quickly replay a track or generate a “top hits” set from past sessions.
 - [ ] Voice activity-triggered tips: when a lull hits, have the bot surface suggested commands (“try /radio jazz”) or poll the channel for next genre.
 
-- [ ] Mixer Panel Concept
+- [x] Mixer Panel Concept
 
 Slash command /eqpanel (DJ only) posts/refreshes a persistent control message in the music text channel. Store panel state in a map keyed by guild (bands[15], page, savedSnapshot, abToggle, lastInteractionUserId, etc.).
 Embed layout: title with current preset name, footer with “Page 1/3 • 60Hz–1kHz”, and a field rendering live band values (▁▂▃▄▅▆▇ scaled from ‑0.25 to +1 or a formatted +1.5 dB). Pull the numbers from your equalizerState map so it stays in sync with node updates.

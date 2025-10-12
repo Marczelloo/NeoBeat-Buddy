@@ -198,13 +198,65 @@ pnpm deploy:dev
 
 ### 🎚️ Equalizer & Effects
 
+#### Interactive Mixer Panel
+
+- **`/eqpanel`**  
+  Open an interactive 15-band equalizer mixer panel with real-time visual feedback and controls.
+
+  **Features:**
+
+  - **Per-band selection**: Use ▲/▼ buttons to navigate bands 0-14 (25Hz to 16kHz)
+  - **Fine-tune gain**: Adjust selected band with + / ++ / -- / - buttons
+    - Single press: ±1.0dB increments
+    - Shift press (hold Shift while clicking): ±0.5dB precision
+  - **Visual bars**: Horizontal bars show gain levels (-12dB to +6dB), selected band marked with ►
+  - **A/B comparison**: Save snapshot with 💾, toggle with 🔄 to compare settings
+  - **Save custom presets**: Use 📁 button to save current EQ as a reusable preset
+  - **Throttled updates**: Changes batched at 200ms to prevent Lavalink spam
+  - **Fine-tune modal**: Advanced users can directly input all 15 gain values
+
+#### Preset Management
+
 - **`/eq preset name:<preset>`**  
-  Apply predefined equalizer presets: `bass`, `treble`, `nightcore`, `lofi`, `vocal`, `flat`, etc.
+  Apply a built-in or custom equalizer preset. Uses autocomplete to show all available presets:
 
-- **`/eq set band:<0-14> gain:<value>`**  
-  Manually adjust a single EQ band gain (-0.25 to 1.0).
+  - **Built-in presets** (22 total): Spotify-quality presets marked as `(built-in)`
+  - **Custom presets**: Your saved presets marked as `(custom)`
 
-- **`/eq reset`** — Reset the equalizer to a flat response.
+- **`/eq list`**  
+  Display all 22 built-in equalizer presets organized by category:
+
+  - **General**: flat, acoustic, classical, piano, vocal, podcast, smallspeakers
+  - **Genre-Based**: pop, rock, jazz, dance, electronic, edm, hiphop, rnb, latin
+  - **Bass & Treble**: bass, bassboost, deep, treble
+  - **Special**: lofi, nightcore
+
+- **`/eq mypresets`**  
+  View all your saved custom presets with usage examples and timestamps.
+
+- **`/eq delete name:<preset>`**  
+  Delete one of your custom presets. Uses autocomplete to filter your presets only.
+
+- **`/eq reset`**  
+  Reset the equalizer to a flat response (all bands at 0dB).
+
+#### Custom Preset System
+
+Save up to **10 custom EQ configurations** per user:
+
+1. **Create in mixer panel**: Open `/eqpanel`, adjust bands, click 📁 Save Preset
+2. **Name your preset**: Alphanumeric names only (3-20 chars, no spaces), e.g., `mybass`, `gaming1`
+3. **Load anytime**: Use `/eq preset name:mybass` to apply your saved configuration
+4. **Manage presets**: View with `/eq mypresets`, delete with `/eq delete`
+5. **Persistence**: Custom presets survive bot restarts (stored in `helpers/data/customPresets.json`)
+
+#### EQ Technical Details
+
+- **15 bands**: 25Hz, 40Hz, 63Hz, 100Hz, 160Hz, 250Hz, 400Hz, 630Hz, 1kHz, 1.6kHz, 2.5kHz, 4kHz, 6.3kHz, 10kHz, 16kHz
+- **Gain range**: -12dB to +6dB per band (Lavalink values: -0.25 to +1.0)
+- **Visual representation**: Horizontal bars with center marker at 0dB
+- **Real-time updates**: Changes apply immediately with visual feedback
+- **State persistence**: EQ settings restore automatically when player reconnects
 
 _EQ settings persist across bot restarts and are restored automatically when the player reconnects._
 

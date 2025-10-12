@@ -111,19 +111,71 @@
       emoji: "🎚️",
       commands: [
         {
+          name: "eqpanel",
+          description: "Open the interactive 15-band EQ mixer panel with real-time controls.",
+          usage: "/eqpanel",
+        },
+        {
           name: "eq preset",
-          description: "Apply a predefined equalizer preset (bass, nightcore, lofi, etc.).",
+          description: "Apply a built-in or custom equalizer preset using autocomplete.",
           usage: "/eq preset name:<preset>",
         },
         {
-          name: "eq set",
-          description: "Manually adjust a single EQ band gain.",
-          usage: "/eq set band:<0-14> gain:<value>",
+          name: "eq list",
+          description: "View all 22 built-in equalizer presets organized by category.",
+          usage: "/eq list",
+        },
+        {
+          name: "eq mypresets",
+          description: "View all your saved custom presets with usage examples.",
+          usage: "/eq mypresets",
+        },
+        {
+          name: "eq delete",
+          description: "Delete one of your custom presets using autocomplete.",
+          usage: "/eq delete name:<preset>",
         },
         {
           name: "eq reset",
           description: "Reset the equalizer back to a flat response.",
           usage: "/eq reset",
+        },
+      ],
+      notes: [
+        {
+          name: "Interactive Mixer Panel",
+          value: [
+            "- Use `/eqpanel` to open a fully interactive 15-band equalizer mixer.",
+            "- **Per-band control**: Use ▲/▼ buttons to select which band to adjust (0-14).",
+            "- **Gain adjustment**: Use + / ++ / -- / - buttons to fine-tune the selected band.",
+            "  - Single press: ±1.0dB increments",
+            "  - Shift press: ±0.5dB increments",
+            "- **A/B Comparison**: Save a snapshot with 💾, then use 🔄 to toggle between current and saved settings.",
+            "- **Save Custom Presets**: Use 📁 to save your current EQ as a custom preset (up to 10 per user).",
+            "- **Visual Feedback**: Horizontal bars show gain levels (-12dB to +6dB) with selected band marked by ►.",
+            "- **Throttled Updates**: Changes are batched (200ms) to prevent Lavalink spam.",
+          ].join("\n"),
+        },
+        {
+          name: "Custom Presets",
+          value: [
+            "- Save your favorite EQ configurations with `/eqpanel` → 📁 Save Preset button.",
+            "- Preset names must be alphanumeric (3-20 characters, no spaces): e.g., `mybass`, `gaming1`.",
+            "- Load your presets with `/eq preset` - autocomplete shows both built-in and custom presets.",
+            "- View all your saved presets with `/eq mypresets`.",
+            "- Delete unwanted presets with `/eq delete` - autocomplete filters your custom presets.",
+            "- Limit: 10 custom presets per user.",
+          ].join("\n"),
+        },
+        {
+          name: "Built-in Presets (22 total)",
+          value: [
+            "**General**: flat, acoustic, classical, piano, vocal, podcast, smallspeakers",
+            "**Genre-Based**: pop, rock, jazz, dance, electronic, edm, hiphop, rnb, latin",
+            "**Bass & Treble**: bass, bassboost, deep, treble",
+            "**Special**: lofi, nightcore",
+            "Use `/eq list` to see all presets with descriptions.",
+          ].join("\n"),
         },
       ],
     },
