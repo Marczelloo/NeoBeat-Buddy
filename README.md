@@ -53,17 +53,17 @@ If you choose to deploy this bot:
 
 # Neo Beat Buddy
 
-A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, smart autoplay, advanced statistics, persistent EQ settings, and seamless playlist support.
+A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, adaptive genre-aware smart autoplay, advanced statistics, interactive EQ mixer, and seamless playlist support.
 
 ## Features
 
 - **Slash-only interface** for queueing, playback, and moderation safeguards.
-- **Smart autoplay** with Spotify recommendations and YouTube Mix — learns from listening patterns, avoids artist clustering, and filters non-music content.
+- **Adaptive smart autoplay** with Spotify recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and natural energy arcs.
+- **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), and real-time visual feedback.
 - **DJ mode** with role-based permissions, skip voting (dj/vote/hybrid modes), and track suggestion approval workflow.
 - **Real-time statistics** per guild and globally via `/stats` — tracks songs played, listening hours, unique users, peak listeners, top sources, and hourly activity patterns.
 - **Lyrics lookup** for the current track with `/lyrics` (powered by Genius API).
 - **Interactive queue management** with pagination, track removal by position or keyword, and shuffle.
-- **Live equalizer** with presets (bass, nightcore, lofi, etc.) and per-band fine-tuning — settings persist across bot restarts.
 - **Persistent state** — now playing messages, EQ configurations, DJ settings, guild stats, and autoplay preferences survive restarts.
 - **Age-restricted content handling** with automatic fallback to alternate sources.
 - **Track history** with `/previous` command to replay or rewind.
@@ -76,7 +76,7 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, sma
 - **Docker** & **Docker Compose** (for hosting Lavalink or the full stack)
 - **Lavalink** 4.x credentials (see `.env-example`)
 - **Genius API key** (optional, for lyrics)
-- **Spotify credentials** (recommended for autoplay, enables Spotify playback)
+- **Spotify credentials** (highly recommended for autoplay with genre awareness, tempo matching, and mood progression)
 
 ## Quick Start
 
@@ -121,7 +121,7 @@ pnpm deploy:dev
 - **`/seekto position:<seconds|mm:ss|hh:mm:ss>`** — Jump to a specific timestamp in the current track (DJ restricted in DJ mode).
 - **`/volume level:<0-100>`** — Set the playback volume (DJ only in DJ mode).
 - **`/lyrics`** — Display lyrics for the currently playing song.
-- **`/autoplay`** — Toggle smart autoplay mode that automatically queues similar tracks when the queue ends (DJ only).
+- **`/autoplay`** — Toggle adaptive genre-aware smart autoplay mode (DJ only).
 
 ---
 
@@ -135,29 +135,139 @@ pnpm deploy:dev
 
 ---
 
-### 🤖 Smart Autoplay
+### 🤖 Smart Autoplay (Genre-Aware + Adaptive)
 
-**Autoplay automatically discovers and queues music when your queue is empty.**
+**Autoplay automatically discovers and queues music when your queue is empty, maintaining genre consistency, tempo flow, and natural energy progression throughout your listening session.**
 
 #### How It Works
 
-1. **Analyzes your listening history** — Tracks the last 15 songs played to understand your music taste.
+1. **Analyzes your listening history** — Tracks the last 15 songs played to understand your music taste, genre preferences, tempo patterns, and mood trends.
+
 2. **Multi-source recommendations** — Pulls suggestions from:
-   - **Spotify** — Genre-aware recommendations using Spotify's algorithm
-   - **YouTube Mix** — Related tracks from YouTube's radio feature
+
+   - **Spotify** — Genre-aware recommendations using Spotify's algorithm with audio feature targeting (tempo, energy, valence, acousticness)
+   - **YouTube Mix** — Related tracks from YouTube's radio feature (fallback/supplement)
    - **Top artist search** — Songs from your most-played artists
-3. **Smart scoring system** — Ranks candidates using 6 factors:
-   - Artist familiarity (how often you've played them)
-   - Duration similarity (matches average song length)
-   - Source quality (Spotify > YouTube Mix > Search)
-   - Diversity bonus (avoids artist clustering)
-   - Skip learning (downweights artists you skip frequently)
-   - Duplicate prevention (never plays the same song twice)
-4. **Quality filtering** — Automatically rejects:
+
+3. **Genre consistency** — Maintains your music style:
+
+   - Extracts genre information from Spotify API for each track
+   - Tracks top genres across your listening session (e.g., "rock", "indie rock", "alternative")
+   - **+30 point bonus** per matching genre in recommendations
+   - **-25 point penalty** for tracks with no genre overlap when you have a strong genre profile
+   - **-15 points** per genre you've skipped recently
+   - Learns from your skips to avoid unwanted genres
+
+4. **Advanced scoring system** — Ranks candidates using **12 intelligent factors**:
+
+   - **Genre consistency** — Strongly favors tracks matching your recent genres (+30 per match)
+   - **Tempo/BPM matching** — Maintains natural flow (+15 within 15 BPM, +8 within 30 BPM)
+   - **Time-of-day awareness** — Adjusts energy for morning/afternoon/evening/night (+12 optimal, +6 acceptable)
+   - **Popularity weighting** — Balances discovery vs. familiarity (+10 for 50-85 popularity, -5 for obscure, -3 for overplayed)
+   - **Mood progression** — Continues or stabilizes valence (happiness) trends (+12 for trend continuation, +8 for stability)
+   - **Energy arc management** — Builds, maintains, or winds down energy intentionally (+15 for trend, +10 for plateau)
+   - **Artist familiarity** — How often you've played them (+5 per occurrence)
+   - **Duration similarity** — Matches average song length (+10 within 20%, +5 within 40%)
+   - **Source quality** — Spotify > YouTube Mix > Search (+30/+15/+10)
+   - **Artist diversity** — Avoids artist clustering (+20 for new artists, -10 for repeats)
+   - **Skip learning** — Downweights artists and genres you skip (-20/-15 per skip)
+   - **Duplicate prevention** — Never plays the same song twice (-1000 penalty)
+
+5. **Quality filtering** — Automatically rejects:
    - Non-music content (tutorials, poetry, spoken word)
    - Short clips (<30 seconds)
    - Videos with excessive hashtags or emojis
    - Known non-music channels
+
+#### Genre Consistency Explained
+
+**Before enhancement:**
+
+```
+Rock → Rock → Pop → Electronic → Hip-hop → ???
+```
+
+_Genre drifts significantly after 3-4 autoplay tracks_
+
+**After enhancement:**
+
+```
+Rock → Indie Rock → Alternative Rock → Garage Rock → Rock Ballad
+```
+
+_Maintains genre consistency while introducing variety within the genre family_
+
+**Example scoring:**
+
+If you're listening to rock music:
+
+- **"Seven Nation Army"** (genres: garage rock, alternative rock)
+
+  - Base: 50 points
+  - Spotify source: +30
+  - Genre matches: +30 (garage rock) +30 (alternative rock)
+  - Tempo match: +15 (within 15 BPM)
+  - Energy arc: +15 (building)
+  - Final: **~170 points** ✅
+
+- **"Uptown Funk"** (genres: pop, funk)
+  - Base: 50 points
+  - Spotify source: +30
+  - Genre drift penalty: -25 (no rock genres)
+  - Tempo mismatch: -5 (too different)
+  - Final: **~50 points** ❌
+
+#### Advanced Features
+
+**Tempo/BPM Consistency**
+
+- Analyzes average tempo across your session
+- Prefers tracks within 15 BPM (+15 points) or 30 BPM (+8 points)
+- Creates natural rhythmic flow without jarring tempo changes
+- Example: 128 BPM session → prefers 115-141 BPM range
+
+**Time-of-Day Awareness**
+
+- **Morning (6am-12pm)**: Moderate energy preference (0.6 factor)
+- **Afternoon (12pm-6pm)**: High energy preference (0.75 factor)
+- **Evening (6pm-10pm)**: Moderate energy preference (0.65 factor)
+- **Night (10pm-6am)**: Low energy preference (0.4 factor)
+- Automatically adjusts recommendations to match your daily rhythm
+
+**Popularity Weighting**
+
+- Sweet spot: 50-85 popularity (+10) — Popular but not overplayed
+- Too obscure: <25 popularity (-5) — Harder to enjoy unfamiliar tracks
+- Overplayed: >95 popularity (-3) — Avoids radio fatigue
+- Balances discovery with accessibility
+
+**Mood Progression**
+
+- Detects valence (happiness) trend from last 5 tracks
+- Continues upward mood trajectory (+12) — Building positive energy
+- Continues downward trajectory (+12) — Deepening introspection
+- Maintains stable mood (+8) — Consistent emotional tone
+- Creates intentional emotional arcs
+
+**Energy Arc Management**
+
+- Detects energy trend: increasing/decreasing/stable
+- Continues energy build-up (+15) — Escalating intensity
+- Continues wind-down (+15) — Relaxing progression
+- Maintains plateau (+10) — Sustained energy level
+- Prevents abrupt energy shifts that break flow
+
+#### Audio Feature Targeting
+
+The algorithm uses audio features from Spotify to maintain consistency:
+
+- **Energy** — Intensity and activity level (0.0-1.0)
+- **Danceability** — Rhythm suitability for dancing (0.0-1.0)
+- **Valence** — Musical positivity/happiness (0.0-1.0)
+- **Tempo** — Beats per minute (BPM)
+- **Acousticness** — Acoustic vs. electronic sound (0.0-1.0)
+
+These features are averaged across your session and used as target parameters for Spotify recommendations.
 
 #### Usage
 
@@ -168,7 +278,9 @@ pnpm deploy:dev
 # Autoplay status shows in the now-playing message
 ```
 
-**When enabled**, autoplay triggers automatically when the queue ends, seamlessly continuing your listening session with curated recommendations.
+**When enabled**, autoplay triggers automatically when the queue ends, seamlessly continuing your listening session with curated recommendations that match your genre preferences, tempo flow, mood, and energy levels.
+
+**Note:** Spotify credentials are highly recommended for the best autoplay experience with genre consistency and advanced features. Without Spotify, the bot falls back to YouTube Mix recommendations (no genre/tempo/mood awareness).
 
 ---
 
@@ -418,9 +530,10 @@ NeoBeat-Buddy/
 │   │   ├── dj.json
 │   │   ├── stats.json
 │   │   ├── guildState.json
-│   │   └── equalizer.json
+│   │   ├── equalizer.json
+│   │   └── customPresets.json
 │   ├── dj/             # DJ mode logic
-│   ├── equalizer/      # EQ presets and messages
+│   ├── equalizer/      # EQ presets, mixer panel, custom presets
 │   ├── help/           # Help command categories
 │   ├── interactions/   # Guards (DJ, voice channel)
 │   ├── lavalink/       # Lavalink client, filters, playback, autoplay
@@ -443,27 +556,119 @@ NeoBeat-Buddy/
 
 ---
 
-## Smart Autoplay Technical Details
+## Technical Deep Dives
 
-### Architecture
+### Smart Autoplay Architecture
 
-- **Session profiling** — Analyzes last 15 tracks for artist frequency and average duration
-- **Multi-source candidates** — Gathers recommendations from Spotify, YouTube Mix, and top artist searches
-- **6-factor scoring algorithm**:
-  1. Artist familiarity (+5 per occurrence)
-  2. Duration similarity (+10 within 20%, +5 within 40%)
-  3. Source preference (Spotify +25, YouTube Mix +15, Search +10)
-  4. Diversity bonus (+20 for artists not in top 3)
-  5. Skip learning (-20 per recent skip)
-  6. Duplicate prevention (-1000 for played tracks)
-- **Skip tracking** — Remembers last 50 skips (30-minute window) to learn preferences
-- **Quality validation** — Filters tracks by duration, keywords, channels, and special characters
+#### Session Profiling
 
-### Data Persistence
+- Analyzes last 15 tracks for artist frequency, genre distribution, and average duration
+- Extracts genre information from Spotify API (e.g., "indie rock", "alternative rock")
+- Calculates average audio features (energy, danceability, valence, acousticness, tempo)
+- Detects energy and mood (valence) trends: increasing, decreasing, or stable
+- Calculates average release year and tempo (BPM)
+- Builds a comprehensive listening profile used for scoring candidates
 
-- **Autoplay state** — Stored in `helpers/data/guildState.json` per guild
-- **Playback history** — Last 20 tracks kept in memory (used for profiling)
-- **Skip patterns** — In-memory Map with 30-minute expiry
+#### Multi-Source Candidate Collection
+
+1. **Spotify Recommendations** (primary, if credentials available)
+
+   - Uses seed track + genre seeds + audio feature targets (including tempo)
+   - Returns 15 genre-matched candidates with full metadata
+   - Each candidate includes: genres, popularity, release year, audio features (tempo, energy, valence, etc.)
+
+2. **YouTube Mix** (fallback/supplement)
+
+   - Uses YouTube's radio playlist feature
+   - Provides 20 related tracks
+   - No genre/tempo/mood information available
+
+3. **Top Artist Search** (supplement)
+   - Searches for songs by your most-played artists
+   - Only used when strong genre profile exists
+
+#### 12-Factor Scoring System
+
+Each candidate receives a score based on:
+
+| Factor                 | Points          | Description                                                   |
+| ---------------------- | --------------- | ------------------------------------------------------------- |
+| **Genre Match**        | +30 per genre   | Matching genre from your top genres (weighted by frequency)   |
+| **Genre Drift**        | -25             | No genre overlap when you have ≥3 top genres                  |
+| **Tempo/BPM Match**    | +15 / +8 / -5   | Within 15 BPM (+15), 30 BPM (+8), or >60 BPM (-5)             |
+| **Time-of-Day**        | +12 / +6        | Energy matches time of day (optimal +12, acceptable +6)       |
+| **Popularity**         | +10 / -5 / -3   | Sweet spot 50-85 (+10), obscure <25 (-5), overplayed >95 (-3) |
+| **Mood Progression**   | +12 / +8        | Continues valence trend (+12) or maintains stability (+8)     |
+| **Energy Arc**         | +15 / +10       | Continues energy trend (+15) or maintains plateau (+10)       |
+| **Artist Familiarity** | +5 per play     | How often you've played this artist                           |
+| **Duration Match**     | +10 / +5 / -5   | Within 20% (+10), 40% (+5), or >40% (-5) of average           |
+| **Source Quality**     | +30 / +15 / +10 | Spotify (+30), YouTube Mix (+15), Search (+10)                |
+| **Artist Diversity**   | +20 / -10       | Artist not in your top 3 (+20), or is recent (-10)            |
+| **Skip Learning**      | -20 per skip    | Artist you've skipped recently (30min window)                 |
+| **Genre Skip**         | -15 per skip    | Genre you've skipped recently                                 |
+| **Duplicate**          | -1000           | Already played in session                                     |
+
+#### Time-of-Day Energy Factors
+
+| Time Period          | Energy Factor | Preference      |
+| -------------------- | ------------- | --------------- |
+| Morning (6am-12pm)   | 0.6           | Moderate energy |
+| Afternoon (12pm-6pm) | 0.75          | High energy     |
+| Evening (6pm-10pm)   | 0.65          | Moderate energy |
+| Night (10pm-6am)     | 0.4           | Low energy      |
+
+#### Trend Detection
+
+**Energy Trend** (last 5 tracks):
+
+- Calculates average energy of first half vs. second half
+- **Increasing**: Difference > 0.1 → Prefers higher energy
+- **Decreasing**: Difference < -0.1 → Prefers lower energy
+- **Stable**: Difference between -0.1 and 0.1 → Maintains current level
+
+**Mood Trend (Valence)** (last 5 tracks):
+
+- Calculates average valence of first half vs. second half
+- **Increasing**: Difference > 0.1 → Prefers happier/more positive tracks
+- **Decreasing**: Difference < -0.1 → Prefers mellower/introspective tracks
+- **Stable**: Difference between -0.1 and 0.1 → Maintains current mood
+
+#### Caching & Performance
+
+- **Genre cache**: Stores genre information for tracks to avoid redundant API calls
+- **Audio features cache**: Maps YouTube identifier → {genres, features, releaseYear}
+- **Session tracking**: Monitors session start time for long-session adjustments
+- **Skip history**: 30-minute memory window with genre tracking
+- Persists in memory during bot runtime (cleared on restart)
+
+#### Data Persistence
+
+- **Autoplay state**: Stored in `helpers/data/guildState.json` per guild
+- **Playback history**: Last 20 tracks in memory (used for profiling)
+- **Skip patterns**: In-memory Map with 30-minute expiry, includes genres
+- **Genre cache**: In-memory Map (cleared on restart)
+- **Session start time**: In-memory Map for long-session detection
+
+#### Detailed Logging
+
+Enhanced logging provides full transparency:
+
+- Top candidate with complete scoring breakdown
+- Tempo, energy, genres, popularity for winner
+- Individual scoring factors with point values
+- Energy/mood trends and time-of-day adjustments
+- Session profile summary (top genres, avg tempo, avg year, trends)
+
+Example log output:
+
+```
+Session profile built: tracks=15, topGenres=rock(5), indie rock(4), alternative(3),
+avgTempo=128BPM, avgYear=2015, energyTrend=increasing, timeOfDay=afternoon
+
+Top candidates scored: winner=Arctic Monkeys - Do I Wanna Know? (167)
+scoring=source:+30, genre:+60, tempo:+15, energyArc:+15, timeOfDay:+12,
+popularity:+10, diversity:+20, artist:+5
+```
 
 ### Testing
 
@@ -473,7 +678,7 @@ Run the autoplay test suite:
 pnpm test:autoplay
 ```
 
-Tests cover session profiling, duplicate detection, artist weight calculation, and edge cases.
+Tests cover session profiling, genre scoring, tempo matching, duplicate detection, artist weight calculation, and edge cases.
 
 ---
 
@@ -531,12 +736,21 @@ Tests cover session profiling, duplicate detection, artist weight calculation, a
 - Check for age-restricted content (requires YouTube tokens)
 - Review bot logs for fallback attempts
 
-### Autoplay not working
+### Autoplay not working or genre drifting
 
 - Ensure `/autoplay` is enabled (check now-playing message)
-- Verify Spotify credentials in `.env` (optional but recommended)
-- Check logs for "Starting smart autoplay" messages
+- **Verify Spotify credentials** in `.env` — required for genre-aware recommendations
+- Check logs for "Starting smart autoplay" and "Session profile built" messages
+- Look for "topGenres" in logs to confirm genre detection
 - Autoplay only triggers when queue is completely empty
+- Without Spotify: Falls back to YouTube Mix (no genre/tempo/mood awareness)
+
+### EQ or custom presets not saving
+
+- Check for "Failed to save" errors in logs
+- Ensure `helpers/data/` directory exists and is writable
+- Verify no BigInt serialization errors (fixed in latest version)
+- Check Docker volume mounts if using containers
 
 ### Data not persisting
 
@@ -590,7 +804,7 @@ This project is licensed under the **Educational & Research License** - see the 
 - **Poru** - Lavalink client for Node.js
 - **Discord.js** - Discord API library
 - **Genius API** - Lyrics provider
-- **Spotify Web API** - Recommendations engine
+- **Spotify Web API** - Genre-aware recommendations and audio feature analysis
 
 ---
 

@@ -44,7 +44,11 @@ function scheduleSave() {
   saveTimer = setTimeout(async () => {
     saveTimer = null;
     try {
-      const data = Object.fromEntries(equalizerState);
+      // Convert Map to object with string keys to avoid BigInt serialization issues
+      const data = {};
+      for (const [guildId, filters] of equalizerState.entries()) {
+        data[String(guildId)] = filters;
+      }
       await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
       await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
     } catch (err) {
@@ -55,7 +59,11 @@ function scheduleSave() {
 
 async function persist() {
   try {
-    const data = Object.fromEntries(equalizerState);
+    // Convert Map to object with string keys to avoid BigInt serialization issues
+    const data = {};
+    for (const [guildId, filters] of equalizerState.entries()) {
+      data[String(guildId)] = filters;
+    }
     await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
     await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
   } catch (err) {
@@ -64,16 +72,19 @@ async function persist() {
 }
 
 function getEqualizerState(guildId) {
-  return equalizerState.get(guildId) ?? null;
+  return equalizerState.get(String(guildId)) ?? null;
 }
 
 function setEqualizerState(guildId, filters) {
   if (!guildId) return;
 
+  // Ensure guildId is stored as string
+  const guildIdStr = String(guildId);
+
   if (filters && typeof filters === "object") {
-    equalizerState.set(guildId, filters);
+    equalizerState.set(guildIdStr, filters);
   } else {
-    equalizerState.delete(guildId);
+    equalizerState.delete(guildIdStr);
   }
 
   scheduleSave();
@@ -81,7 +92,7 @@ function setEqualizerState(guildId, filters) {
 
 function clearEqualizerState(guildId) {
   if (!guildId) return;
-  equalizerState.delete(guildId);
+  equalizerState.delete(String(guildId));
   scheduleSave();
 }
 

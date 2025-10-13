@@ -23,7 +23,11 @@ function loadCustomPresets() {
 
 function saveCustomPresets() {
   try {
-    const obj = Object.fromEntries(customPresets);
+    // Convert Map to object with string keys to avoid BigInt serialization issues
+    const obj = {};
+    for (const [userId, presets] of customPresets.entries()) {
+      obj[String(userId)] = presets;
+    }
     fs.writeFileSync(CUSTOM_PRESETS_FILE, JSON.stringify(obj, null, 2), "utf8");
   } catch (err) {
     Log.error("Failed to save custom presets", err);
@@ -31,11 +35,12 @@ function saveCustomPresets() {
 }
 
 function getUserPresets(userId) {
-  return customPresets.get(userId) || {};
+  return customPresets.get(String(userId)) || {};
 }
 
 function saveUserPreset(userId, presetName, bands) {
-  const userPresets = getUserPresets(userId);
+  const userIdStr = String(userId);
+  const userPresets = getUserPresets(userIdStr);
 
   const presetKeys = Object.keys(userPresets);
   if (!userPresets[presetName] && presetKeys.length >= 10) {
@@ -49,33 +54,34 @@ function saveUserPreset(userId, presetName, bands) {
     updatedAt: Date.now(),
   };
 
-  customPresets.set(userId, userPresets);
+  customPresets.set(userIdStr, userPresets);
   saveCustomPresets();
 
   return { success: true };
 }
 
 function deleteUserPreset(userId, presetName) {
-  const userPresets = getUserPresets(userId);
+  const userIdStr = String(userId);
+  const userPresets = getUserPresets(userIdStr);
 
   if (!userPresets[presetName]) {
     return { success: false, error: "Preset not found" };
   }
 
   delete userPresets[presetName];
-  customPresets.set(userId, userPresets);
+  customPresets.set(userIdStr, userPresets);
   saveCustomPresets();
 
   return { success: true };
 }
 
 function getUserPresetNames(userId) {
-  const userPresets = getUserPresets(userId);
+  const userPresets = getUserPresets(String(userId));
   return Object.keys(userPresets);
 }
 
 function loadUserPreset(userId, presetName) {
-  const userPresets = getUserPresets(userId);
+  const userPresets = getUserPresets(String(userId));
   return userPresets[presetName] || null;
 }
 
