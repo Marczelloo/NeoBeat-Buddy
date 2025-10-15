@@ -3,6 +3,7 @@ const { getEqualizerState } = require("../lavalink/equalizerStore");
 const PRESET_CHOICES = require("./presets");
 
 const panelState = new Map();
+const INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
 const BAND_FREQUENCIES = [
   "25 Hz",
@@ -33,9 +34,44 @@ function ensurePanelState(guildId) {
       savedSnapshot: null,
       lastInteractionUserId: null,
       lastUpdate: Date.now(),
+      inactivityTimer: null,
     });
   }
   return panelState.get(guildId);
+}
+
+function resetInactivityTimer(guildId, client) {
+  const state = panelState.get(guildId);
+  if (!state) return;
+
+  // Clear existing timer
+  if (state.inactivityTimer) {
+    clearTimeout(state.inactivityTimer);
+  }
+
+  // Set new timer
+  state.inactivityTimer = setTimeout(async () => {
+    await cleanupInactivePanel(guildId, client);
+  }, INACTIVITY_TIMEOUT);
+}
+
+async function cleanupInactivePanel(guildId, client) {
+  const state = panelState.get(guildId);
+  if (!state || !state.messageId || !state.channelId) return;
+
+  try {
+    const channel = await client.channels.fetch(state.channelId).catch(() => null);
+    if (channel) {
+      const message = await channel.messages.fetch(state.messageId).catch(() => null);
+      if (message) {
+        await message.delete().catch(() => null);
+      }
+    }
+  } catch {
+    // Ignore errors during cleanup
+  }
+
+  deletePanelState(guildId);
 }
 
 function renderBandBar(gain) {
@@ -78,14 +114,22 @@ function getCurrentPresetName(guildId) {
   return eqState?.preset || "Custom";
 }
 
-function buildPanelEmbed(guildId) {
-  const eqState = getEqualizerState(guildId);
-  const currentBands = eqState?.equalizer || [];
+function buildPanelEmbed(guildId, bandsOverride = null) {
+  let bands;
 
-  const bands = Array(15).fill(0);
-  currentBands.forEach(({ band, gain }) => {
-    if (band >= 0 && band < 15) bands[band] = gain;
-  });
+  if (bandsOverride) {
+    // Use provided bands array directly
+    bands = bandsOverride;
+  } else {
+    // Read from store as fallback
+    const eqState = getEqualizerState(guildId);
+    const currentBands = eqState?.equalizer || [];
+
+    bands = Array(15).fill(0);
+    currentBands.forEach(({ band, gain }) => {
+      if (band >= 0 && band < 15) bands[band] = gain;
+    });
+  }
 
   const presetName = getCurrentPresetName(guildId);
   const state = ensurePanelState(guildId);
@@ -176,6 +220,10 @@ function buildPanelComponents(guildId) {
 }
 
 function deletePanelState(guildId) {
+  const state = panelState.get(guildId);
+  if (state?.inactivityTimer) {
+    clearTimeout(state.inactivityTimer);
+  }
   panelState.delete(guildId);
 }
 
@@ -189,6 +237,23 @@ function updatePanelState(guildId, updates) {
   panelState.set(guildId, state);
 }
 
+async function deletePreviousPanel(guildId, client) {
+  const state = panelState.get(guildId);
+  if (!state || !state.messageId || !state.channelId) return;
+
+  try {
+    const channel = await client.channels.fetch(state.channelId).catch(() => null);
+    if (channel) {
+      const message = await channel.messages.fetch(state.messageId).catch(() => null);
+      if (message) {
+        await message.delete().catch(() => null);
+      }
+    }
+  } catch {
+    // Ignore errors - message might already be deleted
+  }
+}
+
 module.exports = {
   ensurePanelState,
   buildPanelEmbed,
@@ -196,6 +261,8 @@ module.exports = {
   deletePanelState,
   getPanelState,
   updatePanelState,
+  resetInactivityTimer,
+  deletePreviousPanel,
   BAND_FREQUENCIES,
   TOTAL_BANDS,
 };

@@ -23,12 +23,12 @@ describe("Smart Autoplay System", () => {
     beforeEach(async () => {
       // Re-import fresh modules for each test
       delete require.cache[require.resolve("../../../helpers/lavalink/state")];
-      delete require.cache[require.resolve("../../../helpers/lavalink/smartAutoplay")];
+      delete require.cache[require.resolve("../../../helpers/lavalink/sessionProfile")];
 
       const state = require("../../../helpers/lavalink/state");
-      const autoplay = require("../../../helpers/lavalink/smartAutoplay");
+      const sessionProfile = require("../../../helpers/lavalink/sessionProfile");
 
-      buildSessionProfile = autoplay.buildSessionProfile;
+      buildSessionProfile = sessionProfile.buildSessionProfile;
       playbackState = state.playbackState;
 
       playbackState.clear();
@@ -137,9 +137,9 @@ describe("Smart Autoplay System", () => {
     let recordSkip;
 
     beforeEach(() => {
-      delete require.cache[require.resolve("../../../helpers/lavalink/smartAutoplay")];
-      const autoplay = require("../../../helpers/lavalink/smartAutoplay");
-      recordSkip = autoplay.recordSkip;
+      delete require.cache[require.resolve("../../../helpers/lavalink/skipLearning")];
+      const skipLearning = require("../../../helpers/lavalink/skipLearning");
+      recordSkip = skipLearning.recordSkip;
     });
 
     it("should record skip with artist and reason", () => {
@@ -185,12 +185,12 @@ describe("Smart Autoplay System", () => {
 
     beforeEach(() => {
       delete require.cache[require.resolve("../../../helpers/lavalink/state")];
-      delete require.cache[require.resolve("../../../helpers/lavalink/smartAutoplay")];
+      delete require.cache[require.resolve("../../../helpers/lavalink/sessionProfile")];
 
       const state = require("../../../helpers/lavalink/state");
-      const autoplay = require("../../../helpers/lavalink/smartAutoplay");
+      const sessionProfile = require("../../../helpers/lavalink/sessionProfile");
 
-      buildSessionProfile = autoplay.buildSessionProfile;
+      buildSessionProfile = sessionProfile.buildSessionProfile;
       playbackState = state.playbackState;
 
       playbackState.clear();

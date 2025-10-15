@@ -23,7 +23,6 @@ function loadCustomPresets() {
 
 function saveCustomPresets() {
   try {
-    // Convert Map to object with string keys to avoid BigInt serialization issues
     const obj = {};
     for (const [userId, presets] of customPresets.entries()) {
       obj[String(userId)] = presets;

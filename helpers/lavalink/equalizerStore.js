@@ -44,7 +44,6 @@ function scheduleSave() {
   saveTimer = setTimeout(async () => {
     saveTimer = null;
     try {
-      // Convert Map to object with string keys to avoid BigInt serialization issues
       const data = {};
       for (const [guildId, filters] of equalizerState.entries()) {
         data[String(guildId)] = filters;
@@ -59,7 +58,6 @@ function scheduleSave() {
 
 async function persist() {
   try {
-    // Convert Map to object with string keys to avoid BigInt serialization issues
     const data = {};
     for (const [guildId, filters] of equalizerState.entries()) {
       data[String(guildId)] = filters;
@@ -78,7 +76,6 @@ function getEqualizerState(guildId) {
 function setEqualizerState(guildId, filters) {
   if (!guildId) return;
 
-  // Ensure guildId is stored as string
   const guildIdStr = String(guildId);
 
   if (filters && typeof filters === "object") {

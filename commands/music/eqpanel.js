@@ -3,12 +3,12 @@ const {
   buildPanelEmbed,
   buildPanelComponents,
   updatePanelState,
-  getPanelState,
+  deletePreviousPanel,
+  resetInactivityTimer,
 } = require("../../helpers/equalizer/panel");
 const { requireDj } = require("../../helpers/interactions/djGuards");
 const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { getPlayer } = require("../../helpers/lavalink");
-const Log = require("../../helpers/logs/log");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -32,27 +32,11 @@ module.exports = {
     }
 
     const guildId = interaction.guild.id;
-    const state = getPanelState(guildId);
 
-    if (state?.messageId && state?.channelId) {
-      try {
-        const channel = await interaction.client.channels.fetch(state.channelId);
-        const message = await channel.messages.fetch(state.messageId);
+    // Delete previous panel if it exists (keeps chat clean)
+    await deletePreviousPanel(guildId, interaction.client);
 
-        const embed = buildPanelEmbed(guildId);
-        const components = buildPanelComponents(guildId);
-
-        await message.edit({ embeds: [embed], components });
-
-        return interaction.editReply({
-          content: `✅ Refreshed [existing mixer panel](https://discord.com/channels/${guildId}/${state.channelId}/${state.messageId})`,
-        });
-      } catch (err) {
-        Log.error(`[EQ PANEL] Failed to refresh existing panel: ${err.message}`);
-        // Panel message was deleted, create new one
-      }
-    }
-
+    // Create new panel
     const embed = buildPanelEmbed(guildId);
     const components = buildPanelComponents(guildId);
 
@@ -61,6 +45,7 @@ module.exports = {
       components,
     });
 
+    // Update state and start inactivity timer
     updatePanelState(guildId, {
       messageId: panelMessage.id,
       channelId: interaction.channel.id,
@@ -68,8 +53,10 @@ module.exports = {
       lastInteractionUserId: interaction.user.id,
     });
 
+    resetInactivityTimer(guildId, interaction.client);
+
     return interaction.editReply({
-      content: "✅ Mixer panel created! Use the controls below to adjust the equalizer.",
+      content: "✅ Mixer panel created! It will auto-delete after 10 minutes of inactivity.",
     });
   },
 };

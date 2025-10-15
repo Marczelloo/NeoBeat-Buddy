@@ -3,7 +3,14 @@ const { getEqualizerState } = require("../lavalink/equalizerStore");
 const { lavalinkSetEqualizer, lavalinkResetFilters } = require("../lavalink/filters");
 const Log = require("../logs/log");
 const { saveUserPreset } = require("./customPresets");
-const { buildPanelEmbed, buildPanelComponents, updatePanelState, getPanelState, TOTAL_BANDS } = require("./panel");
+const {
+  buildPanelEmbed,
+  buildPanelComponents,
+  updatePanelState,
+  getPanelState,
+  resetInactivityTimer,
+  TOTAL_BANDS,
+} = require("./panel");
 const { throttleEqUpdate } = require("./throttle");
 
 function bandsArrayToLavalink(bandsArray) {
@@ -74,6 +81,9 @@ async function refreshPanel(interaction, guildId) {
   const state = getPanelState(guildId);
   if (!state) return;
 
+  // Reset inactivity timer on interaction
+  resetInactivityTimer(guildId, interaction.client);
+
   const embed = buildPanelEmbed(guildId);
   const components = buildPanelComponents(guildId);
 
@@ -102,6 +112,9 @@ async function handleBandSelect(interaction, guildId, direction) {
 }
 
 async function handleGainNudge(interaction, guildId, direction, isShift) {
+  // Reset inactivity timer immediately
+  resetInactivityTimer(guildId, interaction.client);
+
   const eqState = getEqualizerState(guildId);
   const currentBands = eqState?.equalizer || [];
 
@@ -122,30 +135,36 @@ async function handleGainNudge(interaction, guildId, direction, isShift) {
   const currentGain = Number(bands[selectedBandIndex]) || 0;
   const newGain = currentGain + change;
 
-  Log.debug(`[EQ DEBUG] Band ${selectedBandIndex}: ${currentGain} → ${newGain} (change: ${change})`);
-
   bands[selectedBandIndex] = Math.max(-0.25, Math.min(1.0, newGain));
 
-  throttleEqUpdate(guildId, async () => {
+  // First, defer the update immediately to acknowledge the interaction
+  await interaction.deferUpdate();
+
+  // Apply the EQ change with throttling
+  await throttleEqUpdate(guildId, async () => {
     await lavalinkSetEqualizer(guildId, bandsArrayToLavalink(bands));
   });
 
+  // Update the embed immediately with the new bands array (no need to wait for Lavalink)
   setTimeout(async () => {
     try {
-      const channel = await interaction.client.channels.fetch(interaction.channelId);
-      const message = await channel.messages.fetch(interaction.message.id);
+      const channel = await interaction.client.channels.fetch(interaction.channelId).catch(() => null);
+      if (!channel) return;
 
-      const embed = buildPanelEmbed(guildId);
+      const message = await channel.messages.fetch(interaction.message.id).catch(() => null);
+      if (!message) return;
+
+      // Pass the updated bands array directly to show immediate feedback
+      const embed = buildPanelEmbed(guildId, bands);
       const components = buildPanelComponents(guildId);
 
-      await message.edit({ embeds: [embed], components });
+      await message.edit({ embeds: [embed], components }).catch((err) => {
+        Log.debug(`[EQ PANEL] Failed to update embed: ${err.message}`);
+      });
     } catch (err) {
-      Log.error(`[EQ PANEL] Failed to refresh panel: ${err.message}`);
-      // Ignore errors from refreshing
+      Log.debug(`[EQ PANEL] Error during panel refresh: ${err.message}`);
     }
-  }, 250);
-
-  await interaction.deferUpdate();
+  }, 50);
 }
 
 async function handleABToggle(interaction, guildId) {
