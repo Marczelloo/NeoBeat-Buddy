@@ -154,12 +154,19 @@ function buildSessionProfile(guildId, referenceTrack) {
     `valenceTrend=${valenceTrend || "unknown"}`
   );
 
+  // Track last 3 artists to prevent consecutive plays
+  const lastThreeArtists = recentTracks
+    .slice(-3)
+    .map((t) => t.info?.author)
+    .filter(Boolean);
+
   return {
     topArtists,
     artistCounts,
     avgDuration,
     totalTracks: recentTracks.length,
     recentIdentifiers: identifiers.slice(-20),
+    lastThreeArtists,
     topGenres,
     genreCounts,
     avgFeatures,

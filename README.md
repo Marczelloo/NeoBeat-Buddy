@@ -58,13 +58,15 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 ## Features
 
 - **Slash-only interface** for queueing, playback, and moderation safeguards.
-- **Adaptive smart autoplay** with Spotify recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and natural energy arcs.
-- **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), and real-time visual feedback.
+- **Adaptive smart autoplay** with Spotify recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
+- **24/7 radio mode** — bot stays in voice channel permanently and plays music continuously like a radio station.
+- **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), real-time visual feedback, and 10-minute inactivity auto-cleanup.
 - **DJ mode** with role-based permissions, skip voting (dj/vote/hybrid modes), and track suggestion approval workflow.
 - **Real-time statistics** per guild and globally via `/stats` — tracks songs played, listening hours, unique users, peak listeners, top sources, and hourly activity patterns.
 - **Lyrics lookup** for the current track with `/lyrics` (powered by Genius API).
 - **Interactive queue management** with pagination, track removal by position or keyword, and shuffle.
 - **Persistent state** — now playing messages, EQ configurations, DJ settings, guild stats, and autoplay preferences survive restarts.
+- **Enhanced stability** — automatic voice region reconnection when Discord changes servers, improved duplicate prevention (tracks last 100 songs), and fixed fallback source playback.
 - **Age-restricted content handling** with automatic fallback to alternate sources.
 - **Track history** with `/previous` command to replay or rewind.
 - **Docker-based production stack** with health checks and auto-restart policies.
@@ -121,7 +123,8 @@ pnpm deploy:dev
 - **`/seekto position:<seconds|mm:ss|hh:mm:ss>`** — Jump to a specific timestamp in the current track (DJ restricted in DJ mode).
 - **`/volume level:<0-100>`** — Set the playback volume (DJ only in DJ mode).
 - **`/lyrics`** — Display lyrics for the currently playing song.
-- **`/autoplay`** — Toggle adaptive genre-aware smart autoplay mode (DJ only).
+- **`/autoplay enable:<true|false>`** — Toggle adaptive genre-aware smart autoplay mode (DJ only).
+- **`/247`** — Toggle 24/7 radio mode — bot stays in voice and plays continuously (DJ only).
 
 ---
 
@@ -169,7 +172,7 @@ pnpm deploy:dev
    - **Artist familiarity** — How often you've played them (+5 per occurrence)
    - **Duration similarity** — Matches average song length (+10 within 20%, +5 within 40%)
    - **Source quality** — Spotify > YouTube Mix > Search (+30/+15/+10)
-   - **Artist diversity** — Avoids artist clustering (+20 for new artists, -10 for repeats)
+   - **Smart artist diversity** — Context-aware penalties that prioritize sonic cohesion over strict rotation
    - **Skip learning** — Downweights artists and genres you skip (-20/-15 per skip)
    - **Duplicate prevention** — Never plays the same song twice (-1000 penalty)
 
@@ -269,6 +272,53 @@ The algorithm uses audio features from Spotify to maintain consistency:
 
 These features are averaged across your session and used as target parameters for Spotify recommendations.
 
+#### Smart Artist Diversity (Context-Aware)
+
+Unlike simple artist rotation, the new diversity system **prioritizes sonic cohesion** while preventing monotony:
+
+**"Vibe Match" Scoring:**
+
+- Calculates how well a track matches your session on 4 factors:
+  - **Genre** (25 points) — Shares genres with listening history?
+  - **Tempo** (25 points) — BPM within 20-40 of average?
+  - **Energy** (25 points) — Energy level aligns?
+  - **Mood** (25 points) — Valence (happiness) matches?
+- Combined into a 0-100 "vibe match score"
+
+**Three-Tier Penalty System:**
+
+1. **Last Track (Consecutive):** -40 penalty (prevents back-to-back plays of same artist)
+2. **Last 3 Tracks (Recent):**
+   - Vibe ≥80%: -8 penalty (allows if excellent match)
+   - Vibe ≥60%: -18 penalty (moderate restriction)
+   - Vibe <60%: -30 penalty (heavy restriction)
+3. **Top 3 Artists Overall (Not in Last 3):**
+   - Vibe ≥80%: -5 penalty ✅ (very lenient — prioritizes genre/tempo/energy match)
+   - Vibe ≥60%: -12 penalty (reasonable)
+   - Vibe 40-60%: -20 penalty (discouraged)
+   - Vibe <40%: -30 penalty (heavily discouraged)
+   - Extra -10 if it's the #1 most frequent artist
+
+**What This Achieves:**
+
+- ✅ Same artist CAN play if genre/tempo/energy/mood match excellently
+- ✅ Prevents monotony — won't play same artist back-to-back
+- ✅ Balanced diversity — encourages variety but prioritizes vibe consistency
+- ✅ Genre-focused — if you're in a hip-hop session, it'll stick to hip-hop even if same artist
+
+**Example:**
+
+If you're listening to rock:
+
+- **"Smells Like Teen Spirit"** (Nirvana) → plays
+- Next autoplay finds **another Nirvana track**:
+  - Vibe match: 85% (genre + tempo + energy all match)
+  - Penalty: Only -5 (allowed because vibe is excellent)
+  - ✅ Will likely play if it scores high on other factors
+- But if autoplay tries to queue Nirvana **again** right after:
+  - Penalty: -40 (consecutive play prevention)
+  - ❌ Won't play even with perfect vibe match
+
 #### Usage
 
 ```bash
@@ -281,6 +331,45 @@ These features are averaged across your session and used as target parameters fo
 **When enabled**, autoplay triggers automatically when the queue ends, seamlessly continuing your listening session with curated recommendations that match your genre preferences, tempo flow, mood, and energy levels.
 
 **Note:** Spotify credentials are highly recommended for the best autoplay experience with genre consistency and advanced features. Without Spotify, the bot falls back to YouTube Mix recommendations (no genre/tempo/mood awareness).
+
+---
+
+### 📻 24/7 Radio Mode
+
+**Turn your bot into a 24/7 radio station** that stays in voice and plays music continuously.
+
+#### How It Works
+
+1. **Enable 24/7 mode:**
+
+   ```
+   /247
+   ```
+
+2. **What happens:**
+
+   - Bot stays in voice channel permanently (even when alone)
+   - Automatically queues tracks when queue ends (uses smart autoplay algorithm)
+   - Ignores inactivity timers
+   - Continues playing based on listening history
+
+3. **Requirements:**
+
+   - Bot must be in voice with at least one track played
+   - Needs listening history to generate recommendations
+   - DJ permission required
+
+4. **Disable:**
+   - Use `/247` again to toggle off
+   - Or use `/stop` to stop music and disable 24/7 mode
+
+#### Use Cases
+
+- **Community servers**: Background music running 24/7
+- **Study/work servers**: Continuous lo-fi or ambient music
+- **Music-focused servers**: Non-stop radio experience
+
+**Note:** 24/7 state is NOT saved across restarts to prevent auto-join issues on startup.
 
 ---
 
@@ -325,6 +414,8 @@ These features are averaged across your session and used as target parameters fo
   - **A/B comparison**: Save snapshot with 💾, toggle with 🔄 to compare settings
   - **Save custom presets**: Use 📁 button to save current EQ as a reusable preset
   - **Throttled updates**: Changes batched at 200ms to prevent Lavalink spam
+  - **10-minute inactivity timer**: Panel auto-deletes after 10 minutes of no interaction (prevents channel clutter)
+  - **Smart panel refresh**: Deletes old panel and creates new one to keep it visible at bottom of chat
   - **Fine-tune modal**: Advanced users can directly input all 15 gain values
 
 #### Preset Management
@@ -603,10 +694,10 @@ Each candidate receives a score based on:
 | **Artist Familiarity** | +5 per play     | How often you've played this artist                           |
 | **Duration Match**     | +10 / +5 / -5   | Within 20% (+10), 40% (+5), or >40% (-5) of average           |
 | **Source Quality**     | +30 / +15 / +10 | Spotify (+30), YouTube Mix (+15), Search (+10)                |
-| **Artist Diversity**   | +20 / -10       | Artist not in your top 3 (+20), or is recent (-10)            |
+| **Smart Diversity**    | +20 / -5 to -40 | Context-aware: vibe match reduces penalty, consecutive -40    |
 | **Skip Learning**      | -20 per skip    | Artist you've skipped recently (30min window)                 |
 | **Genre Skip**         | -15 per skip    | Genre you've skipped recently                                 |
-| **Duplicate**          | -1000           | Already played in session                                     |
+| **Duplicate**          | -1000           | Already played in last 100 tracks (ID + title/artist match)   |
 
 #### Time-of-Day Energy Factors
 
@@ -735,6 +826,26 @@ Tests cover session profiling, genre scoring, tempo matching, duplicate detectio
 - Verify Lavalink is healthy and connected
 - Check for age-restricted content (requires YouTube tokens)
 - Review bot logs for fallback attempts
+- Ensure Spotify credentials are configured for best autoplay results
+- Check Lavalink node status and logs if playback fails
+
+---
+
+## 🔧 Reliability & Stability
+
+### Voice Region Reconnection
+
+When Discord changes the voice channel region (moving to a different voice server), the bot automatically:
+
+- Detects the region change via `channelUpdate` event
+- Saves complete playback state (track, position, queue, volume, loop mode)
+- Destroys old connection and creates a fresh one to the new region
+- Restores all settings and resumes playback from the exact position
+- **No interruption** to the listening experience
+
+---
+
+## Troubleshooting
 
 ### Autoplay not working or genre drifting
 

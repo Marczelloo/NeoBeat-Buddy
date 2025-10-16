@@ -76,9 +76,6 @@ async function tryQueueFallbackTrack(player, failedTrack) {
         fallbackAttempts: previousAttempts + 1,
       };
 
-      const queueWasEmpty =
-        player.queue.length === 0 && (!player.currentTrack || player.currentTrack.track === failedTrack?.track);
-
       player.queue.unshift(fallbackTrack);
       failedTrack.userData.fallbackAttempts = previousAttempts + 1;
 
@@ -88,24 +85,10 @@ async function tryQueueFallbackTrack(player, failedTrack) {
         `guild=${player.guildId}`,
         `from=${describeTrack(failedTrack)}`,
         `to=${describeTrack(fallbackTrack)}`,
-        `source=${source}`
+        `source=${source}`,
+        `queueLength=${player.queue.length}`,
+        `note=Lavalink will auto-advance to fallback`
       );
-
-      if (queueWasEmpty) {
-        try {
-          await player.play();
-          Log.info("Started fallback playback", "", `guild=${player.guildId}`, `track=${describeTrack(fallbackTrack)}`);
-        } catch (playErr) {
-          const summary = playErr instanceof Error ? playErr.message : inspect(playErr, { depth: 1 });
-          Log.error(
-            "Failed to start fallback track",
-            "",
-            `guild=${player.guildId}`,
-            `track=${describeTrack(fallbackTrack)}`,
-            `error=${summary}`
-          );
-        }
-      }
 
       return fallbackTrack;
     } catch (fallbackErr) {

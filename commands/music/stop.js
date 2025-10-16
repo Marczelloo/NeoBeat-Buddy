@@ -43,9 +43,10 @@ module.exports = {
       updateGuildState(interaction.guild.id, {
         nowPlayingMessage: null,
         nowPlayingChannel: null,
+        radio247: false,
       });
 
-      return interaction.editReply({ embeds: [successEmbed("Music stopped and queue cleared.")] });
+      return interaction.editReply({ embeds: [successEmbed("Music stopped and queue cleared. 24/7 mode disabled.")] });
     }
 
     return interaction.editReply({ embeds: [errorEmbed("No music is currently playing.")] });

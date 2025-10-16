@@ -14,7 +14,7 @@ const {
   getLyricsState,
 } = require("./lavalink/index");
 const { buildLyricsResponse } = require("./lavalink/lyricsFormatter");
-const { recordSkip } = require("./lavalink/smartAutoplay");
+const { recordSkip } = require("./lavalink/skipLearning");
 const Log = require("./logs/log");
 const { formatDuration } = require("./utils");
 

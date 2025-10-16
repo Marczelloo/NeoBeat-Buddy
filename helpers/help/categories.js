@@ -57,6 +57,12 @@
             "Toggle smart autoplay mode that automatically queues similar tracks when the queue ends (DJ only).",
           usage: "/autoplay enable:<true|false>",
         },
+        {
+          name: "247",
+          description:
+            "Toggle 24/7 radio mode - bot stays in voice channel and plays continuously like a radio station (DJ only).",
+          usage: "/247",
+        },
       ],
     },
     queue: {
@@ -101,6 +107,18 @@
             "- Filters out non-music content (tutorials, poetry, shorts) for quality recommendations.",
             "- Learns from skips: tracks you skip are downweighted in future recommendations.",
             "- Toggle with `/autoplay` (DJ permission required).",
+          ].join("\n"),
+        },
+        {
+          name: "24/7 Radio Mode",
+          value: [
+            "- Toggle with `/247` to turn your bot into a 24/7 radio station (DJ only).",
+            "- **What it does**: Bot stays in voice channel permanently and plays music continuously.",
+            "- **Auto-queue**: Automatically queues tracks based on listening history when queue ends.",
+            "- **No disconnects**: Bot ignores inactivity timers and stays even when alone in channel.",
+            "- **Disable**: Use `/247` again or `/stop` to turn off 24/7 mode.",
+            "- **Perfect for**: Community servers that want background music running all day.",
+            "- Note: 24/7 state is NOT saved across restarts (prevents auto-join issues).",
           ].join("\n"),
         },
       ],

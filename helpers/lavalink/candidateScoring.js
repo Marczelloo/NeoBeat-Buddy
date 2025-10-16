@@ -177,14 +177,114 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       }
     }
 
-    // Factor 10: Artist diversity
-    const isRecentArtist = profile.topArtists.slice(0, 3).some((a) => a.artist === candidate.artist);
-    if (!isRecentArtist) {
-      score += 20;
-      scoringDetails.push("diversity:+20");
+    // Factor 10: Smart artist diversity (context-aware)
+    // Calculate "vibe match score" - how well does this track match the sonic profile?
+    let vibeMatchScore = 0;
+    let vibeFactorsChecked = 0;
+
+    // Genre contribution to vibe match
+    if (candidate.genres && candidate.genres.length > 0 && profile.topGenres.length > 0) {
+      const hasGenreMatch = candidate.genres.some((candidateGenre) => {
+        return profile.topGenres.some(
+          (g) => g.genre === candidateGenre || candidateGenre.includes(g.genre) || g.genre.includes(candidateGenre)
+        );
+      });
+      if (hasGenreMatch) vibeMatchScore += 25;
+      vibeFactorsChecked++;
+    }
+
+    // Tempo contribution to vibe match
+    if (candidate.features?.tempo && profile.avgTempo) {
+      const tempoDiff = Math.abs(candidate.features.tempo - profile.avgTempo);
+      if (tempoDiff < 20) {
+        vibeMatchScore += 25;
+      } else if (tempoDiff < 40) {
+        vibeMatchScore += 15;
+      }
+      vibeFactorsChecked++;
+    }
+
+    // Energy contribution to vibe match
+    if (candidate.features?.energy !== undefined && profile.avgFeatures?.energy !== undefined) {
+      const energyDiff = Math.abs(candidate.features.energy - profile.avgFeatures.energy);
+      if (energyDiff < 0.2) {
+        vibeMatchScore += 25;
+      } else if (energyDiff < 0.35) {
+        vibeMatchScore += 15;
+      }
+      vibeFactorsChecked++;
+    }
+
+    // Mood contribution to vibe match
+    if (candidate.features?.valence !== undefined && profile.avgFeatures?.valence !== undefined) {
+      const valenceDiff = Math.abs(candidate.features.valence - profile.avgFeatures.valence);
+      if (valenceDiff < 0.2) {
+        vibeMatchScore += 25;
+      } else if (valenceDiff < 0.35) {
+        vibeMatchScore += 15;
+      }
+      vibeFactorsChecked++;
+    }
+
+    // Normalize vibe score (0-100 scale)
+    const normalizedVibeScore = vibeFactorsChecked > 0 ? vibeMatchScore / vibeFactorsChecked : 0;
+
+    // Check artist recency
+    const topArtistPosition = profile.topArtists.findIndex((a) => a.artist === candidate.artist);
+    const isInTop3 = topArtistPosition >= 0 && topArtistPosition < 3;
+    const isInTop1 = topArtistPosition === 0;
+
+    // Check if artist was played in last 3 tracks (prevents consecutive plays)
+    const lastThreeArtists = profile.lastThreeArtists || [];
+    const appearsInLastThree = lastThreeArtists.includes(candidate.artist);
+    const isLastArtist =
+      lastThreeArtists.length > 0 && lastThreeArtists[lastThreeArtists.length - 1] === candidate.artist;
+
+    if (isLastArtist) {
+      // Same artist as last track - heavy penalty even with good vibe match
+      score -= 40;
+      scoringDetails.push("diversity:-40(consecutive)");
+    } else if (appearsInLastThree) {
+      // Artist appeared in last 3 tracks - apply vibe-based penalty
+      if (normalizedVibeScore >= 80) {
+        score -= 8;
+        scoringDetails.push("diversity:-8(recent-good-vibe)");
+      } else if (normalizedVibeScore >= 60) {
+        score -= 18;
+        scoringDetails.push("diversity:-18(recent-ok-vibe)");
+      } else {
+        score -= 30;
+        scoringDetails.push("diversity:-30(recent-bad-vibe)");
+      }
+    } else if (isInTop3) {
+      // Artist is in top 3 overall but not in last 3 tracks - apply dynamic penalty based on vibe match
+      if (normalizedVibeScore >= 80) {
+        // Excellent vibe match - allow same artist with minimal penalty
+        score -= 5;
+        scoringDetails.push("diversity:-5(vibe-match)");
+      } else if (normalizedVibeScore >= 60) {
+        // Good vibe match - moderate penalty
+        score -= 12;
+        scoringDetails.push("diversity:-12(similar-vibe)");
+      } else if (normalizedVibeScore >= 40) {
+        // Weak vibe match - higher penalty
+        score -= 20;
+        scoringDetails.push("diversity:-20(weak-vibe)");
+      } else {
+        // Poor vibe match - heavy penalty for same artist
+        score -= 30;
+        scoringDetails.push("diversity:-30(off-vibe)");
+      }
+
+      // Extra penalty for most recent artist to prevent back-to-back plays
+      if (isInTop1) {
+        score -= 10;
+        scoringDetails.push("diversity:-10(top-frequent)");
+      }
     } else {
-      score -= 10;
-      scoringDetails.push("diversity:-10");
+      // New artist - bonus
+      score += 20;
+      scoringDetails.push("diversity:+20(new-artist)");
     }
 
     // Factor 11: Skip learning
@@ -206,11 +306,28 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       });
     }
 
-    // Factor 12: Duplicate prevention
-    const isDuplicate = profile.recentIdentifiers.includes(candidate.identifier);
-    if (isDuplicate) {
+    // Factor 12: Duplicate prevention (identifier-based)
+    const isDuplicateById = candidate.identifier && profile.recentIdentifiers.includes(candidate.identifier);
+    if (isDuplicateById) {
       score -= 1000;
-      scoringDetails.push("duplicate:-1000");
+      scoringDetails.push("duplicate:-1000(id)");
+    }
+
+    // Additional title-based duplicate check for stronger prevention
+    if (!isDuplicateById && candidate.title && candidate.artist) {
+      const normalizedTitle = candidate.title.toLowerCase().trim();
+      const normalizedArtist = candidate.artist.toLowerCase().trim();
+
+      const isDuplicateByTitle = profile.recentTracks?.some((recentTrack) => {
+        const recentTitle = (recentTrack?.info?.title || "").toLowerCase().trim();
+        const recentArtist = (recentTrack?.info?.author || "").toLowerCase().trim();
+        return recentTitle === normalizedTitle && recentArtist === normalizedArtist;
+      });
+
+      if (isDuplicateByTitle) {
+        score -= 1000;
+        scoringDetails.push("duplicate:-1000(title)");
+      }
     }
 
     candidate.score = Math.max(0, score);

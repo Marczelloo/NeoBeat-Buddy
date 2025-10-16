@@ -81,16 +81,263 @@ for (const file of eventsFiles) {
   }
 }
 
+// Handle channel updates (including region changes)
+client.on("channelUpdate", async (oldChannel, newChannel) => {
+  // Only handle voice channels
+  if (newChannel.type !== 2) return; // 2 = GUILD_VOICE
+
+  const { getPoru } = require("./helpers/lavalink/players");
+  const { cloneTrack } = require("./helpers/lavalink/state");
+  const poru = getPoru();
+  if (!poru) return;
+
+  const player = poru.players.get(newChannel.guild.id);
+  if (!player || player.voiceChannel !== newChannel.id) return;
+
+  // Check if the region changed
+  if (oldChannel.rtcRegion !== newChannel.rtcRegion) {
+    Log.warning(
+      "Voice channel region changed, reconnecting player",
+      "",
+      `guild=${newChannel.guild.id}`,
+      `channel=${newChannel.name}`,
+      `oldRegion=${oldChannel.rtcRegion || "auto"}`,
+      `newRegion=${newChannel.rtcRegion || "auto"}`
+    );
+
+    try {
+      // Save current playback state
+      const currentTrack = player.currentTrack ? cloneTrack(player.currentTrack) : null;
+      const currentPosition = player.position || 0;
+      const queue = player.queue.map((track) => cloneTrack(track));
+      const isPaused = player.isPaused;
+      const volume = player.volume;
+      const loopMode = player.loop;
+      const textChannel = player.textChannel;
+
+      Log.info(
+        "Saving playback state before reconnection",
+        "",
+        `guild=${newChannel.guild.id}`,
+        `track=${currentTrack?.info?.title || "none"}`,
+        `position=${currentPosition}ms`,
+        `queueLength=${queue.length}`,
+        `isPaused=${isPaused}`
+      );
+
+      // Destroy old connection
+      await player.destroy();
+      Log.info("Destroyed old player connection", "", `guild=${newChannel.guild.id}`);
+
+      // Wait for Discord to settle
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Create new connection
+      const newPlayer = await poru.createConnection({
+        guildId: newChannel.guild.id,
+        voiceChannel: newChannel.id,
+        textChannel: textChannel,
+        deaf: true,
+      });
+
+      Log.info("Created new player connection", "", `guild=${newChannel.guild.id}`);
+
+      // Restore volume and loop mode
+      await newPlayer.setVolume(volume);
+      newPlayer.volume = volume;
+      newPlayer.loop = loopMode;
+
+      // Restore queue
+      for (const track of queue) {
+        await newPlayer.queue.add(track);
+      }
+
+      Log.info("Restored queue", "", `guild=${newChannel.guild.id}`, `queueLength=${queue.length}`);
+
+      // Resume playback if there was a track playing
+      if (currentTrack) {
+        // Add current track to the front of queue
+        await newPlayer.queue.unshift(currentTrack);
+
+        Log.info(
+          "Starting playback",
+          "",
+          `guild=${newChannel.guild.id}`,
+          `track=${currentTrack.info?.title}`,
+          `position=${currentPosition}ms`
+        );
+
+        // Start playback
+        await newPlayer.play();
+
+        // Wait a moment for playback to start
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Seek to previous position if not paused
+        if (currentPosition > 1000 && !isPaused) {
+          await newPlayer.seekTo(currentPosition);
+          Log.info("Seeked to position", "", `guild=${newChannel.guild.id}`, `position=${currentPosition}ms`);
+        }
+
+        // Apply pause state if needed
+        if (isPaused) {
+          await newPlayer.pause(true);
+          Log.info("Applied pause state", "", `guild=${newChannel.guild.id}`);
+        }
+
+        Log.success(
+          "Player reconnected and playback resumed",
+          "",
+          `guild=${newChannel.guild.id}`,
+          `track=${currentTrack.info?.title}`,
+          `position=${currentPosition}ms`,
+          `queueRestored=${queue.length}`
+        );
+      } else {
+        Log.info("Player reconnected with empty queue", "", `guild=${newChannel.guild.id}`);
+      }
+    } catch (error) {
+      Log.error(
+        "Failed to reconnect player after region change",
+        error,
+        `guild=${newChannel.guild.id}`,
+        `error=${error.message}`
+      );
+    }
+  }
+});
+
 client.on("voiceStateUpdate", (oldState, newState) => {
   if (oldState.member.user.id === client.user.id && newState.channelId === null) {
     Log.info("Bot left the voice channel:", oldState.channel, newState.guild.name, newState.guild.id);
   }
 });
 
-client.on("voiceStateUpdate", (oldState, newState) => {
+client.on("voiceStateUpdate", async (oldState, newState) => {
   const oldChannel = oldState.channel;
   const newChannel = newState.channel;
   const guild = newState.guild;
+
+  // Handle bot being moved between channels or voice region changes
+  if (newState.member?.user?.id === client.user.id && oldChannel && newChannel) {
+    const { getPoru } = require("./helpers/lavalink/players");
+    const { cloneTrack } = require("./helpers/lavalink/state");
+    const poru = getPoru();
+    const player = poru?.players?.get(guild.id);
+
+    // Check if bot was moved to a different channel
+    if (oldChannel.id !== newChannel.id) {
+      Log.info(
+        "Bot moved to different voice channel",
+        "",
+        `guild=${guild.id}`,
+        `from=${oldChannel.name}`,
+        `to=${newChannel.name}`
+      );
+
+      if (player) {
+        player.voiceChannel = newChannel.id;
+        Log.info("Updated player voice channel reference", "", `guild=${guild.id}`, `channel=${newChannel.id}`);
+      }
+    }
+
+    // Detect voice region/server changes (Discord moving to different server)
+    // This requires a full player reconnection to work properly
+    if (oldChannel.rtcRegion !== newChannel.rtcRegion) {
+      Log.warning(
+        "Voice channel region changed, reconnecting player",
+        "",
+        `guild=${guild.id}`,
+        `oldRegion=${oldChannel.rtcRegion || "auto"}`,
+        `newRegion=${newChannel.rtcRegion || "auto"}`
+      );
+
+      if (player) {
+        try {
+          // Save current playback state
+          const currentTrack = player.currentTrack ? cloneTrack(player.currentTrack) : null;
+          const currentPosition = player.position || 0;
+          const queue = player.queue.map((track) => cloneTrack(track));
+          const isPaused = player.isPaused;
+          const volume = player.volume;
+          const loopMode = player.loop;
+          const textChannel = player.textChannel;
+
+          Log.info(
+            "Saving playback state before reconnection",
+            "",
+            `guild=${guild.id}`,
+            `track=${currentTrack?.info?.title || "none"}`,
+            `position=${currentPosition}ms`,
+            `queueLength=${queue.length}`,
+            `isPaused=${isPaused}`
+          );
+
+          // Destroy old connection
+          await player.destroy();
+          Log.info("Destroyed old player connection", "", `guild=${guild.id}`);
+
+          // Wait a moment for Discord to settle
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Create new connection
+          const newPlayer = await poru.createConnection({
+            guildId: guild.id,
+            voiceChannel: newChannel.id,
+            textChannel: textChannel,
+            deaf: true,
+          });
+
+          // Restore volume and loop mode
+          await newPlayer.setVolume(volume);
+          newPlayer.volume = volume;
+          newPlayer.loop = loopMode;
+
+          // Restore queue
+          for (const track of queue) {
+            await newPlayer.queue.add(track);
+          }
+
+          // Resume playback if there was a track playing
+          if (currentTrack) {
+            // Add current track to the front of queue
+            await newPlayer.queue.unshift(currentTrack);
+
+            // Start playback
+            await newPlayer.play();
+
+            // Seek to previous position if not paused
+            if (currentPosition > 0 && !isPaused) {
+              await newPlayer.seekTo(currentPosition);
+            }
+
+            // Apply pause state if needed
+            if (isPaused) {
+              await newPlayer.pause(true);
+            }
+
+            Log.success(
+              "Player reconnected and playback resumed",
+              "",
+              `guild=${guild.id}`,
+              `track=${currentTrack.info?.title}`,
+              `position=${currentPosition}ms`,
+              `queueRestored=${queue.length}`
+            );
+          } else {
+            Log.info("Player reconnected with empty queue", "", `guild=${guild.id}`);
+          }
+        } catch (error) {
+          Log.error(
+            "Failed to reconnect player after region change",
+            error,
+            `guild=${guild.id}`,
+            `error=${error.message}`
+          );
+        }
+      }
+    }
+  }
 
   if (oldChannel && newChannel && oldChannel.id !== newChannel.id) {
     const oldMembers = oldChannel.members.size;

@@ -26,6 +26,15 @@ const scheduleInactivityDisconnect = (player, reason = "queueEnd") => {
   if (!player || !poru) return;
 
   if (!INACTIVITY_TIMEOUT_MS || INACTIVITY_TIMEOUT_MS <= 0) return;
+
+  // Check for 24/7 mode - don't schedule disconnect if enabled
+  const { getGuildState } = require("../guildState");
+  const state = getGuildState(player.guildId);
+  if (state?.radio247) {
+    Log.info("Skipped inactivity disconnect (24/7 mode active)", "", `guild=${player.guildId}`);
+    return;
+  }
+
   clearInactivityTimer(player.guildId);
   const timeout = setTimeout(async () => {
     inactivityTimers.delete(player.guildId);

@@ -100,6 +100,26 @@ module.exports = {
         const state = getGuildState(player.guildId);
         const channelId = state?.nowPlayingChannel;
         const messageId = state?.nowPlayingMessage;
+
+        // Check if 24/7 radio mode is enabled
+        if (state?.radio247) {
+          Log.info("24/7 radio mode active, queuing next track", "", `guild=${player.guildId}`);
+
+          // Import autoplay function dynamically to avoid circular deps
+          const { queueAutoplayTrack } = require("../helpers/lavalink/autoplay");
+          const { playbackState } = require("../helpers/lavalink/state");
+
+          const pbState = playbackState.get(player.guildId);
+          const lastTrack = pbState?.history?.[pbState.history.length - 1];
+
+          if (lastTrack) {
+            await queueAutoplayTrack(player, lastTrack, channelId);
+          } else {
+            Log.warning("24/7 mode active but no history to base recommendations on", "", `guild=${player.guildId}`);
+          }
+          return;
+        }
+
         if (!channelId || !messageId) return;
 
         const channel = await client.channels.fetch(channelId).catch(() => null);
