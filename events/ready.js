@@ -1,4 +1,5 @@
 const { Events } = require("discord.js");
+const announcer = require("../helpers/announcements/announcer");
 const { buildControlRows } = require("../helpers/buttons");
 const { playerEmbed } = require("../helpers/embeds");
 const { getGuildState, updateGuildState } = require("../helpers/guildState.js");
@@ -11,7 +12,12 @@ module.exports = {
   once: true,
   async execute(client) {
     Log.success(`Logged in as ${client.user.tag}`);
-    client.user.setActivity({ name: "/help", type: 2 });
+
+    // Initialize announcer system
+    await announcer.init();
+
+    // Update bot status with version info
+    announcer.updateBotStatus(client);
 
     try {
       const poru = createPoru(client);
@@ -133,6 +139,25 @@ module.exports = {
           nowPlayingMessage: null,
         });
       });
+
+      // Send version announcements to all guilds
+      Log.info("Checking for version announcements...");
+      let announcementsSent = 0;
+      for (const [guildId, guild] of client.guilds.cache) {
+        try {
+          const wasAnnounced = await announcer.sendAnnouncement(client, guildId, null);
+          if (wasAnnounced) {
+            announcementsSent++;
+          }
+        } catch (err) {
+          Log.error(`Failed to send announcement to guild ${guild.name} (${guildId})`, err);
+        }
+      }
+      if (announcementsSent > 0) {
+        Log.success(`Sent version announcements to ${announcementsSent} guild(s)`);
+      } else {
+        Log.info("No new announcements to send");
+      }
     } catch (err) {
       Log.error("Failed to initialize Poru in ready event", err);
     }

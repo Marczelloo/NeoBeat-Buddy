@@ -67,6 +67,7 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 - **Interactive queue management** with pagination, track removal by position or keyword, and shuffle.
 - **Persistent state** — now playing messages, EQ configurations, DJ settings, guild stats, and autoplay preferences survive restarts.
 - **Enhanced stability** — automatic voice region reconnection when Discord changes servers, improved duplicate prevention (tracks last 100 songs), and fixed fallback source playback.
+- **Version announcements** — automatic patch notes delivered to servers when new versions are released, with `/changelog` to view any version and `/setup announcements` to configure channel and toggle notifications.
 - **Age-restricted content handling** with automatic fallback to alternate sources.
 - **Track history** with `/previous` command to replay or rewind.
 - **Docker-based production stack** with health checks and auto-restart policies.
@@ -475,6 +476,14 @@ _EQ settings persist across bot restarts and are restored automatically when the
   - Unique users, peak listeners
   - Session count, average session length
   - _Detailed mode:_ Top sources, most active hour
+
+- **`/changelog [version:<version>]`**  
+  View patch notes for the current version or a specific version with navigation controls. Shows categorized features, fixes, and changes with links to GitHub.
+
+- **`/setup announcements channel:<channel>`** — Configure announcement channel for new version notifications (requires Manage Guild permission).
+- **`/setup announcements enable`** — Enable automatic version announcements for this server.
+- **`/setup announcements disable`** — Disable automatic version announcements for this server.
+- **`/setup announcements status`** — View current announcement configuration.
 
 - **`/user user:<member>`** — Inspect a member's profile, badges, flags, and status.
 - **`/help`** — Open the interactive help menu with categorized commands.

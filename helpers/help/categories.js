@@ -208,6 +208,19 @@
           usage: "/stats",
         },
         {
+          name: "changelog",
+          description:
+            "View patch notes for the current version or a specific version. Navigate between versions with interactive buttons.",
+          usage: "/changelog [version:<version>]",
+        },
+        {
+          name: "setup announcements",
+          description:
+            "Configure automatic version announcements: set channel, enable/disable, view status, or reset state for testing.",
+          usage:
+            "\n/setup announcements channel channel:<channel>\n/setup announcements enable\n/setup announcements disable\n/setup announcements status\n/setup announcements reset",
+        },
+        {
           name: "user",
           description: "Inspect a user's profile, flags, and status.",
           usage: "/user user:<member>",
@@ -226,6 +239,17 @@
         },
       ],
       notes: [
+        {
+          name: "Version Announcements",
+          value: [
+            "- The bot automatically announces new versions when it starts up.",
+            "- Configure where announcements are sent with `/setup announcements channel`.",
+            "- View patch notes anytime with `/changelog` - navigate between versions with interactive buttons.",
+            "- Enable/disable announcements per server with `/setup announcements enable/disable`.",
+            "- Check current configuration with `/setup announcements status`.",
+            "- For testing: `/setup announcements reset` clears announcement state to resend current version.",
+          ].join("\n"),
+        },
         {
           name: "DJ Mode Overview",
           value: [

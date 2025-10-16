@@ -24,6 +24,7 @@
 - [x] adjust autoplay to count track history for better picking better song, include suggestions from spotify
 - [x] enhance autoplay with tempo matching, time-of-day awareness, popularity weighting, mood progression, and energy arc management
 - [x] 24/7 command
+- [x] version announcements with patch notes system (/changelog command, auto-announce on updates, configurable via /setup announcements)
 - [ ] server playlists, user playlists
 - [ ] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )
 - [ ] other commands

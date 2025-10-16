@@ -66,6 +66,9 @@ const createDefaultState = () => ({
   nowPlayingChannel: null,
   autoplay: false,
   radio247: false,
+  announcementChannel: null,
+  announcementsEnabled: true,
+  lastAnnouncedVersion: null,
 });
 
 function getGuildState(guildId) {
