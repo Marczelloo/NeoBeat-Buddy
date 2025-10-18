@@ -8,7 +8,8 @@
       commands: [
         {
           name: "play",
-          description: "Queue a track from a URL or search query. In DJ mode, non-DJs submit suggestions for approval.",
+          description:
+            "Queue a track from a URL or search query with autocomplete suggestions. In DJ mode, non-DJs submit suggestions for approval.",
           usage: "/play query:<song or url> [prepend:true]",
         },
         {

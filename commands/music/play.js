@@ -5,6 +5,7 @@ const { buildProposalAnnouncement, buildProposalComponents, buildProposalEmbed }
 const { errorEmbed, successEmbed, playlistEmbed, songEmbed } = require("../../helpers/embeds");
 const { updateGuildState } = require("../../helpers/guildState.js");
 const { lavalinkPlay, lavalinkResolveTracks } = require("../../helpers/lavalink/index");
+const { getPoru } = require("../../helpers/lavalink/players");
 const Log = require("../../helpers/logs/log");
 const statsStore = require("../../helpers/stats/store");
 
@@ -13,7 +14,11 @@ module.exports = {
     .setName("play")
     .setDescription("Play a song from YouTube, Spotify, or SoundCloud")
     .addStringOption((option) =>
-      option.setName("query").setDescription("The URL or search term of the song to play").setRequired(true)
+      option
+        .setName("query")
+        .setDescription("The URL or search term of the song to play")
+        .setRequired(true)
+        .setAutocomplete(true)
     )
     .addBooleanOption((option) =>
       option
@@ -21,6 +26,111 @@ module.exports = {
         .setDescription("Add the track to the front of the queue instead of the back")
         .setRequired(false)
     ),
+
+  async autocomplete(interaction) {
+    const focusedValue = interaction.options.getFocused();
+
+    // Don't autocomplete if the query is too short
+    if (!focusedValue || focusedValue.length < 2) {
+      return interaction.respond([]);
+    }
+
+    // Skip autocomplete for URLs (YouTube, Spotify, SoundCloud links)
+    if (
+      focusedValue.startsWith("http://") ||
+      focusedValue.startsWith("https://") ||
+      focusedValue.includes("youtube.com") ||
+      focusedValue.includes("youtu.be") ||
+      focusedValue.includes("spotify.com") ||
+      focusedValue.includes("soundcloud.com")
+    ) {
+      return interaction.respond([]);
+    }
+
+    try {
+      // Use Poru directly to get search results
+      const poru = getPoru();
+      const searchQuery = focusedValue;
+      const results = await poru.resolve({ query: searchQuery });
+
+      if (!results?.tracks || results.tracks.length === 0) {
+        return interaction.respond([]);
+      }
+
+      // Take only first 15 tracks for faster processing
+      const limitedTracks = results.tracks.slice(0, 15);
+
+      // Filter out non-music content (tutorials, compilations, etc.)
+      const musicTracks = limitedTracks.filter((track) => {
+        const title = (track.info?.title || "").toLowerCase();
+        const author = (track.info?.author || "").toLowerCase();
+
+        // Skip non-music content
+        if (
+          title.includes("tutorial") ||
+          title.includes("how to") ||
+          title.includes("lesson") ||
+          title.includes("compilation") ||
+          (author.includes("topic") && title.includes("provided to youtube"))
+        ) {
+          return false;
+        }
+
+        return true;
+      });
+
+      // Deduplicate by artist + title
+      const seen = new Set();
+      const uniqueTracks = [];
+
+      for (const track of musicTracks) {
+        const author = (track.info?.author || "Unknown Artist").trim();
+        const title = (track.info?.title || "Unknown").trim();
+
+        // Create a normalized key for deduplication
+        const normalizedAuthor = author.toLowerCase().replace(/\s+/g, "");
+        const normalizedTitle = title.toLowerCase().replace(/\s+/g, "");
+        const key = `${normalizedAuthor}|||${normalizedTitle}`;
+
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueTracks.push(track);
+
+          // Stop at 10 unique tracks for faster response
+          if (uniqueTracks.length >= 10) break;
+        }
+      }
+
+      // Format results for autocomplete
+      const choices = uniqueTracks.map((track) => {
+        const title = track.info?.title || "Unknown";
+        const author = track.info?.author || "Unknown Artist";
+
+        // Truncate if too long (Discord has 100 char limit)
+        let displayName = `${title} - ${author}`;
+        if (displayName.length > 100) {
+          displayName = displayName.substring(0, 97) + "...";
+        }
+
+        // Use "artist title" as the value
+        let value = `${author} ${title}`;
+        if (value.length > 100) {
+          value = value.substring(0, 100);
+        }
+
+        return {
+          name: displayName,
+          value: value,
+        };
+      });
+
+      await interaction.respond(choices);
+    } catch (error) {
+      Log.error("Autocomplete error in /play", error);
+      // Return empty array on error to avoid blocking the user
+      await interaction.respond([]);
+    }
+  },
 
   async execute(interaction) {
     Log.info("/play command used by " + interaction.user.tag + " in guild " + interaction.guild.name);

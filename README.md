@@ -58,6 +58,7 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 ## Features
 
 - **Slash-only interface** for queueing, playback, and moderation safeguards.
+- **Live autocomplete search** — get instant song suggestions as you type in `/play` command.
 - **Adaptive smart autoplay** with Deezer recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
 - **24/7 radio mode** — bot stays in voice channel permanently and plays music continuously like a radio station.
 - **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), real-time visual feedback, and 10-minute inactivity auto-cleanup.
@@ -113,7 +114,7 @@ pnpm deploy:dev
 ### 🎵 Playback Control
 
 - **`/play query:<song or url> [prepend:true]`**  
-  Queue a track from YouTube, Spotify, or a search query. Use `prepend:true` to add it to the front of the queue.  
+  Queue a track from YouTube, Spotify, or a search query with **live autocomplete suggestions** as you type. Use `prepend:true` to add it to the front of the queue.  
   _In DJ mode, non-DJs submit suggestions for approval._
 
 - **`/pause`** — Pause the currently playing track (DJ restricted in DJ mode).
