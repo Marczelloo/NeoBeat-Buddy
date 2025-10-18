@@ -4,8 +4,6 @@ const { scoreCandidates, getTimeOfDayFactor } = require("./candidateScoring");
 const { getPoru } = require("./players");
 const { buildSessionProfile, genreCache } = require("./sessionProfile");
 const { getSkipPatterns } = require("./skipLearning");
-const { searchSpotifyTrack, getTrackDetails, getArtistGenres } = require("./spotifyClient");
-const { getSpotifyRecommendations } = require("./spotifyRecommendations");
 const { filterValidSongs } = require("./trackValidation");
 
 /**
@@ -20,71 +18,153 @@ async function collectCandidates(referenceTrack, guildId, profile) {
   const candidates = [];
   const { title, author, identifier } = referenceTrack.info;
 
-  let referenceGenres = [];
-  let referenceFeatures = null;
-  let referenceYear = null;
-
-  // Source 1: Spotify recommendations with genre awareness
+  // Source 1: Deezer recommendations (primary source)
   try {
-    const trackId = await searchSpotifyTrack(title, author);
-    if (trackId) {
-      const trackDetails = await getTrackDetails(trackId);
+    // Clean up title - extract actual artist and title from YouTube naming conventions
+    let cleanTitle = title;
+    let searchArtist = author;
 
-      if (trackDetails) {
-        if (trackDetails.artistIds.length > 0) {
-          referenceGenres = await getArtistGenres(trackDetails.artistIds);
-          referenceFeatures = trackDetails.features;
-          referenceYear = trackDetails.releaseYear;
+    // Check if title contains " - " which usually separates artist from title
+    if (title.includes(" - ")) {
+      const parts = title.split(" - ");
+      // If first part looks like artist name, use it
+      if (parts.length >= 2) {
+        searchArtist = parts[0].trim();
+        cleanTitle = parts.slice(1).join(" - ").trim();
+      }
+    }
 
-          genreCache.set(identifier, {
-            genres: referenceGenres,
-            features: referenceFeatures,
-            releaseYear: referenceYear,
-          });
+    // Remove common YouTube suffixes
+    cleanTitle = cleanTitle
+      .replace(/\(official\s*(video|audio|music\s*video)?\)/gi, "")
+      .replace(/\[official\s*(video|audio|music\s*video)?\]/gi, "")
+      .replace(/\s*-?\s*(official|lyric|lyrics|video|audio|hq|hd)\s*$/gi, "")
+      .trim();
 
-          Log.info(
-            "Reference track details found",
-            "",
-            `guild=${guildId}`,
-            `genres=${referenceGenres.join(", ")}`,
-            `tempo=${referenceFeatures?.tempo ? Math.round(referenceFeatures.tempo) : "unknown"}`,
-            `year=${referenceYear || "unknown"}`
-          );
+    // Search for track on Deezer
+    const deezerSearchQuery = `dzsearch:${searchArtist} ${cleanTitle}`;
+    Log.info("Searching Deezer", "", `guild=${guildId}`, `query=${deezerSearchQuery}`);
+
+    // Use direct Lavalink REST API instead of Poru (workaround for dzsearch: prefix issue)
+    const encodedQuery = encodeURIComponent(deezerSearchQuery);
+    const lavalinkUrl = `http://localhost:2333/v4/loadtracks?identifier=${encodedQuery}`;
+    const response = await fetch(lavalinkUrl, {
+      headers: {
+        Authorization: process.env.LAVALINK_PASSWORD || "youshallnotpass",
+      },
+    });
+    const deezerSearch = await response.json();
+
+    // Convert Lavalink v4 response to Poru format
+    if (deezerSearch.loadType === "search" || deezerSearch.loadType === "track") {
+      deezerSearch.tracks = deezerSearch.data || [];
+    }
+
+    Log.info(
+      "Deezer search response",
+      "",
+      `guild=${guildId}`,
+      `loadType=${deezerSearch?.loadType}`,
+      `trackCount=${deezerSearch?.tracks?.length || 0}`,
+      `firstTrackSource=${deezerSearch?.tracks?.[0]?.info?.sourceName || "none"}`
+    );
+
+    if (deezerSearch?.tracks?.length > 0) {
+      const deezerTrack = deezerSearch.tracks[0];
+      let deezerTrackId = deezerTrack.info?.identifier;
+
+      // Check if we got a Deezer track or YouTube fallback
+      const sourceName = deezerTrack.info?.sourceName || deezerTrack.pluginInfo?.source || "unknown";
+      const uri = deezerTrack.info?.uri || "";
+
+      // Try to extract Deezer ID from URI if we got YouTube fallback
+      if (sourceName === "youtube" && uri.includes("deezer.com")) {
+        const match = uri.match(/\/track\/(\d+)/);
+        if (match) {
+          deezerTrackId = match[1];
+          Log.info("Extracted Deezer ID from URI", "", `guild=${guildId}`, `deezerID=${deezerTrackId}`);
         }
       }
 
-      const targetGenres = referenceGenres.length > 0 ? referenceGenres : profile.topGenres.map((g) => g.genre);
-      const targetFeatures = referenceFeatures || profile.avgFeatures;
-
-      const spotifyRecs = await getSpotifyRecommendations(trackId, 15, targetGenres.slice(0, 2), targetFeatures);
-
-      for (const rec of spotifyRecs) {
-        candidates.push({
-          artist: rec.artist,
-          title: rec.title,
-          source: "spotify",
-          genres: rec.genres || [],
-          spotifyId: rec.spotifyId,
-          popularity: rec.popularity || 0,
-          releaseYear: rec.releaseYear,
-          features: rec.features,
-          score: 0,
-        });
-      }
-
       Log.info(
-        "Collected genre-aware Spotify candidates",
+        "Found track on Deezer",
         "",
         `guild=${guildId}`,
-        `count=${spotifyRecs.length}`,
-        `targetGenres=${targetGenres.slice(0, 2).join(", ")}`
+        `track=${deezerTrack.info?.title}`,
+        `deezerID=${deezerTrackId}`,
+        `sourceName=${sourceName}`,
+        `uri=${uri}`
       );
+
+      // Only proceed if we have numeric Deezer ID
+      if (deezerTrackId && /^\d+$/.test(deezerTrackId)) {
+        // Get recommendations from Deezer using direct REST API
+        const deezerRecQuery = `dzrec:${deezerTrackId}`;
+        const encodedRecQuery = encodeURIComponent(deezerRecQuery);
+        const lavalinkRecUrl = `http://localhost:2333/v4/loadtracks?identifier=${encodedRecQuery}`;
+        const recResponse = await fetch(lavalinkRecUrl, {
+          headers: {
+            Authorization: process.env.LAVALINK_PASSWORD || "youshallnotpass",
+          },
+        });
+        const deezerRecs = await recResponse.json();
+
+        // Convert Lavalink v4 response to Poru format
+        if (deezerRecs.loadType === "search" || deezerRecs.loadType === "track") {
+          deezerRecs.tracks = deezerRecs.data || [];
+        } else if (deezerRecs.loadType === "playlist") {
+          deezerRecs.tracks = deezerRecs.data?.tracks || [];
+        }
+
+        Log.info(
+          "Deezer recommendations response",
+          "",
+          `guild=${guildId}`,
+          `loadType=${deezerRecs?.loadType}`,
+          `trackCount=${deezerRecs?.tracks?.length || 0}`
+        );
+
+        if (deezerRecs?.tracks?.length > 0) {
+          const validTracks = filterValidSongs(deezerRecs.tracks).slice(0, 20);
+
+          // Add Deezer tracks directly without Spotify enrichment for speed
+          for (const track of validTracks) {
+            candidates.push({
+              artist: track.info?.author,
+              title: track.info?.title,
+              identifier: track.info?.identifier,
+              duration: track.info?.length,
+              source: "deezer_recommendations",
+              track: track,
+              genres: [],
+              popularity: 0,
+              releaseYear: null,
+              features: null,
+              score: 0,
+            });
+          }
+
+          Log.info(
+            "Collected Deezer recommendations",
+            "",
+            `guild=${guildId}`,
+            `count=${validTracks.length}`,
+            `referenceTrack=${author} - ${title}`
+          );
+        } else {
+          Log.warning("No Deezer recommendations found", "", `guild=${guildId}`, `deezerID=${deezerTrackId}`);
+        }
+      } else {
+        Log.warning("No Deezer track ID", "", `guild=${guildId}`);
+      }
+    } else {
+      Log.warning("Track not found on Deezer", "", `guild=${guildId}`, `query=${deezerSearchQuery}`);
     }
   } catch (err) {
-    Log.warning("Failed to get Spotify recommendations", err.message);
+    Log.warning("Failed to get Deezer recommendations", err.message, `guild=${guildId}`);
   }
 
-  // Source 2: YouTube Mix Radio
+  // Source 2: YouTube Mix Radio (fallback)
   try {
     const radioQuery = `https://www.youtube.com/watch?v=${identifier}&list=RD${identifier}`;
     const radioRes = await poru.resolve({ query: radioQuery });
@@ -114,7 +194,7 @@ async function collectCandidates(referenceTrack, guildId, profile) {
     Log.warning("Failed to get YouTube Mix", err.message);
   }
 
-  // Source 3: Top artist search
+  // Source 4: Top artist search (last resort)
   if (profile.topArtists.length > 0 && profile.topGenres.length > 0) {
     const topArtist = profile.topArtists[0].artist;
 

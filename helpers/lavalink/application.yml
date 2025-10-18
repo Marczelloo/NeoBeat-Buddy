@@ -61,8 +61,14 @@ plugins:
       enabled: true
       refreshToken: ${YOUTUBE_REFRESH_TOKEN:} # inside the container
   lavasrc:
+    providers: # Search providers for fallback
+      - 'dzsearch:"%ISRC%"'
+      - "dzsearch:%QUERY%"
+      - 'ytsearch:"%ISRC%"'
+      - "ytsearch:%QUERY%"
     sources:
       spotify: true
+      deezer: true
       youtube: true
       ytmsearch: true
     spotify:
@@ -70,3 +76,6 @@ plugins:
       clientSecret: ${SPOTIFY_CLIENT_SECRET}
       countryCode: PL
       playlistPageSize: 100
+    deezer:
+      arl: ${DEEZER_ARL_TOKEN}
+      masterDecryptionKey: ${DEEZER_MASTER_KEY}

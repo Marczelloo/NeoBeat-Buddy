@@ -9,3 +9,5 @@ helpers/lavalink/youtube-cookies.txt
 data
 helpers/data/*
 !helpers/data/.gitkeep
+*.sh
+*.ps1

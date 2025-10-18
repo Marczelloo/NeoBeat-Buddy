@@ -57,7 +57,10 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     }
 
     // Factor 3: Source quality
-    if (candidate.source === "spotify") {
+    if (candidate.source === "deezer_recommendations") {
+      score += 35;
+      scoringDetails.push("source:+35");
+    } else if (candidate.source === "spotify") {
       score += 30;
       scoringDetails.push("source:+30");
     } else if (candidate.source === "youtube_mix") {

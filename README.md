@@ -58,7 +58,7 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 ## Features
 
 - **Slash-only interface** for queueing, playback, and moderation safeguards.
-- **Adaptive smart autoplay** with Spotify recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
+- **Adaptive smart autoplay** with Deezer recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
 - **24/7 radio mode** — bot stays in voice channel permanently and plays music continuously like a radio station.
 - **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), real-time visual feedback, and 10-minute inactivity auto-cleanup.
 - **DJ mode** with role-based permissions, skip voting (dj/vote/hybrid modes), and track suggestion approval workflow.
@@ -79,7 +79,7 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 - **Docker** & **Docker Compose** (for hosting Lavalink or the full stack)
 - **Lavalink** 4.x credentials (see `.env-example`)
 - **Genius API key** (optional, for lyrics)
-- **Spotify credentials** (highly recommended for autoplay with genre awareness, tempo matching, and mood progression)
+- **Deezer credentials** (highly recommended for autoplay with genre awareness, tempo matching, and mood progression)
 
 ## Quick Start
 
@@ -149,13 +149,13 @@ pnpm deploy:dev
 
 2. **Multi-source recommendations** — Pulls suggestions from:
 
-   - **Spotify** — Genre-aware recommendations using Spotify's algorithm with audio feature targeting (tempo, energy, valence, acousticness)
+   - **Deezer Recommendations (primary)** — Returns 40 high-quality recommendations based on the last track in your queue
    - **YouTube Mix** — Related tracks from YouTube's radio feature (fallback/supplement)
    - **Top artist search** — Songs from your most-played artists
 
 3. **Genre consistency** — Maintains your music style:
 
-   - Extracts genre information from Spotify API for each track
+   - Extracts genre information from Spotify API for each track (when available)
    - Tracks top genres across your listening session (e.g., "rock", "indie rock", "alternative")
    - **+30 point bonus** per matching genre in recommendations
    - **-25 point penalty** for tracks with no genre overlap when you have a strong genre profile
@@ -172,7 +172,7 @@ pnpm deploy:dev
    - **Energy arc management** — Builds, maintains, or winds down energy intentionally (+15 for trend, +10 for plateau)
    - **Artist familiarity** — How often you've played them (+5 per occurrence)
    - **Duration similarity** — Matches average song length (+10 within 20%, +5 within 40%)
-   - **Source quality** — Spotify > YouTube Mix > Search (+30/+15/+10)
+   - **Source quality** — Deezer > YouTube Mix > Search (+35/+15/+10)
    - **Smart artist diversity** — Context-aware penalties that prioritize sonic cohesion over strict rotation
    - **Skip learning** — Downweights artists and genres you skip (-20/-15 per skip)
    - **Duplicate prevention** — Never plays the same song twice (-1000 penalty)
@@ -208,18 +208,18 @@ If you're listening to rock music:
 - **"Seven Nation Army"** (genres: garage rock, alternative rock)
 
   - Base: 50 points
-  - Spotify source: +30
+  - Deezer source: +35
   - Genre matches: +30 (garage rock) +30 (alternative rock)
   - Tempo match: +15 (within 15 BPM)
   - Energy arc: +15 (building)
-  - Final: **~170 points** ✅
+  - Final: **~175 points** ✅
 
 - **"Uptown Funk"** (genres: pop, funk)
   - Base: 50 points
-  - Spotify source: +30
+  - Deezer source: +35
   - Genre drift penalty: -25 (no rock genres)
   - Tempo mismatch: -5 (too different)
-  - Final: **~50 points** ❌
+  - Final: **~55 points** ❌
 
 #### Advanced Features
 
@@ -263,15 +263,7 @@ If you're listening to rock music:
 
 #### Audio Feature Targeting
 
-The algorithm uses audio features from Spotify to maintain consistency:
-
-- **Energy** — Intensity and activity level (0.0-1.0)
-- **Danceability** — Rhythm suitability for dancing (0.0-1.0)
-- **Valence** — Musical positivity/happiness (0.0-1.0)
-- **Tempo** — Beats per minute (BPM)
-- **Acousticness** — Acoustic vs. electronic sound (0.0-1.0)
-
-These features are averaged across your session and used as target parameters for Spotify recommendations.
+The algorithm uses Deezer recommendations to maintain consistency, with optional Spotify metadata enrichment for tempo and energy analysis when credentials are configured.
 
 #### Smart Artist Diversity (Context-Aware)
 
@@ -331,7 +323,7 @@ If you're listening to rock:
 
 **When enabled**, autoplay triggers automatically when the queue ends, seamlessly continuing your listening session with curated recommendations that match your genre preferences, tempo flow, mood, and energy levels.
 
-**Note:** Spotify credentials are highly recommended for the best autoplay experience with genre consistency and advanced features. Without Spotify, the bot falls back to YouTube Mix recommendations (no genre/tempo/mood awareness).
+**Note:** Deezer credentials are required for the best autoplay experience with genre consistency. Without Deezer, the bot falls back to YouTube Mix recommendations (no genre awareness). Spotify credentials are optional and only used for metadata enrichment.
 
 ---
 
@@ -516,8 +508,10 @@ _EQ settings persist across bot restarts and are restored automatically when the
    LAVALINK_PORT=2333
    LAVALINK_PASSWORD=your-secure-password
    GENIUS_API_KEY=your-genius-api-key
-   SPOTIFY_CLIENT_ID=your-spotify-id
-   SPOTIFY_CLIENT_SECRET=your-spotify-secret
+   DEEZER_ARL_TOKEN=your-deezer-arl-token
+   DEEZER_MASTER_KEY=g4el58wc0zvf9na1
+   SPOTIFY_CLIENT_ID=your-spotify-id  # Optional
+   SPOTIFY_CLIENT_SECRET=your-spotify-secret  # Optional
    ```
 
 3. **Deploy slash commands:**
@@ -599,20 +593,22 @@ docker load -i neo-bot.tar
 
 ### Optional
 
-| Variable                      | Default  | Description                                  |
-| ----------------------------- | -------- | -------------------------------------------- |
-| `GENIUS_API_KEY`              | -        | Genius API key for lyrics lookup             |
-| `SPOTIFY_CLIENT_ID`           | -        | Spotify client ID (for autoplay and Spotify) |
-| `SPOTIFY_CLIENT_SECRET`       | -        | Spotify client secret                        |
-| `YOUTUBE_PO_TOKEN`            | -        | YouTube PO token for age-restricted content  |
-| `YOUTUBE_VISITOR_DATA`        | -        | YouTube visitor data                         |
-| `YOUTUBE_REFRESH_TOKEN`       | -        | YouTube refresh token                        |
-| `DEFAULT_VOLUME`              | `50`     | Default playback volume (0-100)              |
-| `INACTIVITY_TIMEOUT_MS`       | `300000` | Inactivity timeout in ms (5 minutes)         |
-| `PROGRESS_UPDATE_INTERVAL_MS` | `10000`  | Player progress update interval (10 seconds) |
-| `TRACK_HISTORY_LIMIT`         | `20`     | Max tracks to keep in history                |
-| `FAST_LOGS`                   | `1`      | Enable fast logging (0 to disable)           |
-| `LOG_TO_FILE`                 | `1`      | Enable file logging (0 to disable)           |
+| Variable                      | Default  | Description                                                |
+| ----------------------------- | -------- | ---------------------------------------------------------- |
+| `GENIUS_API_KEY`              | -        | Genius API key for lyrics lookup                           |
+| `SPOTIFY_CLIENT_ID`           | -        | Spotify client ID (optional, for metadata enrichment)      |
+| `SPOTIFY_CLIENT_SECRET`       | -        | Spotify client secret                                      |
+| `DEEZER_ARL_TOKEN`            | -        | Deezer ARL cookie for recommendations (highly recommended) |
+| `DEEZER_MASTER_KEY`           | -        | Deezer master decryption key (required with ARL)           |
+| `YOUTUBE_PO_TOKEN`            | -        | YouTube PO token for age-restricted content                |
+| `YOUTUBE_VISITOR_DATA`        | -        | YouTube visitor data                                       |
+| `YOUTUBE_REFRESH_TOKEN`       | -        | YouTube refresh token                                      |
+| `DEFAULT_VOLUME`              | `50`     | Default playback volume (0-100)                            |
+| `INACTIVITY_TIMEOUT_MS`       | `300000` | Inactivity timeout in ms (5 minutes)                       |
+| `PROGRESS_UPDATE_INTERVAL_MS` | `10000`  | Player progress update interval (10 seconds)               |
+| `TRACK_HISTORY_LIMIT`         | `20`     | Max tracks to keep in history                              |
+| `FAST_LOGS`                   | `1`      | Enable fast logging (0 to disable)                         |
+| `LOG_TO_FILE`                 | `1`      | Enable file logging (0 to disable)                         |
 
 ---
 
@@ -671,11 +667,12 @@ NeoBeat-Buddy/
 
 #### Multi-Source Candidate Collection
 
-1. **Spotify Recommendations** (primary, if credentials available)
+1. **Deezer Recommendations** (primary)
 
-   - Uses seed track + genre seeds + audio feature targets (including tempo)
-   - Returns 15 genre-matched candidates with full metadata
-   - Each candidate includes: genres, popularity, release year, audio features (tempo, energy, valence, etc.)
+   - Uses Deezer's recommendation algorithm based on seed track
+   - Returns 40 high-quality recommendations with full metadata
+   - Fast and reliable - no additional API calls needed
+   - Provides artist, title, duration, and track identifiers
 
 2. **YouTube Mix** (fallback/supplement)
 
@@ -702,7 +699,7 @@ Each candidate receives a score based on:
 | **Energy Arc**         | +15 / +10       | Continues energy trend (+15) or maintains plateau (+10)       |
 | **Artist Familiarity** | +5 per play     | How often you've played this artist                           |
 | **Duration Match**     | +10 / +5 / -5   | Within 20% (+10), 40% (+5), or >40% (-5) of average           |
-| **Source Quality**     | +30 / +15 / +10 | Spotify (+30), YouTube Mix (+15), Search (+10)                |
+| **Source Quality**     | +35 / +15 / +10 | Deezer (+35), YouTube Mix (+15), Search (+10)                 |
 | **Smart Diversity**    | +20 / -5 to -40 | Context-aware: vibe match reduces penalty, consecutive -40    |
 | **Skip Learning**      | -20 per skip    | Artist you've skipped recently (30min window)                 |
 | **Genre Skip**         | -15 per skip    | Genre you've skipped recently                                 |
@@ -859,11 +856,11 @@ When Discord changes the voice channel region (moving to a different voice serve
 ### Autoplay not working or genre drifting
 
 - Ensure `/autoplay` is enabled (check now-playing message)
-- **Verify Spotify credentials** in `.env` — required for genre-aware recommendations
-- Check logs for "Starting smart autoplay" and "Session profile built" messages
-- Look for "topGenres" in logs to confirm genre detection
+- **Verify Deezer credentials** in `.env` — `DEEZER_ARL_TOKEN` and `DEEZER_MASTER_KEY` required for recommendations
+- Check logs for "Starting smart autoplay" and "Collected Deezer recommendations" messages
 - Autoplay only triggers when queue is completely empty
-- Without Spotify: Falls back to YouTube Mix (no genre/tempo/mood awareness)
+- Without Deezer: Falls back to YouTube Mix (may drift genres)
+- Check Lavalink logs for Deezer authentication errors
 
 ### EQ or custom presets not saving
 
