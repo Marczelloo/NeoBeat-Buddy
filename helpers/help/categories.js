@@ -39,8 +39,9 @@
         },
         {
           name: "seekto",
-          description: "Jump to a specific timestamp in the current track (DJ restricted in DJ mode).",
-          usage: "/seekto position:<seconds|mm:ss|hh:mm:ss>",
+          description:
+            "Jump to a specific timestamp in the current track (DJ restricted in DJ mode). Accepts flexible formats: 90, 3:00, or 1:30:45.",
+          usage: "/seekto position:<seconds|m:ss|mm:ss|h:mm:ss>",
         },
         {
           name: "volume",

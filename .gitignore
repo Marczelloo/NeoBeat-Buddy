@@ -8,6 +8,7 @@ helpers/lavalink/youtube-cookies.txt
 *.txt
 data
 helpers/data/*
+!helpers/data/patchNotes.json
 !helpers/data/.gitkeep
 *.sh
 *.ps1

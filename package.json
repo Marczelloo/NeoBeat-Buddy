@@ -1,6 +1,6 @@
 {
   "name": "neo-beat-buddy",
-  "version": "1.0.5",
+  "version": "1.0.8",
   "description": "Educational music bot example (NOT for production use) | A feature-rich Discord music bot with DJ mode, advanced statistics, and persistent EQ settings",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
