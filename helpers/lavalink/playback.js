@@ -275,6 +275,15 @@ async function lavalinkPrevious(guildId) {
     if (player.currentTrack) {
       await player.seekTo(0);
       clearInactivityTimer(guildId, "previousRestart");
+
+      // Update the player message to show position reset
+      const { refreshNowPlayingMessage } = require("../buttons");
+      const { getClient } = require("../clientRegistry");
+      const client = getClient();
+      if (client) {
+        await refreshNowPlayingMessage(client, guildId, player, player.loop ?? "NONE", 0);
+      }
+
       return { status: "restart", track: cloneTrack(player.currentTrack) };
     }
 
@@ -290,15 +299,16 @@ async function lavalinkPrevious(guildId) {
 
   clearProgressInterval(guildId);
 
-  await player.node.rest.updatePlayer({
-    guildId,
-    data: { track: { encoded: previous.track }, position: 0 },
-  });
-
+  // Update player state before calling updatePlayer
   player.currentTrack = cloneTrack(previous);
   player.isPlaying = true;
   player.isPaused = false;
   player.position = 0;
+
+  await player.node.rest.updatePlayer({
+    guildId,
+    data: { track: { encoded: previous.track }, position: 0 },
+  });
 
   state.history = history;
   state.currentTrack = cloneTrack(previous);
@@ -308,6 +318,8 @@ async function lavalinkPrevious(guildId) {
 
   clearInactivityTimer(guildId, "previousCommand");
   scheduleProgressUpdates(player);
+
+  // Let Lavalink's trackStart event handle the UI update
 
   return { status: "previous", track: previous };
 }

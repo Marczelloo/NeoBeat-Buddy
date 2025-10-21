@@ -30,10 +30,11 @@ module.exports = {
     const position = interaction.options.getString("position");
     if (!position) return interaction.editReply({ embeds: [errorEmbed("You must specify a position to seek to.")] });
 
-    const isValidPosition = /^\d+$/.test(position) || /^(?:\d{1,2}:)?\d{2}:\d{2}$/.test(position);
+    const isValidPosition =
+      /^\d+$/.test(position) || /^\d{1,2}:\d{1,2}$/.test(position) || /^\d{1,2}:\d{1,2}:\d{1,2}$/.test(position);
     if (!isValidPosition)
       return interaction.editReply({
-        embeds: [errorEmbed("Invalid position format. Use seconds or mm:ss/hh:mm:ss format.")],
+        embeds: [errorEmbed("Invalid position format. Use seconds (e.g. 90) or timestamp (e.g. 3:00 or 1:30:45).")],
       });
 
     const positionInMs = /^\d+$/.test(position)
@@ -71,7 +72,20 @@ module.exports = {
 
     const success = await lavalinkSeekTo(interaction.guild.id, positionInMs);
     if (success) {
-      return interaction.editReply({ embeds: [successEmbed(`Seeking to ${position}...`)] });
+      // Format the position for display
+      const totalSeconds = Math.floor(positionInMs / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      let formattedPosition;
+      if (hours > 0) {
+        formattedPosition = `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+      } else {
+        formattedPosition = `${minutes}:${String(seconds).padStart(2, "0")}`;
+      }
+
+      return interaction.editReply({ embeds: [successEmbed(`Seeking to ${formattedPosition}...`)] });
     }
 
     return interaction.editReply({ embeds: [errorEmbed("Failed to seek to the specified position.")] });

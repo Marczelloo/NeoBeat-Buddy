@@ -12,6 +12,7 @@ const {
   createPoru,
   lavalinkPrevious,
   getLyricsState,
+  getPlayer,
 } = require("./lavalink/index");
 const { buildLyricsResponse } = require("./lavalink/lyricsFormatter");
 const { recordSkip } = require("./lavalink/skipLearning");

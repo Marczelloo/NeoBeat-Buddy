@@ -52,8 +52,8 @@
 - [x] fix duplicate tracks playing in autoplay (enhanced from 20 to 100 track memory + dual-layer detection)
 - [x] fix fallback source playing tracks twice (removed manual play() call)
 - [x] fix bot stopping after voice channel region change (automatic reconnection)
-- [ ] fix seekto formatting
-- [ ] fix previous button not refreshing player embed
+- [x] fix seekto formatting
+- [x] fix previous button not refreshing player embed
 
 ## OTHER
 
