@@ -24,64 +24,71 @@ module.exports = {
       poru.init(client);
 
       poru.on("trackStartUI", async (player, track) => {
-        const info = track?.info || {};
+        try {
+          const info = track?.info || {};
 
-        if (!info.title) {
-          Log.warning(
-            "trackStartUI fired with track missing title",
-            "",
-            `guild=${player.guildId}`,
-            `track=${track?.track?.substring(0, 20) || "unknown"}`
+          if (!info.title) {
+            Log.warning(
+              "trackStartUI fired with track missing title",
+              "",
+              `guild=${player.guildId}`,
+              `track=${track?.track?.substring(0, 20) || "unknown"}`
+            );
+            return;
+          }
+
+          const state = getGuildState(player.guildId) ?? {};
+          const channelId = state.nowPlayingChannel ?? player.textChannel;
+          if (!channelId) return;
+
+          const channel = await client.channels.fetch(channelId).catch(() => null);
+          if (!channel) return;
+
+          if (state.nowPlayingMessage) {
+            await channel.messages.delete(state.nowPlayingMessage).catch((err) => {
+              if (err?.code !== 10008) Log.error("Failed to delete now-playing message", err);
+            });
+          }
+
+          const duration = info.isStream ? "Live" : formatDuration(info.length ?? 0);
+          const position = info.isStream ? "Live" : formatDuration(player.position ?? 0);
+          const artwork = info.artworkUrl ?? info.image ?? "https://i.imgur.com/3g7nmJC.png";
+          const autoplay = getGuildState(player.guildId)?.autoplay ?? false;
+
+          const embed = playerEmbed(
+            info.title,
+            info.uri,
+            artwork,
+            info.author ?? "Unknown",
+            info.requesterTag ?? "Unknown",
+            info.requesterAvatar ?? null,
+            duration,
+            position,
+            info.loop,
+            player.volume,
+            autoplay
           );
-          return;
-        }
 
-        const state = getGuildState(player.guildId) ?? {};
-        const channelId = state.nowPlayingChannel ?? player.textChannel;
-        if (!channelId) return;
-
-        const channel = await client.channels.fetch(channelId).catch(() => null);
-        if (!channel) return;
-
-        if (state.nowPlayingMessage) {
-          await channel.messages.delete(state.nowPlayingMessage).catch((err) => {
-            if (err?.code !== 10008) Log.error("Failed to delete now-playing message", err);
+          const controls = buildControlRows({
+            paused: player.isPaused,
+            loopMode: player.loop ?? "NONE",
           });
+
+          const message = await channel.send({ embeds: [embed], components: controls }).catch((err) => {
+            Log.error("Failed to send now-playing message", err);
+            return null;
+          });
+          if (!message) return;
+
+          updateGuildState(player.guildId, {
+            nowPlayingMessage: message.id,
+            nowPlayingChannel: channel.id,
+            nowPlayingRequesterTag: info.requesterTag ?? "Unknown",
+            nowPlayingRequesterAvatar: info.requesterAvatar ?? null,
+          });
+        } catch (error) {
+          Log.error("Error in trackStartUI handler", error);
         }
-
-        const duration = info.isStream ? "Live" : formatDuration(info.length ?? 0);
-        const position = info.isStream ? "Live" : formatDuration(player.position ?? 0);
-        const artwork = info.artworkUrl ?? info.image ?? "https://i.imgur.com/3g7nmJC.png";
-        const autoplay = getGuildState(player.guildId)?.autoplay ?? false;
-
-        const embed = playerEmbed(
-          info.title,
-          info.uri,
-          artwork,
-          info.author ?? "Unknown",
-          info.requesterTag ?? "Unknown",
-          info.requesterAvatar ?? null,
-          duration,
-          position,
-          info.loop,
-          player.volume,
-          autoplay
-        );
-
-        const controls = buildControlRows({
-          paused: player.isPaused,
-          loopMode: player.loop ?? "NONE",
-        });
-
-        const message = await channel.send({ embeds: [embed], components: controls }).catch(() => null);
-        if (!message) return;
-
-        updateGuildState(player.guildId, {
-          nowPlayingMessage: message.id,
-          nowPlayingChannel: channel.id,
-          nowPlayingRequesterTag: info.requesterTag ?? "Unknown",
-          nowPlayingRequesterAvatar: info.requesterAvatar ?? null,
-        });
       });
 
       poru.on("trackEnd", async (player) => {

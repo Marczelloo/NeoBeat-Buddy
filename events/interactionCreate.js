@@ -144,6 +144,29 @@ module.exports = {
         return;
       }
 
+      // Playlist pagination buttons
+      if (interaction.customId.startsWith("playlist-prev:") || interaction.customId.startsWith("playlist-next:")) {
+        const parts = interaction.customId.split(":");
+        const action = parts[0].replace("playlist-", ""); // "prev" or "next"
+        const playlistName = parts[1];
+        const currentPage = parseInt(parts[2], 10);
+
+        const userId = interaction.user.id;
+        const guildId = interaction.guild.id;
+        const { getPlaylist } = require("../helpers/playlists/store");
+        const playlist = getPlaylist(userId, guildId, playlistName);
+
+        if (!playlist) {
+          await interaction.reply({ content: "Playlist not found.", ephemeral: true });
+          return;
+        }
+
+        const newPage = action === "next" ? currentPage + 1 : currentPage - 1;
+        const playlistCommand = require("../commands/music/playlist");
+        await playlistCommand.showPlaylistPage(interaction, playlist, newPage);
+        return;
+      }
+
       const poru = createPoru(getClient());
       const player = poru.players.get(interaction.guild.id);
       if (!player) {

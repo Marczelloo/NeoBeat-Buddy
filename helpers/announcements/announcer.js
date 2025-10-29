@@ -95,31 +95,127 @@ function buildPatchNotesEmbed(version, pageIndex = 0, totalPages = 1) {
   // Add features section
   if (notes.features && notes.features.length > 0) {
     const featuresText = notes.features.map((f) => `✨ ${f}`).join("\n");
-    embed.addFields({
-      name: "🆕 New Features",
-      value: featuresText,
-      inline: false,
-    });
+    // Discord limit: 1024 characters per field value
+    if (featuresText.length > 1024) {
+      // Split into multiple fields if too long
+      const chunks = [];
+      let currentChunk = "";
+
+      for (const feature of notes.features) {
+        const line = `✨ ${feature}\n`;
+        if ((currentChunk + line).length > 1024) {
+          chunks.push(currentChunk.trim());
+          currentChunk = line;
+        } else {
+          currentChunk += line;
+        }
+      }
+      if (currentChunk) chunks.push(currentChunk.trim());
+
+      // Add first chunk with title
+      embed.addFields({
+        name: "🆕 New Features",
+        value: chunks[0],
+        inline: false,
+      });
+
+      // Add remaining chunks without title
+      for (let i = 1; i < chunks.length; i++) {
+        embed.addFields({
+          name: "\u200b", // Zero-width space
+          value: chunks[i],
+          inline: false,
+        });
+      }
+    } else {
+      embed.addFields({
+        name: "🆕 New Features",
+        value: featuresText,
+        inline: false,
+      });
+    }
   }
 
   // Add fixes section
   if (notes.fixes && notes.fixes.length > 0) {
     const fixesText = notes.fixes.map((f) => `🔧 ${f}`).join("\n");
-    embed.addFields({
-      name: "🐛 Bug Fixes",
-      value: fixesText,
-      inline: false,
-    });
+    // Discord limit: 1024 characters per field value
+    if (fixesText.length > 1024) {
+      const chunks = [];
+      let currentChunk = "";
+
+      for (const fix of notes.fixes) {
+        const line = `🔧 ${fix}\n`;
+        if ((currentChunk + line).length > 1024) {
+          chunks.push(currentChunk.trim());
+          currentChunk = line;
+        } else {
+          currentChunk += line;
+        }
+      }
+      if (currentChunk) chunks.push(currentChunk.trim());
+
+      embed.addFields({
+        name: "🐛 Bug Fixes",
+        value: chunks[0],
+        inline: false,
+      });
+
+      for (let i = 1; i < chunks.length; i++) {
+        embed.addFields({
+          name: "\u200b",
+          value: chunks[i],
+          inline: false,
+        });
+      }
+    } else {
+      embed.addFields({
+        name: "🐛 Bug Fixes",
+        value: fixesText,
+        inline: false,
+      });
+    }
   }
 
   // Add changes section
   if (notes.changes && notes.changes.length > 0) {
     const changesText = notes.changes.map((c) => `⚡ ${c}`).join("\n");
-    embed.addFields({
-      name: "📝 Changes & Improvements",
-      value: changesText,
-      inline: false,
-    });
+    // Discord limit: 1024 characters per field value
+    if (changesText.length > 1024) {
+      const chunks = [];
+      let currentChunk = "";
+
+      for (const change of notes.changes) {
+        const line = `⚡ ${change}\n`;
+        if ((currentChunk + line).length > 1024) {
+          chunks.push(currentChunk.trim());
+          currentChunk = line;
+        } else {
+          currentChunk += line;
+        }
+      }
+      if (currentChunk) chunks.push(currentChunk.trim());
+
+      embed.addFields({
+        name: "📝 Changes & Improvements",
+        value: chunks[0],
+        inline: false,
+      });
+
+      for (let i = 1; i < chunks.length; i++) {
+        embed.addFields({
+          name: "\u200b",
+          value: chunks[i],
+          inline: false,
+        });
+      }
+    } else {
+      embed.addFields({
+        name: "📝 Changes & Improvements",
+        value: changesText,
+        inline: false,
+      });
+    }
   }
 
   // Add footer with version and page info

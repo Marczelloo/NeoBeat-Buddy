@@ -65,6 +65,132 @@
             "Toggle 24/7 radio mode - bot stays in voice channel and plays continuously like a radio station (DJ only).",
           usage: "/247",
         },
+        {
+          name: "like",
+          description: "Add the currently playing track to your Liked Songs playlist.",
+          usage: "/like",
+        },
+      ],
+    },
+    playlists: {
+      label: "Playlists",
+      description: "Create, manage, share, and play custom playlists.",
+      emoji: "📋",
+      commands: [
+        {
+          name: "playlist create",
+          description: "Create a new user or server playlist.",
+          usage:
+            "/playlist create name:<name> [type:user|server] [public:false] [description:text] [collaborative:false]",
+        },
+        {
+          name: "playlist list",
+          description: "View your playlists or another user's public playlists.",
+          usage: "/playlist list [filter:all|user|server|shared] [user:@someone]",
+        },
+        {
+          name: "playlist view",
+          description:
+            "View all tracks in a playlist with pagination controls. Use Next/Previous buttons to browse through all tracks (15 per page).",
+          usage: "/playlist view name:<playlist>",
+        },
+        {
+          name: "playlist play",
+          description: "Load playlist into queue. DJ permission required for server playlists in DJ mode.",
+          usage: "/playlist play name:<playlist> [shuffle:false] [prepend:false]",
+        },
+        {
+          name: "playlist add",
+          description:
+            "Add the current track or search for a track to add to playlist. Track search supports autocomplete suggestions (same as /play).",
+          usage: "/playlist add name:<playlist> [track:query or URL]",
+        },
+        {
+          name: "playlist remove",
+          description: "Remove a track from playlist by position (1-based).",
+          usage: "/playlist remove name:<playlist> position:<number>",
+        },
+        {
+          name: "playlist rename",
+          description: "Rename a playlist.",
+          usage: "/playlist rename old:<name> new:<name>",
+        },
+        {
+          name: "playlist move",
+          description: "Reorder tracks within a playlist.",
+          usage: "/playlist move name:<playlist> from:<position> to:<position>",
+        },
+        {
+          name: "playlist edit",
+          description: "Update playlist description, visibility, or collaboration settings.",
+          usage: "/playlist edit name:<playlist> [description:text] [public:true|false] [collaborative:true|false]",
+        },
+        {
+          name: "playlist collaborators",
+          description: "Add or remove collaborators from a playlist.",
+          usage: "/playlist collaborators name:<playlist> [add:@user] [remove:@user]",
+        },
+        {
+          name: "playlist merge",
+          description: "Merge two playlists (copies tracks from source to target).",
+          usage: "/playlist merge target:<playlist> source:<playlist>",
+        },
+        {
+          name: "playlist share",
+          description: "Share playlist with a specific user or generate a share code.",
+          usage: "/playlist share name:<playlist> [user:@someone]",
+        },
+        {
+          name: "playlist import",
+          description: "Import a playlist from a share code, Spotify URL, or YouTube URL.",
+          usage: "/playlist import source:<code or URL> [name:custom name]",
+        },
+      ],
+      notes: [
+        {
+          name: "Playlist Types",
+          value: [
+            "- **User Playlists**: Personal playlists visible only to you by default.",
+            "  - Can be made public for others to view and play.",
+            "  - Can be shared with specific users or via share codes.",
+            "- **Server Playlists**: Available to everyone in the server.",
+            "  - Anyone can create server playlists.",
+            "  - In DJ mode, only DJs can play server playlists.",
+            "- Both types support collaborative mode for shared editing.",
+          ].join("\n"),
+        },
+        {
+          name: "Liked Songs",
+          value: [
+            "- Use `/like` while a track is playing to add it to your personal Liked Songs playlist.",
+            "- Liked Songs is automatically created for each user when they like their first track.",
+            "- View your Liked Songs with `/playlist view name:Liked Songs`.",
+            "- Play your Liked Songs like any other playlist: `/playlist play name:Liked Songs`.",
+          ].join("\n"),
+        },
+        {
+          name: "Sharing & Collaboration",
+          value: [
+            "- **Share Codes**: Generate a code with `/playlist share` (expires in 24 hours).",
+            "  - Anyone can import the playlist with `/playlist import code:<code>`.",
+            "  - Imported playlists become the importer's personal copy.",
+            "- **User Sharing**: Share directly with specific users using `/playlist share user:@someone`.",
+            "  - Shared users can view and play the playlist.",
+            "  - Owner must enable collaborative mode for others to edit.",
+            "- **Collaborative Mode**: Enable with `/playlist edit collaborative:true`.",
+            "  - Allows collaborators and shared users to add/remove tracks.",
+            "  - Only the owner can delete, rename, or change settings.",
+          ].join("\n"),
+        },
+        {
+          name: "Permissions",
+          value: [
+            "- **Owner-only actions**: Delete, rename, edit settings, manage collaborators.",
+            "- **Collaborator actions**: Add/remove tracks (if collaborative mode enabled).",
+            "- **Public playlists**: Anyone can view and play, but only owner/collaborators can modify.",
+            "- **DJ Mode**: Only DJs can use `/playlist play` on server playlists when DJ mode is active.",
+          ].join("\n"),
+        },
       ],
     },
     queue: {

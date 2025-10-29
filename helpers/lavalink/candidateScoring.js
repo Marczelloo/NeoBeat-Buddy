@@ -66,6 +66,9 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     } else if (candidate.source === "youtube_mix") {
       score += 15;
       scoringDetails.push("source:+15");
+    } else if (candidate.source === "youtube_search") {
+      score += 12;
+      scoringDetails.push("source:+12");
     } else if (candidate.source === "top_artist_search") {
       score += 10;
       scoringDetails.push("source:+10");
@@ -318,13 +321,42 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
 
     // Additional title-based duplicate check for stronger prevention
     if (!isDuplicateById && candidate.title && candidate.artist) {
-      const normalizedTitle = candidate.title.toLowerCase().trim();
-      const normalizedArtist = candidate.artist.toLowerCase().trim();
+      // Normalize function: remove common YouTube suffixes, special chars, extra spaces
+      const normalize = (str) => {
+        return str
+          .toLowerCase()
+          .replace(/\(official\s*(video|audio|music\s*video|mv|lyric video)?\)/gi, "")
+          .replace(/\[official\s*(video|audio|music\s*video|mv|lyric video)?\]/gi, "")
+          .replace(/\s*-?\s*(official|lyric|lyrics|video|audio|hq|hd|4k|8k|visualizer|music video|mv)\s*$/gi, "")
+          .replace(/\s*\(feat\..*?\)/gi, "") // Remove featuring artists
+          .replace(/\s*\[feat\..*?\]/gi, "")
+          .replace(/[^\w\s]/g, "") // Remove special characters
+          .replace(/\s+/g, " ") // Normalize whitespace
+          .trim();
+      };
+
+      const normalizedTitle = normalize(candidate.title);
+      const normalizedArtist = normalize(candidate.artist);
 
       const isDuplicateByTitle = profile.recentTracks?.some((recentTrack) => {
-        const recentTitle = (recentTrack?.info?.title || "").toLowerCase().trim();
-        const recentArtist = (recentTrack?.info?.author || "").toLowerCase().trim();
-        return recentTitle === normalizedTitle && recentArtist === normalizedArtist;
+        const recentTitle = normalize(recentTrack?.info?.title || "");
+        const recentArtist = normalize(recentTrack?.info?.author || "");
+
+        // Check if normalized titles match (fuzzy matching)
+        const titleMatch = recentTitle === normalizedTitle;
+
+        // Also check if one title contains the other (catches partial matches)
+        const titleContains =
+          (recentTitle.length > 5 && normalizedTitle.includes(recentTitle)) ||
+          (normalizedTitle.length > 5 && recentTitle.includes(normalizedTitle));
+
+        // Artist match (exact or partial)
+        const artistMatch = recentArtist === normalizedArtist;
+        const artistContains =
+          (recentArtist.length > 3 && normalizedArtist.includes(recentArtist)) ||
+          (normalizedArtist.length > 3 && recentArtist.includes(normalizedArtist));
+
+        return (titleMatch || titleContains) && (artistMatch || artistContains);
       });
 
       if (isDuplicateByTitle) {

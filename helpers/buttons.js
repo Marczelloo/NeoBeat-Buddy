@@ -12,7 +12,6 @@ const {
   createPoru,
   lavalinkPrevious,
   getLyricsState,
-  getPlayer,
 } = require("./lavalink/index");
 const { buildLyricsResponse } = require("./lavalink/lyricsFormatter");
 const { recordSkip } = require("./lavalink/skipLearning");
@@ -27,6 +26,7 @@ const PAUSE_EMOJI = "1198248585624571904";
 const RESUME_EMOJI = "1198248583162511430";
 const LYRICS_EMOJI = "1422570950951571456";
 const VOLUME_EMOJI = "1422570891283529738";
+const LIKE_EMOJI = "1432456097146470513"; // Using Unicode emoji temporarily - replace with custom emoji ID when available
 
 function createButton(id, style, emoji, disabled = false) {
   return new ButtonBuilder().setCustomId(id).setStyle(style).setEmoji(emoji).setDisabled(disabled);
@@ -67,13 +67,18 @@ function volumeButton(disabled = false) {
   return createButton("volume-button", ButtonStyle.Primary, VOLUME_EMOJI, disabled);
 }
 
+function likeButton(disabled = false) {
+  return createButton("like-button", ButtonStyle.Secondary, LIKE_EMOJI, disabled);
+}
+
 function buildControlRows({ paused = false, loopMode = "NONE", disabled = false } = {}) {
   return [
     new ActionRowBuilder().addComponents(
       rewindButton(disabled),
       pauseButton(disabled || paused),
       resumeButton(disabled || !paused),
-      skipButton(disabled)
+      skipButton(disabled),
+      likeButton(disabled)
     ),
     new ActionRowBuilder().addComponents(
       loopButton(disabled, loopMode),
@@ -275,6 +280,43 @@ async function handleControlButtons(interaction, player) {
         embeds,
       });
 
+      return;
+    }
+    case "like-button": {
+      const { getLikedSongs } = require("./playlists/store");
+      const { addTrack } = require("./playlists/store");
+
+      if (!player?.currentTrack) {
+        await interaction.followUp({
+          embeds: [errorEmbed("No track is currently playing.")],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      // Ensure Liked Songs exists
+      getLikedSongs(interaction.user.id);
+
+      // Add track
+      const result = addTrack(interaction.user.id, guildId, "Liked Songs", player.currentTrack);
+
+      if (!result.success) {
+        await interaction.followUp({
+          embeds: [errorEmbed(result.error)],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const { successEmbed } = require("./embeds");
+      const embed = successEmbed("Added to Liked Songs ❤️").setDescription(
+        `**${player.currentTrack.info.title}** by ${player.currentTrack.info.author}`
+      );
+
+      await interaction.followUp({
+        embeds: [embed],
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
     default:

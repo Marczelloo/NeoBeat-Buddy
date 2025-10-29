@@ -191,7 +191,40 @@ async function collectCandidates(referenceTrack, guildId, profile) {
       Log.info("Collected YouTube Mix candidates", "", `guild=${guildId}`, `count=${validTracks.length}`);
     }
   } catch (err) {
-    Log.warning("Failed to get YouTube Mix", err.message);
+    Log.warning("Failed to get YouTube Mix", err.message, `guild=${guildId}`);
+  }
+
+  // Source 3: Generic YouTube search fallback (when Mix fails)
+  if (candidates.length === 0) {
+    try {
+      Log.info("Trying generic YouTube search fallback", "", `guild=${guildId}`, `query=${author} ${title}`);
+      const searchQuery = `ytsearch:${author} ${title}`;
+      const searchRes = await poru.resolve({ query: searchQuery });
+
+      if (searchRes?.tracks?.length > 0) {
+        const validTracks = filterValidSongs(searchRes.tracks).slice(0, 15);
+
+        validTracks.forEach((track) => {
+          candidates.push({
+            artist: track.info?.author,
+            title: track.info?.title,
+            identifier: track.info?.identifier,
+            duration: track.info?.length,
+            source: "youtube_search",
+            track: track,
+            genres: [],
+            popularity: 0,
+            releaseYear: null,
+            features: null,
+            score: 0,
+          });
+        });
+
+        Log.info("Collected YouTube search candidates", "", `guild=${guildId}`, `count=${validTracks.length}`);
+      }
+    } catch (err) {
+      Log.warning("Failed YouTube search fallback", err.message, `guild=${guildId}`);
+    }
   }
 
   // Source 4: Top artist search (last resort)

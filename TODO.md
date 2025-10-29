@@ -26,7 +26,8 @@
 - [x] 24/7 command
 - [x] version announcements with patch notes system (/changelog command, auto-announce on updates, configurable via /setup announcements)
 - [x] add to play command songs autocompleted based on user query
-- [ ] server playlists, user playlists
+- [x] server playlists, user playlists (with sharing, collaboration, liked songs, autocomplete)
+- [ ] other commands
 - [ ] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )
 - [ ] other commands
 

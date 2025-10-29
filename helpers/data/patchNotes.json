@@ -1,4 +1,37 @@
 {
+  "1.0.9": {
+    "version": "1.0.9",
+    "date": "2025-10-29",
+    "title": "Complete Playlist System",
+    "features": [
+      "Full playlist management system - create, edit, share, and play custom playlists",
+      "Two playlist types: user playlists (personal) and server playlists (shared with server)",
+      "Liked Songs playlist with quick-add via /like command and player embed button (❤️)",
+      "Share codes with 24-hour expiry - generate 8-character codes to share playlists",
+      "Direct user sharing - share playlists with specific users",
+      "Collaborative playlists - allow collaborators to add/remove tracks",
+      "Import playlists from Spotify URLs with automatic thumbnail extraction",
+      "Import playlists from YouTube URLs with full metadata support",
+      "Playlist pagination - browse through all tracks with Next/Previous buttons",
+      "Track search in playlist add - autocomplete suggestions just like /play command",
+      "Playlist thumbnails - automatically extracted from Spotify/YouTube imports",
+      "Protected Liked Songs - cannot be deleted or renamed",
+      "13 playlist subcommands: create, delete, list, view, play, add, remove, rename, move, edit, collaborators, merge, share, import"
+    ],
+    "fixes": [
+      "Playlist view now uses pagination buttons that update the same message instead of sending new embeds",
+      "Like button moved to first row of player controls (after skip button) for better accessibility"
+    ],
+    "changes": [
+      "Playlists stored in JSON format (helpers/data/playlists.json)",
+      "Share codes expire after 24 hours with automatic cleanup",
+      "Playlist add command supports track search with autocomplete (same as /play)",
+      "Collaborative mode allows shared editing while protecting owner permissions",
+      "DJ mode integration - only DJs can play server playlists when DJ mode active",
+      "Comprehensive help documentation added for all playlist features",
+      "Player embed like button uses Unicode ❤️ (temporary, can be replaced with custom emoji)"
+    ]
+  },
   "1.0.8": {
     "version": "1.0.8",
     "date": "2025-10-21",

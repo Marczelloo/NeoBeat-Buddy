@@ -367,6 +367,122 @@ If you're listening to rock:
 
 ---
 
+### 📋 Playlists
+
+**Create and manage custom playlists** for organizing your favorite tracks, sharing with friends, and building collaborative music collections.
+
+#### Playlist Management
+
+- **`/playlist create name:<name> [type:user|server] [public:false] [description:text] [collaborative:false]`**  
+  Create a new playlist.
+
+  - **User playlists**: Personal playlists (default), can be made public or shared.
+  - **Server playlists**: Available to everyone in the server.
+  - **Collaborative mode**: Allow collaborators to add/remove tracks.
+
+- **`/playlist list [filter:all|user|server|shared] [user:@someone]`**  
+  View your playlists or another user's public playlists with filtering options.
+
+- **`/playlist view name:<playlist>`**  
+  Display all tracks in a playlist with **pagination controls** (Next/Previous buttons to browse through all tracks).
+
+- **`/playlist play name:<playlist> [shuffle:false] [prepend:false]`**  
+  Load an entire playlist into the queue. DJ permission required for server playlists when DJ mode is active.
+
+- **`/playlist add name:<playlist> [track:query]`**  
+  Add the currently playing track to a playlist, or **search for a track** using autocomplete suggestions (same as `/play`).
+
+- **`/playlist remove name:<playlist> position:<number>`**  
+  Remove a track from a playlist by its position (1-based).
+
+- **`/playlist rename old:<name> new:<name>`**  
+  Rename a playlist (owner only).
+
+- **`/playlist move name:<playlist> from:<position> to:<position>`**  
+  Reorder tracks within a playlist.
+
+- **`/playlist edit name:<playlist> [description:text] [public:true|false] [collaborative:true|false]`**  
+  Update playlist settings (owner only).
+
+- **`/playlist delete name:<playlist>`**  
+  Delete a playlist permanently (owner only).
+
+- **`/like`**  
+  Quickly add the currently playing track to your **Liked Songs** playlist. The like button is also available on the player embed.
+
+#### Sharing & Collaboration
+
+- **`/playlist share name:<playlist> [user:@someone]`**  
+  Share a playlist:
+
+  - **Generate share code**: 8-character code valid for 24 hours that anyone can use to import the playlist.
+  - **Share with user**: Grant a specific user access to view and play the playlist.
+
+- **`/playlist import source:<code or URL> [name:custom name]`**  
+  Import a playlist from:
+
+  - **Share code**: Import from an 8-character code
+  - **Spotify URL**: Import playlists directly from Spotify (extracts thumbnails automatically)
+  - **YouTube URL**: Import YouTube playlists with full metadata
+
+- **`/playlist collaborators name:<playlist> [add:@user] [remove:@user]`**  
+  Manage playlist collaborators. Collaborators can add/remove tracks if collaborative mode is enabled.
+
+- **`/playlist merge target:<playlist> source:<playlist>`**  
+  Merge two playlists by copying all tracks from source to target.
+
+#### Special Features
+
+**Liked Songs**
+
+- Automatically created when you like your first track
+- Protected from deletion and renaming
+- Quick access via `/like` command or like button (❤️) on player embed
+- View with `/playlist view name:Liked Songs`
+
+**Playlist Thumbnails**
+
+- Automatically extracted when importing from Spotify or YouTube
+- Displayed in playlist view embed
+- Shows album art or playlist artwork
+
+**Autocomplete Search**
+
+- `/playlist add` supports track search with live autocomplete (same as `/play`)
+- Type to search YouTube and get instant suggestions
+- Add tracks without needing to play them first
+
+**Pagination**
+
+- Playlist view shows 15 tracks per page
+- Use Next/Previous buttons to navigate through all tracks
+- Clean, organized interface for large playlists
+
+#### Permissions
+
+**Owner-only actions:**
+
+- Delete, rename, edit settings
+- Manage collaborators
+- Change collaborative mode
+
+**Collaborator actions (if collaborative mode enabled):**
+
+- Add tracks
+- Remove tracks
+
+**Public playlist access:**
+
+- Anyone can view and play
+- Only owner/collaborators can modify
+
+**DJ Mode integration:**
+
+- Only DJs can play server playlists when DJ mode is active
+- Non-DJs can still manage their user playlists
+
+---
+
 ### 🎛️ DJ Mode
 
 - **`/dj enable [role:<role>] [skipmode:<mode>] [threshold:<10-100>]`**  
