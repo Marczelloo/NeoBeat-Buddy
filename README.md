@@ -408,7 +408,7 @@ If you're listening to rock:
   Delete a playlist permanently (owner only).
 
 - **`/like`**  
-  Quickly add the currently playing track to your **Liked Songs** playlist. The like button is also available on the player embed.
+  Add or remove the currently playing track from your **Liked Songs** playlist. If the track is already liked, you'll be prompted to confirm removal. The like button is also available on the player embed.
 
 #### Sharing & Collaboration
 

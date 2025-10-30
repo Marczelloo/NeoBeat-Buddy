@@ -125,6 +125,42 @@ module.exports = {
         return;
       }
 
+      // Unlike confirmation buttons
+      if (interaction.customId.startsWith("unlike-confirm:") || interaction.customId === "unlike-cancel") {
+        const { removeTrack } = require("../helpers/playlists/store");
+        const { successEmbed, errorEmbed } = require("../helpers/embeds");
+
+        if (interaction.customId === "unlike-cancel") {
+          await interaction.update({
+            content: "❌ Cancelled",
+            embeds: [],
+            components: [],
+          });
+          return;
+        }
+
+        // Extract position from customId
+        const position = parseInt(interaction.customId.split(":")[1], 10);
+        const userId = interaction.user.id;
+        const guildId = interaction.guild.id;
+
+        const result = removeTrack(userId, guildId, "Liked Songs", position);
+
+        if (!result.success) {
+          await interaction.update({
+            embeds: [errorEmbed(result.error)],
+            components: [],
+          });
+          return;
+        }
+
+        await interaction.update({
+          embeds: [successEmbed("Removed from Liked Songs 💔").setDescription(result.message)],
+          components: [],
+        });
+        return;
+      }
+
       if (interaction.customId.startsWith("eq:")) {
         const { handlePanelInteraction } = require("../helpers/equalizer/interactions");
         await handlePanelInteraction(interaction);

@@ -621,6 +621,40 @@ function mergePlaylists(userId, guildId, targetName, sourceName) {
 }
 
 /**
+ * Check if track exists in playlist
+ * @param {string} userId - User ID
+ * @param {string} guildId - Guild ID
+ * @param {string} name - Playlist name
+ * @param {Object} track - Track object to check
+ * @returns {Object} Result with exists boolean and position
+ */
+function isTrackInPlaylist(userId, guildId, name, track) {
+  const playlist = getPlaylist(userId, guildId, name);
+
+  if (!playlist) {
+    return { exists: false, position: -1 };
+  }
+
+  const trackIdentifier = track.info?.identifier || track.identifier;
+  const trackTitle = (track.info?.title || track.title || "").toLowerCase();
+  const trackAuthor = (track.info?.author || track.author || "").toLowerCase();
+
+  const position = playlist.tracks.findIndex((t) => {
+    // Match by identifier if available
+    if (trackIdentifier && t.identifier === trackIdentifier) {
+      return true;
+    }
+    // Fallback to title + author match
+    return t.title.toLowerCase() === trackTitle && t.author.toLowerCase() === trackAuthor;
+  });
+
+  return {
+    exists: position !== -1,
+    position: position + 1, // Convert to 1-based index
+  };
+}
+
+/**
  * Get "Liked Songs" playlist for user (auto-create if doesn't exist)
  * @param {string} userId - User ID
  * @returns {Object} Liked Songs playlist
@@ -674,4 +708,5 @@ module.exports = {
   listPlaylists,
   mergePlaylists,
   getLikedSongs,
+  isTrackInPlaylist,
 };

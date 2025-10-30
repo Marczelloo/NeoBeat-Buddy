@@ -283,8 +283,8 @@ async function handleControlButtons(interaction, player) {
       return;
     }
     case "like-button": {
-      const { getLikedSongs } = require("./playlists/store");
-      const { addTrack } = require("./playlists/store");
+      const { getLikedSongs, isTrackInPlaylist, addTrack } = require("./playlists/store");
+      const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
       if (!player?.currentTrack) {
         await interaction.followUp({
@@ -297,27 +297,54 @@ async function handleControlButtons(interaction, player) {
       // Ensure Liked Songs exists
       getLikedSongs(interaction.user.id);
 
-      // Add track
-      const result = addTrack(interaction.user.id, guildId, "Liked Songs", player.currentTrack);
+      // Check if track is already liked
+      const checkResult = isTrackInPlaylist(interaction.user.id, guildId, "Liked Songs", player.currentTrack);
 
-      if (!result.success) {
+      if (checkResult.exists) {
+        // Track is already liked - ask for confirmation to remove
+        const { successEmbed } = require("./embeds");
+        const embed = successEmbed("💔 Unlike this track?").setDescription(
+          `**${player.currentTrack.info.title}** by ${player.currentTrack.info.author}\n\nThis track is already in your Liked Songs. Do you want to remove it?`
+        );
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`unlike-confirm:${checkResult.position}`)
+            .setLabel("Remove from Liked Songs")
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji("💔"),
+          new ButtonBuilder().setCustomId("unlike-cancel").setLabel("Cancel").setStyle(ButtonStyle.Secondary)
+        );
+
         await interaction.followUp({
-          embeds: [errorEmbed(result.error)],
+          embeds: [embed],
+          components: [row],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      } else {
+        // Track is not liked - add it
+        const result = addTrack(interaction.user.id, guildId, "Liked Songs", player.currentTrack);
+
+        if (!result.success) {
+          await interaction.followUp({
+            embeds: [errorEmbed(result.error)],
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const { successEmbed } = require("./embeds");
+        const embed = successEmbed("Added to Liked Songs ❤️").setDescription(
+          `**${player.currentTrack.info.title}** by ${player.currentTrack.info.author}`
+        );
+
+        await interaction.followUp({
+          embeds: [embed],
           flags: MessageFlags.Ephemeral,
         });
         return;
       }
-
-      const { successEmbed } = require("./embeds");
-      const embed = successEmbed("Added to Liked Songs ❤️").setDescription(
-        `**${player.currentTrack.info.title}** by ${player.currentTrack.info.author}`
-      );
-
-      await interaction.followUp({
-        embeds: [embed],
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
     }
     default:
       await interaction.followUp({ content: "Unknown button.", flags: MessageFlags.Ephemeral });

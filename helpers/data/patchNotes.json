@@ -1,4 +1,16 @@
 {
+  "1.0.10": {
+    "version": "1.0.10",
+    "date": "2025-10-30",
+    "title": "Like/Unlike Toggle",
+    "features": [
+      "Smart like/unlike detection - like button now checks if track is already in Liked Songs",
+      "Unlike confirmation prompt - shows Remove/Cancel buttons when trying to like an already-liked track",
+      "Updated /like command description to reflect add or remove functionality"
+    ],
+    "fixes": [],
+    "changes": []
+  },
   "1.0.9": {
     "version": "1.0.9",
     "date": "2025-10-29",
