@@ -36,6 +36,16 @@ async function ensurePlayer(guildId, voiceId, textId) {
   await player.setVolume(target);
   player.volume = target;
 
+  // Apply volume normalization for consistent audio levels
+  try {
+    await player.node.rest.updatePlayer({
+      guildId,
+      data: { filters: { volume: 1.0 } },
+    });
+  } catch (err) {
+    Log.error("Failed to apply volume normalization", err, `guild=${guildId}`);
+  }
+
   const savedEq = getEqualizerState(guildId);
 
   if (savedEq?.equalizer?.length) {

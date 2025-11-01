@@ -24,6 +24,17 @@ lavalink:
     frameBufferDurationMs: 1000
     trackStuckThresholdMs: 10000
     useSeekGhosting: true
+    filters:
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
   plugins:
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.5"
       repository: "https://maven.lavalink.dev/releases"

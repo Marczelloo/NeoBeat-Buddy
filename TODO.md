@@ -27,9 +27,15 @@
 - [x] version announcements with patch notes system (/changelog command, auto-announce on updates, configurable via /setup announcements)
 - [x] add to play command songs autocompleted based on user query
 - [x] server playlists, user playlists (with sharing, collaboration, liked songs, autocomplete)
-- [ ] other commands
-- [ ] add more sources for play command (current: youtube, spotify | planned: apple music, soundcloud, tidal, dreezer(for FLACS) )
-- [ ] other commands
+- [x] Mixer Panel Concept (Fully implemented with 15-band control, A/B toggle, custom presets)
+- [x] volume normalization (automatic on player creation, balances YouTube/Spotify/SoundCloud levels)
+- [x] improved autocomplete with Spotify + YouTube merged results (better metadata, no duplicates)
+- [x] source display in player and queue embeds
+- [ ] investigate Deezer FLAC direct playback (currently only works for autoplay recommendations, not direct playback)
+- [ ] save queue (all songs played in current session) as playlist, queue import / export
+- [ ] search history
+- [ ] stats enchancment / listening wrapped
+- [ ] better logging + health monitoring
 
 ## FIXES
 
@@ -55,6 +61,7 @@
 - [x] fix bot stopping after voice channel region change (automatic reconnection)
 - [x] fix seekto formatting
 - [x] fix previous button not refreshing player embed
+- [x] check if its possible to normalize volume (some songs are louder/quieter)
 
 ## OTHER
 
@@ -62,22 +69,74 @@
 - [x] (lavalink | rest of the files to be checked) move components/function to helpers folder/modules
 - [x] create docker file and compose lavalink and bot
 - [x] remove global.js since lavalink poru/lavalink maintain most of these functions and migrate the needed ones
-- [] add more logging and improve track logs
 - [x] cleanup help command and sepperate it into smaller chunks
-- [] cleanup code
+- [] add more logging and improve track logs
+- [] cleanup code, refactor, switch to ts, add db integration for storing data
 - [] create website for bot
 
 ## IDEAS
 
-- [ ] Cross-guild playlist sharing: let users export/import queues and playlists across servers so the community can share curated sets.
-- [ ] Smart DJ mode: analyze listening history to auto-mix genres, adjust transitions, or surface "mood" suggestions when the queue runs low.
-- [ ] Per-user audio profiles: remember preferred volume/filters per user and automatically apply when they join.
-- [ ] Queue voting + skip threshold tuning: allow members to up/down vote songs and dynamically adjust skip requirements based on active listeners.
-- [ ] Listening parties with synced lyrics/cards: schedule sessions that show upcoming tracks, synced trivia, or karaoke-friendly overlays in a companion channel.
-- [ ] Adaptive queue sorting: let listeners sort by requester, duration, popularity, or sentiment so long queues stay manageable.
-- [ ] Audio reaction filters: trigger temporary effects (bass boost, vocal isolate, reverb) from button taps that sync to the track for a few seconds.
-- [ ] Collaborative DJ roles: assign rotating "DJ for the hour" roles with permissions to curate or pin queue slots, with automated reminders when it's someone's turn.
-- [ ] \* History recall + requeue: expose a searchable history browser (per server) to quickly replay a track or generate a "top hits" set from past sessions.
-- [ ] Voice activity-triggered tips: when a lull hits, have the bot surface suggested commands ("try /radio jazz") or poll the channel for next genre.
+# 1. Music Quiz/Trivia Game
 
-- [x] Mixer Panel Concept (Fully implemented with 15-band control, A/B toggle, custom presets)
+One of Master-Bot's most popular features - plays songs and users guess the title/artist
+
+/quiz start [category] [difficulty] [rounds] - Start music trivia
+Plays 10-30 second clips, users race to guess
+Leaderboard tracking, points, streaks
+Categories: decade, genre, artist, your listening history
+Why it's popular: Gamification + social competition
+
+# 2. Radio Stations
+
+/radio <genre/station> - Start a curated radio stream
+Pre-built stations: lofi, jazz, rock, EDM, chill, study beats
+Could use your autoplay algorithm to create custom stations
+Why it's popular: Zero-effort music discovery
+
+# 3. Filters/Effects (Beyond EQ)
+
+You have EQ, but most bots also offer:
+
+Nightcore (speed up + pitch up)
+Vaporwave (slow down + pitch down)
+8D Audio (panning effect)
+Karaoke (vocal removal)
+Tremolo, Vibrato, Distortion
+Lavalink supports these via filters!
+
+# 4. Queue Position Swapping
+
+/queue move <from> <to> - You have this!
+/queue swap <pos1> <pos2> - Swap two positions
+Drag-and-drop if you build a web dashboard
+
+# 5. Track History Browser
+
+/history [user] - See last 50 tracks played
+/replay <number> - Replay track from history
+/history search <query> - Find that song you heard 2 hours ago
+Export history to playlist
+
+# 6. Soundboard/Sound Effects
+
+/soundboard <effect> - Play short sound clips
+Air horn, applause, drumroll, meme sounds
+Custom sounds per server
+Why it's popular: Fun, memes, community bonding
+
+# 7. Music Discovery Features
+
+/discover - Get personalized recommendations based on your stats
+/trending - Most played tracks in your server this week
+/similar <track> - Find similar songs
+/new - Recently added/released tracks
+
+# 8. Web Dashboard
+
+Many popular bots have web interfaces:
+
+Browse queue with drag-and-drop
+Visual EQ mixer
+Playlist management
+Server stats/analytics
+Remote control from browser
