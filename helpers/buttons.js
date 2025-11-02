@@ -389,6 +389,9 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
     const durationLabel = info.isStream ? "Live" : formatDuration(info.length ?? 0);
     const positionLabel = info.isStream ? "Live" : formatDuration(elapsedMs);
     const autoplay = getGuildState(guildId)?.autoplay ?? false;
+    const source = info.sourceName || null;
+    const quality =
+      player.currentTrack.pluginInfo?.isPreview === false ? null : player.currentTrack.pluginInfo?.quality || null;
 
     embed = playerEmbed(
       info.title,
@@ -401,7 +404,9 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
       positionLabel,
       loopMode,
       player.volume,
-      autoplay
+      autoplay,
+      source,
+      quality
     );
   }
 

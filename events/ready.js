@@ -54,6 +54,11 @@ module.exports = {
           const position = info.isStream ? "Live" : formatDuration(player.position ?? 0);
           const artwork = info.artworkUrl ?? info.image ?? "https://i.imgur.com/3g7nmJC.png";
           const autoplay = getGuildState(player.guildId)?.autoplay ?? false;
+          const source = info.sourceName || null;
+          const quality =
+            player.currentTrack?.pluginInfo?.isPreview === false
+              ? null
+              : player.currentTrack?.pluginInfo?.quality || null;
 
           const embed = playerEmbed(
             info.title,
@@ -66,7 +71,9 @@ module.exports = {
             position,
             info.loop,
             player.volume,
-            autoplay
+            autoplay,
+            source,
+            quality
           );
 
           const controls = buildControlRows({

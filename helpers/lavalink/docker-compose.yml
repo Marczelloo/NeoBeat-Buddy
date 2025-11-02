@@ -1,17 +1,11 @@
 services:
   lavalink:
-    env_file:
-      - ../../.env
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: lavalink
+    env_file:
+      - ../../.env
     environment:
       - SERVER_PORT=2333
-      - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
-      - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
-      - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
-      - YOUTUBE_PO_TOKEN=${YOUTUBE_PO_TOKEN}
-      - YOUTUBE_VISITOR_DATA=${YOUTUBE_VISITOR_DATA}
-      - YOUTUBE_REFRESH_TOKEN=${YOUTUBE_REFRESH_TOKEN}
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
       - ./plugins:/opt/Lavalink/plugins

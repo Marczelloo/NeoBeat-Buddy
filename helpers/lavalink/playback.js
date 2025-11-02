@@ -36,16 +36,6 @@ async function ensurePlayer(guildId, voiceId, textId) {
   await player.setVolume(target);
   player.volume = target;
 
-  // Apply volume normalization for consistent audio levels
-  try {
-    await player.node.rest.updatePlayer({
-      guildId,
-      data: { filters: { volume: 1.0 } },
-    });
-  } catch (err) {
-    Log.error("Failed to apply volume normalization", err, `guild=${guildId}`);
-  }
-
   const savedEq = getEqualizerState(guildId);
 
   if (savedEq?.equalizer?.length) {
@@ -66,15 +56,71 @@ async function lavalinkResolveTracks(query) {
   const poru = getPoru();
   let q = String(query || "").trim();
   const isUrl = /^(https?:\/\/)/i.test(q);
-  if (!isUrl && q.toLowerCase().startsWith("ytsearch:")) {
-    q = q.slice("ytsearch:".length);
+
+  // For URLs (Spotify/YouTube links), let Lavalink handle via providers chain
+  // For search queries without dzsearch prefix, try Deezer first for FLAC quality
+  let res = null;
+  const isDeezerSearch = q.toLowerCase().startsWith("dzsearch:");
+
+  if (!isUrl && !isDeezerSearch) {
+    // Remove ytsearch prefix if present
+    let searchQuery = q;
+    if (q.toLowerCase().startsWith("ytsearch:")) {
+      searchQuery = q.slice("ytsearch:".length).trim();
+    }
+
+    // Try Deezer first using direct HTTP request
+    try {
+      Log.info("Attempting Deezer search", `query=${searchQuery}`);
+      const node = poru.leastUsedNodes[0];
+      if (node) {
+        const deezerUrl = `http://${node.options.host}:${
+          node.options.port
+        }/v4/loadtracks?identifier=${encodeURIComponent(`dzsearch:${searchQuery}`)}`;
+        const deezerResponse = await fetch(deezerUrl, {
+          headers: { Authorization: node.options.password },
+        });
+        const deezerData = await deezerResponse.json();
+
+        if (deezerData?.loadType === "search" && Array.isArray(deezerData?.data) && deezerData.data.length > 0) {
+          Log.info(
+            "Deezer search successful",
+            `tracks=${deezerData.data.length}`,
+            `source=${deezerData.data[0]?.info?.sourceName}`,
+            `query=${searchQuery}`
+          );
+          res = {
+            loadType: deezerData.loadType,
+            tracks: deezerData.data,
+            playlistInfo: deezerData.playlistInfo,
+          };
+        } else {
+          Log.info(
+            "Deezer search returned no results, falling back to YouTube",
+            `loadType=${deezerData?.loadType}`,
+            `query=${searchQuery}`
+          );
+        }
+      }
+    } catch (err) {
+      Log.warn("Deezer search failed, falling back to YouTube", err, `query=${searchQuery}`);
+    }
   }
 
-  const res = await poru.resolve({ query: isUrl ? q : q });
+  // If Deezer didn't work, it's a URL, or already has a source prefix, resolve normally
+  if (!res) {
+    const resolveQuery = isDeezerSearch ? q : isUrl ? q : q;
+    res = await poru.resolve({ query: resolveQuery });
+  }
 
   const validTracks = Array.isArray(res?.tracks)
     ? res.tracks.filter(
-        (t) => t && typeof t.track === "string" && t.track.length > 0 && t.info && typeof t.info === "object"
+        (t) =>
+          t &&
+          (typeof t.track === "string" || typeof t.encoded === "string") &&
+          (t.track?.length > 0 || t.encoded?.length > 0) &&
+          t.info &&
+          typeof t.info === "object"
       )
     : [];
 

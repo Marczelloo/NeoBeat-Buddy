@@ -42,13 +42,29 @@ module.exports = {
     position,
     loop,
     volume = 100,
-    autoplay = false
+    autoplay = false,
+    source = null,
+    quality = null
   ) {
     const loopLabel = loop === "TRACK" ? "Track" : loop === "QUEUE" ? "Queue" : "None";
+
+    // Build source label with quality info
+    let sourceLabel = "Unknown";
+    if (source === "deezer") {
+      const qualityStr = quality || "FLAC";
+      sourceLabel = `Deezer • ${qualityStr}`;
+    } else if (source === "spotify") {
+      sourceLabel = "Spotify • ~320kbps";
+    } else if (source === "youtube") {
+      sourceLabel = "YouTube • ~128kbps";
+    } else if (source) {
+      sourceLabel = source.charAt(0).toUpperCase() + source.slice(1);
+    }
 
     const infoLeft = [
       `${ICONS.artist} ${bold("Artist", artist ?? "Unknown")}`,
       `${ICONS.duration} ${bold("Duration", duration ?? "Unknown")}`,
+      `${ICONS.source} ${bold("Source", sourceLabel)}`,
     ].join("\n");
 
     const infoRight = [

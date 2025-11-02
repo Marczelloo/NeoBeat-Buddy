@@ -48,10 +48,49 @@ module.exports = {
     }
 
     try {
-      // Use Poru directly to get search results
+      // Use direct Lavalink API to search Deezer first, fallback to default search
       const poru = getPoru();
-      const searchQuery = focusedValue;
-      const results = await poru.resolve({ query: searchQuery });
+      const node = poru.leastUsedNodes[0];
+      let results = null;
+
+      if (node) {
+        try {
+          // Try Deezer search first for FLAC quality
+          const deezerUrl = `http://${node.options.host}:${
+            node.options.port
+          }/v4/loadtracks?identifier=${encodeURIComponent(`dzsearch:${focusedValue}`)}`;
+          const deezerResponse = await fetch(deezerUrl, {
+            headers: { Authorization: node.options.password },
+          });
+          const deezerData = await deezerResponse.json();
+
+          if (deezerData?.loadType === "search" && Array.isArray(deezerData?.data) && deezerData.data.length > 0) {
+            // If Deezer has enough results (3+), use them exclusively
+            if (deezerData.data.length >= 3) {
+              results = {
+                loadType: deezerData.loadType,
+                tracks: deezerData.data,
+              };
+            } else {
+              // If Deezer has few results, combine with YouTube for more options
+              const ytResults = await poru.resolve({ query: focusedValue });
+              const ytTracks = ytResults?.tracks || [];
+
+              results = {
+                loadType: "search",
+                tracks: [...deezerData.data, ...ytTracks], // Deezer first, then YouTube
+              };
+            }
+          }
+        } catch {
+          // Deezer failed, will fallback below
+        }
+      }
+
+      // Fallback to default search if Deezer didn't work
+      if (!results) {
+        results = await poru.resolve({ query: focusedValue });
+      }
 
       if (!results?.tracks || results.tracks.length === 0) {
         return interaction.respond([]);

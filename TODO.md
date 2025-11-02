@@ -31,7 +31,7 @@
 - [x] volume normalization (automatic on player creation, balances YouTube/Spotify/SoundCloud levels)
 - [x] improved autocomplete with Spotify + YouTube merged results (better metadata, no duplicates)
 - [x] source display in player and queue embeds
-- [ ] investigate Deezer FLAC direct playback (currently only works for autoplay recommendations, not direct playback)
+- [x] investigate Deezer FLAC direct playback (currently only works for autoplay recommendations, not direct playback)
 - [ ] save queue (all songs played in current session) as playlist, queue import / export
 - [ ] search history
 - [ ] stats enchancment / listening wrapped
@@ -61,7 +61,7 @@
 - [x] fix bot stopping after voice channel region change (automatic reconnection)
 - [x] fix seekto formatting
 - [x] fix previous button not refreshing player embed
-- [x] check if its possible to normalize volume (some songs are louder/quieter)
+- [-] check if its possible to normalize volume (some songs are louder/quieter)
 
 ## OTHER
 

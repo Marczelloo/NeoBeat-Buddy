@@ -12,7 +12,7 @@ lavalink:
   server:
     password: ${LAVALINK_SERVER_PASSWORD:youshallnotpass}
     sources:
-      youtube: false
+      youtube: false # Disabled - using LavaSrc YouTube instead
       bandcamp: true
       soundcloud: true
       twitch: true
@@ -36,10 +36,11 @@ lavalink:
       channelMix: true
       lowPass: true
   plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.5"
-      repository: "https://maven.lavalink.dev/releases"
     - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.1"
-      repository: "https://maven.lavalink.dev/releases" # this is optional for lavalink v4.0.0-beta.5 or greater
+      repository: "https://maven.lavalink.dev/releases"
+      snapshot: false
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.15.0"
+      repository: "https://maven.lavalink.dev/releases"
       snapshot: false
 
 logging:
@@ -70,7 +71,7 @@ plugins:
       visitorData: ${YOUTUBE_VISITOR_DATA:}
     oauth:
       enabled: true
-      refreshToken: ${YOUTUBE_REFRESH_TOKEN:} # inside the container
+      refreshToken: ${YOUTUBE_REFRESH_TOKEN:}
   lavasrc:
     providers: # Search providers for fallback
       - 'dzsearch:"%ISRC%"'
@@ -90,3 +91,4 @@ plugins:
     deezer:
       arl: ${DEEZER_ARL_TOKEN}
       masterDecryptionKey: ${DEEZER_MASTER_KEY}
+      formats: ["FLAC", "MP3_320", "MP3_256", "MP3_128"]

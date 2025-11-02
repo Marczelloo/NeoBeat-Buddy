@@ -58,7 +58,8 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 ## Features
 
 - **Slash-only interface** for queueing, playback, and moderation safeguards.
-- **Live autocomplete search** — get instant song suggestions as you type in `/play` command.
+- **Deezer FLAC quality playback** — high-fidelity lossless audio as default source with automatic quality display.
+- **Live autocomplete search** — get instant song suggestions as you type in `/play` command with Deezer-first results.
 - **Adaptive smart autoplay** with Deezer recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
 - **24/7 radio mode** — bot stays in voice channel permanently and plays music continuously like a radio station.
 - **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), real-time visual feedback, and 10-minute inactivity auto-cleanup.
@@ -79,8 +80,9 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 - **Node.js** 20+ and **pnpm** 10+
 - **Docker** & **Docker Compose** (for hosting Lavalink or the full stack)
 - **Lavalink** 4.x credentials (see `.env-example`)
+- **Deezer credentials** (required for FLAC playback, autoplay, and recommendations)
+- **YouTube credentials** (required for OAuth authentication and age-restricted content)
 - **Genius API key** (optional, for lyrics)
-- **Deezer credentials** (highly recommended for autoplay with genre awareness, tempo matching, and mood progression)
 
 ## Quick Start
 
@@ -708,24 +710,29 @@ docker load -i neo-bot.tar
 | `LAVALINK_PORT`     | Lavalink port (default: `2333`)                              |
 | `LAVALINK_PASSWORD` | Lavalink password                                            |
 
+### Required for Full Functionality
+
+| Variable                | Description                                             |
+| ----------------------- | ------------------------------------------------------- |
+| `DEEZER_ARL_TOKEN`      | Deezer ARL cookie for FLAC playback and recommendations |
+| `DEEZER_MASTER_KEY`     | Deezer master decryption key (use: g4el58wc0zvf9na1)    |
+| `YOUTUBE_PO_TOKEN`      | YouTube PO token for OAuth authentication               |
+| `YOUTUBE_VISITOR_DATA`  | YouTube visitor data for OAuth                          |
+| `YOUTUBE_REFRESH_TOKEN` | YouTube OAuth refresh token                             |
+
 ### Optional
 
-| Variable                      | Default  | Description                                                |
-| ----------------------------- | -------- | ---------------------------------------------------------- |
-| `GENIUS_API_KEY`              | -        | Genius API key for lyrics lookup                           |
-| `SPOTIFY_CLIENT_ID`           | -        | Spotify client ID (optional, for metadata enrichment)      |
-| `SPOTIFY_CLIENT_SECRET`       | -        | Spotify client secret                                      |
-| `DEEZER_ARL_TOKEN`            | -        | Deezer ARL cookie for recommendations (highly recommended) |
-| `DEEZER_MASTER_KEY`           | -        | Deezer master decryption key (required with ARL)           |
-| `YOUTUBE_PO_TOKEN`            | -        | YouTube PO token for age-restricted content                |
-| `YOUTUBE_VISITOR_DATA`        | -        | YouTube visitor data                                       |
-| `YOUTUBE_REFRESH_TOKEN`       | -        | YouTube refresh token                                      |
-| `DEFAULT_VOLUME`              | `50`     | Default playback volume (0-100)                            |
-| `INACTIVITY_TIMEOUT_MS`       | `300000` | Inactivity timeout in ms (5 minutes)                       |
-| `PROGRESS_UPDATE_INTERVAL_MS` | `10000`  | Player progress update interval (10 seconds)               |
-| `TRACK_HISTORY_LIMIT`         | `20`     | Max tracks to keep in history                              |
-| `FAST_LOGS`                   | `1`      | Enable fast logging (0 to disable)                         |
-| `LOG_TO_FILE`                 | `1`      | Enable file logging (0 to disable)                         |
+| Variable                      | Default  | Description                                           |
+| ----------------------------- | -------- | ----------------------------------------------------- |
+| `GENIUS_API_KEY`              | -        | Genius API key for lyrics lookup                      |
+| `SPOTIFY_CLIENT_ID`           | -        | Spotify client ID (optional, for metadata enrichment) |
+| `SPOTIFY_CLIENT_SECRET`       | -        | Spotify client secret                                 |
+| `DEFAULT_VOLUME`              | `50`     | Default playback volume (0-100)                       |
+| `INACTIVITY_TIMEOUT_MS`       | `300000` | Inactivity timeout in ms (5 minutes)                  |
+| `PROGRESS_UPDATE_INTERVAL_MS` | `10000`  | Player progress update interval (10 seconds)          |
+| `TRACK_HISTORY_LIMIT`         | `20`     | Max tracks to keep in history                         |
+| `FAST_LOGS`                   | `1`      | Enable fast logging (0 to disable)                    |
+| `LOG_TO_FILE`                 | `1`      | Enable file logging (0 to disable)                    |
 
 ---
 

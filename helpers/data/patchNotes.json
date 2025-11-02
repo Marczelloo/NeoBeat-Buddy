@@ -1,15 +1,25 @@
 {
   "1.0.10": {
     "version": "1.0.10",
-    "date": "2025-10-30",
-    "title": "Like/Unlike Toggle",
+    "date": "2025-11-02",
+    "title": "Deezer FLAC Quality Playback & Like/Unlike Toggle",
     "features": [
-      "Smart like/unlike detection - like button now checks if track is already in Liked Songs",
-      "Unlike confirmation prompt - shows Remove/Cancel buttons when trying to like an already-liked track",
-      "Updated /like command description to reflect add or remove functionality"
+      "Deezer FLAC lossless audio quality as default playback source",
+      "Autocomplete now returns Deezer tracks with smart fallback to YouTube",
+      "Quality display in player embed - shows audio quality for each source",
+      "Smart like/unlike detection - like button checks if track is already liked",
+      "Unlike confirmation prompt when trying to like an already-liked track"
     ],
-    "fixes": [],
-    "changes": []
+    "fixes": [
+      "Fixed Lavalink startup issues with plugin compatibility",
+      "Fixed autocomplete returning incorrect results",
+      "Fixed playback errors for valid Deezer searches"
+    ],
+    "changes": [
+      "Playback now prioritizes Deezer for higher quality audio",
+      "Improved search and playback reliability",
+      "Updated plugin configuration for better compatibility"
+    ]
   },
   "1.0.9": {
     "version": "1.0.9",
@@ -17,31 +27,23 @@
     "title": "Complete Playlist System",
     "features": [
       "Full playlist management system - create, edit, share, and play custom playlists",
-      "Two playlist types: user playlists (personal) and server playlists (shared with server)",
-      "Liked Songs playlist with quick-add via /like command and player embed button (❤️)",
-      "Share codes with 24-hour expiry - generate 8-character codes to share playlists",
-      "Direct user sharing - share playlists with specific users",
-      "Collaborative playlists - allow collaborators to add/remove tracks",
-      "Import playlists from Spotify URLs with automatic thumbnail extraction",
-      "Import playlists from YouTube URLs with full metadata support",
-      "Playlist pagination - browse through all tracks with Next/Previous buttons",
-      "Track search in playlist add - autocomplete suggestions just like /play command",
-      "Playlist thumbnails - automatically extracted from Spotify/YouTube imports",
-      "Protected Liked Songs - cannot be deleted or renamed",
-      "13 playlist subcommands: create, delete, list, view, play, add, remove, rename, move, edit, collaborators, merge, share, import"
+      "User playlists (personal) and server playlists (shared with everyone)",
+      "Liked Songs playlist with quick-add via /like command and player button",
+      "Share playlists with 8-character codes or directly with specific users",
+      "Collaborative playlists - allow others to add/remove tracks",
+      "Import playlists from Spotify and YouTube URLs",
+      "Playlist pagination for easy browsing",
+      "Track search with autocomplete when adding to playlists",
+      "13 playlist commands for complete management"
     ],
     "fixes": [
-      "Playlist view now uses pagination buttons that update the same message instead of sending new embeds",
-      "Like button moved to first row of player controls (after skip button) for better accessibility"
+      "Playlist view now updates in place instead of sending multiple messages",
+      "Like button repositioned for better accessibility"
     ],
     "changes": [
-      "Playlists stored in JSON format (helpers/data/playlists.json)",
-      "Share codes expire after 24 hours with automatic cleanup",
-      "Playlist add command supports track search with autocomplete (same as /play)",
-      "Collaborative mode allows shared editing while protecting owner permissions",
-      "DJ mode integration - only DJs can play server playlists when DJ mode active",
-      "Comprehensive help documentation added for all playlist features",
-      "Player embed like button uses Unicode ❤️ (temporary, can be replaced with custom emoji)"
+      "Share codes expire after 24 hours",
+      "DJ mode integration - DJs control server playlists when DJ mode is active",
+      "Protected Liked Songs playlist cannot be deleted or renamed"
     ]
   },
   "1.0.8": {
@@ -49,38 +51,24 @@
     "date": "2025-10-21",
     "title": "Live Autocomplete for Play Command",
     "features": [
-      "Live autocomplete search for /play command - get instant song suggestions as you type",
-      "Shows up to 10 unique song results with deduplication",
-      "Fast search results (limited to 15 tracks for speed)",
-      "Filters out duplicate entries by title and artist",
-      "Works with any search query - YouTube and Spotify sources supported"
+      "Live autocomplete search - get instant song suggestions as you type",
+      "Smart deduplication for cleaner results",
+      "Fast and responsive search experience"
     ],
     "fixes": [],
-    "changes": [
-      "Play command now provides interactive autocomplete suggestions",
-      "Search results are cached and deduplicated for better user experience",
-      "Query optimization ensures fast response times"
-    ]
+    "changes": []
   },
   "1.0.7": {
     "version": "1.0.7",
     "date": "2025-10-21",
     "title": "Deezer Integration for Enhanced Autoplay",
     "features": [
-      "Deezer recommendations integration for superior autoplay quality",
-      "Returns 40 high-quality track recommendations per seed",
-      "Replaces Spotify recommendations as primary source (more reliable)",
-      "Full metadata support (artist, title, duration, album art)",
-      "No additional API calls needed - faster and more efficient"
+      "Deezer recommendations for better autoplay quality",
+      "Improved genre consistency and track discovery",
+      "Faster and more reliable recommendations"
     ],
     "fixes": [],
-    "changes": [
-      "Autoplay now uses Deezer as primary recommendation source",
-      "Spotify credentials now optional (only used for metadata enrichment)",
-      "Improved candidate quality and recommendation accuracy",
-      "Enhanced genre consistency with Deezer's recommendation algorithm",
-      "Updated README and help documentation to reflect Deezer integration"
-    ]
+    "changes": ["Spotify credentials now optional"]
   },
   "1.0.6": {
     "version": "1.0.6",
@@ -88,87 +76,62 @@
     "title": "SeekTo & Previous Button Fixes",
     "features": [],
     "fixes": [
-      "Fixed seekTo command rejecting flexible timestamp formats (3:00, 1:30, etc.)",
-      "Fixed previous button not refreshing player embed with correct track info",
-      "Fixed player state synchronization when using previous track functionality"
+      "Fixed seekTo command rejecting flexible timestamp formats",
+      "Fixed previous button not updating track info correctly",
+      "Fixed player synchronization issues"
     ],
-    "changes": [
-      "SeekTo now accepts flexible formats: seconds (90), MM:SS (3:00), or H:MM:SS (1:30:45)",
-      "Previous button now uses Lavalink's trackStart event for consistent UI updates",
-      "Player state updates before calling updatePlayer to ensure correct track info display"
-    ]
+    "changes": ["SeekTo now accepts multiple formats: seconds, MM:SS, or H:MM:SS"]
   },
   "1.0.5": {
     "version": "1.0.5",
     "date": "2025-10-16",
     "title": "Version Announcements & Patch Notes System",
     "features": [
-      "Automatic version announcements when new updates are released",
-      "/changelog command to view patch notes for any version with interactive navigation",
-      "/setup announcements command to configure announcement channel and preferences",
-      "Bot status now displays current version (e.g., 'NeoBeat Buddy v1.0.5')",
-      "Once per guild per version tracking - no duplicate announcements",
-      "Interactive navigation with 'Older', 'Latest', 'Newer' buttons",
-      "Direct links to GitHub changelog and bug reporting from announcements"
+      "Automatic version announcements for new updates",
+      "/changelog command to view patch notes with navigation",
+      "/setup announcements to configure announcement preferences",
+      "Bot status now shows current version",
+      "Interactive navigation between versions"
     ],
     "fixes": [],
-    "changes": [
-      "Announcements sent to configured channel or fallback to first available text channel",
-      "Admins can enable/disable announcements per server",
-      "Patch notes categorized into Features, Fixes, and Changes sections",
-      "Guild state now includes announcement preferences and version tracking"
-    ]
+    "changes": []
   },
   "1.0.4": {
     "version": "1.0.4",
     "date": "2025-10-16",
     "title": "Stability & Smart Autoplay Update",
     "features": [
-      "24/7 radio mode - Bot stays in voice channel and plays continuously like a radio station",
-      "Smart artist diversity with context-aware 'vibe match' scoring system",
-      "Voice region automatic reconnection when Discord changes voice servers",
-      "Adaptive autoplay now considers genre consistency, tempo flow, and energy arcs"
+      "24/7 radio mode - continuous playback like a radio station",
+      "Smart artist diversity with vibe matching",
+      "Automatic reconnection when Discord changes voice servers",
+      "Enhanced autoplay with genre, tempo, and energy awareness"
     ],
     "fixes": [
-      "EQ panel embed race condition - now updates immediately with correct gain values",
-      "Enhanced duplicate prevention (5x stronger, tracks last 100 songs instead of 20)",
-      "Fixed fallback tracks playing twice (removed manual play() call)",
-      "Fixed bot stopping after voice channel region change (automatic reconnection)",
-      "Fixed TypeError: requireBotInVoice is not a function in 247 command",
-      "Fixed TypeError: recordSkip is not a function in button handlers"
+      "Fixed EQ panel not updating correctly",
+      "Improved duplicate prevention",
+      "Fixed tracks playing twice",
+      "Fixed bot disconnecting on voice region changes",
+      "Fixed various command errors"
     ],
-    "changes": [
-      "Improved autoplay algorithm with 12-factor scoring including vibe match",
-      "Session profile now tracks last 100 tracks and last 3 artists",
-      "Dual-layer duplicate detection (YouTube ID + normalized title/artist)",
-      "Vibe match penalties scale based on sonic similarity (genre/tempo/energy/mood)",
-      "EQ panel refresh delay reduced from 150ms to 50ms for faster updates"
-    ]
+    "changes": ["Better autoplay algorithm with smarter scoring", "Faster EQ panel updates"]
   },
   "1.0.3": {
     "version": "1.0.3",
     "date": "2025-10-15",
     "title": "Enhanced Autoplay & EQ Improvements",
     "features": [
-      "Tempo/BPM consistency in autoplay - maintains natural rhythmic flow",
-      "Time-of-day awareness - adjusts energy based on morning/afternoon/evening/night",
-      "Popularity weighting - balances discovery with accessibility",
-      "Mood progression tracking - continues or stabilizes emotional arcs",
-      "Energy arc management - intentional build-up or wind-down",
-      "Interactive EQ mixer panel with 15-band control and A/B comparison",
-      "Custom EQ preset saving (up to 10 per user)",
-      "Real-time visual feedback with bar graphs in EQ panel"
+      "Tempo consistency in autoplay for natural flow",
+      "Time-of-day awareness - adjusts music energy",
+      "Mood and energy progression tracking",
+      "Interactive 15-band EQ mixer with A/B comparison",
+      "Custom EQ presets (up to 10 per user)",
+      "Real-time visual feedback in EQ panel"
     ],
-    "fixes": [
-      "Fixed BigInt serialization errors in equalizer and custom presets",
-      "Fixed EQ panel message getting lost in chat (now refreshes position)",
-      "Fixed autoplay playing same 2 tracks in loop after extended use"
-    ],
+    "fixes": ["Fixed EQ panel errors and positioning issues", "Fixed autoplay looping same tracks"],
     "changes": [
-      "Enhanced autoplay scoring with audio feature targeting (energy, danceability, valence)",
-      "EQ panel auto-cleanup after 10 minutes of inactivity",
-      "Skip learning system now avoids unwanted genres (-15 points per skipped genre)",
-      "Improved candidate scoring with 12 intelligent factors"
+      "Better autoplay with audio feature analysis",
+      "EQ panel auto-cleanup after inactivity",
+      "Skip learning avoids unwanted genres"
     ]
   },
   "1.0.2": {
@@ -176,69 +139,47 @@
     "date": "2025-10-14",
     "title": "DJ Mode & Statistics Update",
     "features": [
-      "DJ mode with role-based permissions and track suggestion approval",
-      "Skip voting system (dj/vote/hybrid modes)",
-      "Real-time statistics per guild and globally via /stats command",
-      "Tracks songs played, listening hours, unique users, peak listeners",
-      "Hourly activity patterns and top sources tracking",
-      "Session count and average session length analytics"
+      "DJ mode with role-based permissions and approvals",
+      "Skip voting system with multiple modes",
+      "Statistics tracking via /stats command",
+      "Tracks listening hours, users, and activity patterns"
     ],
-    "fixes": [
-      "Fixed server sessions and average session playtime calculations",
-      "Fixed requester info after adding playlists (no longer shows 'unknown')",
-      "Fixed double player message issue on Raspberry Pi deployments"
-    ],
-    "changes": [
-      "Stats tracking includes detailed mode with top sources and most active hour",
-      "DJ proposals now show in queue with pending status",
-      "Improved permission guards for all music commands when DJ mode active"
-    ]
+    "fixes": ["Fixed session calculations", "Fixed requester info display", "Fixed duplicate messages on Raspberry Pi"],
+    "changes": []
   },
   "1.0.1": {
     "version": "1.0.1",
     "date": "2025-10-13",
     "title": "Autoplay & Lyrics Update",
     "features": [
-      "Adaptive genre-aware smart autoplay with Spotify recommendations",
-      "Lyrics lookup for current track with /lyrics command (Genius API)",
-      "Interactive queue management with pagination",
-      "Track removal by position or keyword",
-      "Enhanced playlist info when adding to queue"
+      "Smart autoplay with genre awareness",
+      "Lyrics lookup with /lyrics command",
+      "Interactive queue management",
+      "Track removal by position or keyword"
     ],
     "fixes": [
-      "Fixed lyrics fetching incorrect songs - switched to Genius API",
-      "Fixed queue display not showing currently playing track",
-      "Fixed seekTo command ending track prematurely",
-      "Fixed fallback query issues when queue is empty",
-      "Fixed age-restricted content handling with automatic fallbacks"
+      "Fixed lyrics fetching wrong songs",
+      "Fixed queue display issues",
+      "Fixed seekTo command problems",
+      "Fixed age-restricted content handling"
     ],
-    "changes": [
-      "Autoplay analyzes last 15 songs for better recommendations",
-      "Multi-source recommendations (Spotify, YouTube Mix, artist search)",
-      "Quality filtering rejects non-music content automatically",
-      "Improved age-restricted messages (no longer shows 2 messages)"
-    ]
+    "changes": ["Better recommendations from multiple sources", "Automatic filtering of non-music content"]
   },
   "1.0.0": {
     "version": "1.0.0",
     "date": "2025-10-12",
     "title": "Initial Release",
     "features": [
-      "Complete music playback system with Lavalink integration",
-      "Slash command interface for all controls",
-      "Support for YouTube and Spotify sources",
-      "Queue management with shuffle and loop modes",
-      "Volume control and seek functionality",
+      "Complete music playback system",
+      "Slash command interface",
+      "YouTube and Spotify support",
+      "Queue management with shuffle and loop",
+      "Volume control and seek",
       "Previous track navigation",
-      "Persistent state across bot restarts",
-      "Interactive help command with categorized documentation",
-      "Docker-based deployment with health checks"
+      "Persistent state across restarts",
+      "Interactive help command"
     ],
     "fixes": [],
-    "changes": [
-      "Built on Discord.js v14 with modern slash commands",
-      "Powered by Poru and Lavalink for reliable audio streaming",
-      "pnpm-first workflow for efficient dependency management"
-    ]
+    "changes": []
   }
 }
