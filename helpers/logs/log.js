@@ -51,6 +51,11 @@ const getLogLevel = () => {
   return isNaN(level) ? 2 : level;
 };
 
+const isJsonLogEnabled = () => process.env.JSON_LOGS === "1";
+
+const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_LOG_FILES = 5;
+
 class Log {
   static info(message, arg, ...additionalInfo) {
     if (getLogLevel() < 2) return;
@@ -176,6 +181,7 @@ class Log {
     console.log(formattedMessage);
 
     Log.saveLogsToFile(formattedMessage);
+    Log.logJson("WARNING", message, { arg, additionalInfo });
   }
 
   static error(message, arg = null, ...additionalInfo) {
@@ -207,6 +213,19 @@ class Log {
     console.log(formattedMessage);
 
     Log.saveLogsToFile(formattedMessage);
+    Log.logJson("ERROR", message, {
+      arg,
+      additionalInfo,
+      error: arg instanceof Error ? { message: arg.message, stack: arg.stack } : null,
+    });
+
+    // Record error in health monitoring if available
+    try {
+      const health = require("../monitoring/health");
+      health.recordError(arg instanceof Error ? arg : new Error(message), { additionalInfo });
+    } catch (err) {
+      // Health monitoring not available
+    }
   }
 
   static progress(message, progress, ...additionalInfo) {
@@ -304,11 +323,111 @@ class Log {
     (async () => {
       try {
         await fsp.mkdir(logsFolder, { recursive: true });
+
+        // Check log file size and rotate if needed
+        try {
+          const stats = await fsp.stat(logsPath);
+          if (stats.size >= MAX_LOG_SIZE) {
+            await Log.rotateLogs(logsPath);
+          }
+        } catch (err) {
+          // File doesn't exist yet, no need to rotate
+        }
+
         await fsp.appendFile(logsPath, logWithoutFormatting + "\n");
       } catch (error) {
         console.error("Error saving logs to file", error?.message || error);
       }
     })();
+  }
+
+  static async rotateLogs(logsPath) {
+    try {
+      const logsFolder = path.dirname(logsPath);
+      const baseName = path.basename(logsPath, ".txt");
+
+      // Delete oldest log if we have MAX_LOG_FILES
+      const oldestLog = path.join(logsFolder, `${baseName}.${MAX_LOG_FILES}.txt`);
+      try {
+        await fsp.unlink(oldestLog);
+      } catch (err) {
+        // File doesn't exist, that's fine
+      }
+
+      // Rotate existing logs
+      for (let i = MAX_LOG_FILES - 1; i >= 1; i--) {
+        const oldPath = path.join(logsFolder, `${baseName}.${i}.txt`);
+        const newPath = path.join(logsFolder, `${baseName}.${i + 1}.txt`);
+
+        try {
+          await fsp.rename(oldPath, newPath);
+        } catch (err) {
+          // File doesn't exist, continue
+        }
+      }
+
+      // Rotate current log
+      const rotatedPath = path.join(logsFolder, `${baseName}.1.txt`);
+      await fsp.rename(logsPath, rotatedPath);
+
+      console.log(`Logs rotated: ${logsPath} -> ${rotatedPath}`);
+    } catch (error) {
+      console.error("Error rotating logs", error?.message || error);
+    }
+  }
+
+  static logJson(level, message, data = {}) {
+    if (!isJsonLogEnabled()) return;
+
+    const entry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      caller: fastLogsEnabled() ? "n/a" : Log.getCallerFile(),
+      ...data,
+    };
+
+    const logsPath = path.resolve(__dirname, "../../logs/logs.json");
+    const logsFolder = path.dirname(logsPath);
+
+    (async () => {
+      try {
+        await fsp.mkdir(logsFolder, { recursive: true });
+
+        // Check log file size and rotate if needed
+        try {
+          const stats = await fsp.stat(logsPath);
+          if (stats.size >= MAX_LOG_SIZE) {
+            await Log.rotateLogs(logsPath.replace(".json", ".txt"));
+          }
+        } catch (err) {
+          // File doesn't exist yet
+        }
+
+        await fsp.appendFile(logsPath, JSON.stringify(entry) + "\n");
+      } catch (error) {
+        console.error("Error saving JSON logs", error?.message || error);
+      }
+    })();
+  }
+
+  static metric(metricName, value, tags = {}) {
+    if (getLogLevel() < 3) return;
+
+    const data = {
+      metric: metricName,
+      value,
+      tags,
+    };
+
+    Log.logJson("METRIC", metricName, data);
+
+    if (getLogLevel() >= 3) {
+      const tagsStr = Object.entries(tags)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(", ");
+      Log.debug(`Metric: ${metricName}=${value}`, tagsStr ? `(${tagsStr})` : "");
+    }
   }
 }
 

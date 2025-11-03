@@ -290,6 +290,10 @@ async function lavalinkSkip(guildId) {
 
   if (result) {
     statsStore.trackSkip(guildId);
+
+    // Record skip in health monitoring
+    const health = require("../monitoring/health");
+    health.recordTrackSkipped();
   }
 
   return true;

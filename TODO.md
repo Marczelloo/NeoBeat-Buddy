@@ -37,9 +37,8 @@
 
 - [x] save queue (all songs played in current session) as playlist, queue import / export
 - [x] search history
-
-- [ ] stats enchancment / listening wrapped
-- [ ] better logging + health monitoring
+- [x] stats enchancment / listening wrapped
+- [x] better logging + health monitoring
 
 ## FIXES
 

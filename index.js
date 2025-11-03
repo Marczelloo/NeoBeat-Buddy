@@ -11,6 +11,7 @@ const guildState = require("./helpers/guildState.js");
 const equalizerStore = require("./helpers/lavalink/equalizerStore.js");
 const { createPoru } = require("./helpers/lavalink/index.js");
 const Log = require("./helpers/logs/log.js");
+const health = require("./helpers/monitoring/health.js");
 const statsStore = require("./helpers/stats/store.js");
 
 if (!token) {
@@ -428,3 +429,22 @@ connectClient();
 
 const poru = createPoru(client);
 client.on("raw", (d) => poru.packetUpdate(d));
+
+// Start health monitoring
+health.startMonitoring();
+
+// Update Lavalink connection status
+poru.on("nodeConnect", (node) => {
+  Log.success("Lavalink node connected", node.name);
+  health.updateLavalinkStatus(true);
+});
+
+poru.on("nodeDisconnect", (node) => {
+  Log.error("Lavalink node disconnected", node.name);
+  health.updateLavalinkStatus(false);
+});
+
+poru.on("nodeError", (node, error) => {
+  Log.error("Lavalink node error", error, `node=${node.name}`);
+  health.recordError(error, { node: node.name });
+});

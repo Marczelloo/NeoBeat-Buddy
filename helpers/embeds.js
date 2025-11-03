@@ -181,7 +181,7 @@ module.exports = {
       })
       .setTimestamp();
   },
-  statsEmbed(guildStats, globalStats, lastActivityLabel) {
+  statsEmbed(guildStats, globalStats, lastActivityLabel, detailedInfo = null) {
     const toHours = (ms) => (ms / 3_600_000).toFixed(2);
     const toDays = (ms) => (ms / 86_400_000).toFixed(1);
 
@@ -211,6 +211,34 @@ module.exports = {
           inline: true,
         }
       );
+
+      // Add detailed info if provided
+      if (detailedInfo) {
+        if (detailedInfo.topSources && detailedInfo.topSources.length > 0) {
+          const sourceList = detailedInfo.topSources
+            .map((item) => {
+              const percentage = ((item.count / guildStats.songsPlayed) * 100).toFixed(1);
+              return `**${item.source}**: ${item.count} (${percentage}%)`;
+            })
+            .join("\n");
+
+          guildFields.push({
+            name: "📻 Top Sources",
+            value: sourceList,
+            inline: false,
+          });
+        }
+
+        if (detailedInfo.mostActiveHour) {
+          const hour = detailedInfo.mostActiveHour.hour;
+          const hourStr = `${hour}:00`;
+          guildFields.push({
+            name: "⏰ Most Active Hour",
+            value: `**${hourStr}** - ${detailedInfo.mostActiveHour.count} songs played`,
+            inline: false,
+          });
+        }
+      }
     }
 
     if (globalStats) {

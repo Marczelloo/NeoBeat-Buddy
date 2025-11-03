@@ -62,6 +62,9 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 - **Live autocomplete search** — get instant song suggestions as you type in `/play` command with Deezer-first results.
 - **Search history tracking** — automatic history of all your searches with replay, search, export to playlist, and clear functions.
 - **Session queue export** — save entire listening sessions (history + queue) as playlists for easy replay.
+- **Music Wrapped & Insights** — personal and server-wide listening statistics with top tracks, artists, listening patterns, streaks, and achievements.
+- **Health monitoring** — comprehensive system metrics, error tracking, Lavalink status, performance monitoring, and admin diagnostics.
+- **Enhanced logging** — structured JSON logs, automatic log rotation, error aggregation, and performance metrics tracking.
 - **Adaptive smart autoplay** with Deezer recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
 - **24/7 radio mode** — bot stays in voice channel permanently and plays music continuously like a radio station.
 - **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), real-time visual feedback, and 10-minute inactivity auto-cleanup.
@@ -608,6 +611,49 @@ _EQ settings persist across bot restarts and are restored automatically when the
   - Session count, average session length
   - _Detailed mode:_ Top sources, most active hour
 
+- **`/wrapped me [user:<user>]`**  
+  View personal music listening wrapped:
+
+  - Total songs played and listening time
+  - Top tracks with play counts
+  - Top artists with song counts
+  - Listening patterns: most active hour, favorite source
+  - Listening streak (current and longest)
+  - Activity level based on total plays
+
+- **`/wrapped server`**  
+  View server-wide music statistics:
+
+  - Total songs, playtime, and sessions
+  - Unique listeners and peak concurrent users
+  - Top music sources with percentages
+  - Most active listening hours
+  - Community engagement metrics
+
+- **`/health status`** (Admin only)  
+  View overall bot health status:
+
+  - Overall health indicator (healthy/issues)
+  - Active issues and warnings
+  - Quick metrics: uptime, memory, Lavalink status
+  - Recent errors with timestamps
+
+- **`/health metrics`** (Admin only)  
+  View detailed system metrics:
+
+  - System info: platform, Node version, uptime
+  - Memory usage: heap, RSS, system totals
+  - CPU usage and event loop lag
+  - Lavalink connection status and latency
+  - Command success rates and track statistics
+  - Error and warning summaries
+
+- **`/health errors [limit:1-20]`** (Admin only)  
+  View recent error logs with context and stack traces for troubleshooting.
+
+- **`/health reset`** (Admin only)  
+  Reset all health monitoring metrics (does not affect music stats).
+
 - **`/changelog [version:<version>]`**  
   View patch notes for the current version or a specific version with navigation controls. Shows categorized features, fixes, and changes with links to GitHub.
 
@@ -751,8 +797,10 @@ docker load -i neo-bot.tar
 | `INACTIVITY_TIMEOUT_MS`       | `300000` | Inactivity timeout in ms (5 minutes)                  |
 | `PROGRESS_UPDATE_INTERVAL_MS` | `10000`  | Player progress update interval (10 seconds)          |
 | `TRACK_HISTORY_LIMIT`         | `20`     | Max tracks to keep in history                         |
-| `FAST_LOGS`                   | `1`      | Enable fast logging (0 to disable)                    |
+| `FAST_LOGS`                   | `1`      | Enable fast logging (0 to disable, skips caller info) |
 | `LOG_TO_FILE`                 | `1`      | Enable file logging (0 to disable)                    |
+| `LOG_LEVEL`                   | `2`      | Log level (0=none, 1=warn/error, 2=info, 3=debug)     |
+| `JSON_LOGS`                   | `0`      | Enable structured JSON logs (1 to enable)             |
 
 ---
 

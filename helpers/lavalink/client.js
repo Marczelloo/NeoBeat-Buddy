@@ -156,6 +156,10 @@ function createPoru(client) {
       const listenerCount = voiceChannel?.members?.filter((m) => !m.user.bot).size || 0;
 
       statsStore.beginTrackSession(player.guildId, track, listenerCount);
+
+      // Record track played in health monitoring
+      const health = require("../monitoring/health");
+      health.recordTrackPlayed();
     } catch (err) {
       Log.error(`Failed to begin track session for guild ${player.guildId}`, err);
     }
@@ -219,6 +223,12 @@ function createPoru(client) {
 
     try {
       statsStore.finishTrackSession(player.guildId, track, reasonCode);
+
+      // Record track failure in health monitoring
+      if (reasonCode === "load_failed") {
+        const health = require("../monitoring/health");
+        health.recordTrackFailed();
+      }
     } catch (err) {
       Log.error(`Failed to finish track session for guild ${player.guildId}`, err);
     }

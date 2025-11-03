@@ -15,12 +15,33 @@ const formatLastActivity = (iso) => {
 };
 
 module.exports = {
-  data: new SlashCommandBuilder().setName("stats").setDescription("Show music playback statistics"),
+  data: new SlashCommandBuilder()
+    .setName("stats")
+    .setDescription("Show music playback statistics")
+    .addBooleanOption((option) =>
+      option.setName("detailed").setDescription("Show detailed stats with top sources and activity").setRequired(false)
+    ),
   async execute(interaction) {
+    const detailed = interaction.options.getBoolean("detailed") || false;
+
     const guildStats = statsStore.getGuildStats(interaction.guildId) ?? { songsPlayed: 0, msPlayed: 0 };
     const globalStats = statsStore.getGlobalStats();
     const lastActivityLabel = formatLastActivity(guildStats.lastPlayedAt);
 
-    await interaction.reply({ embeds: [statsEmbed(guildStats, globalStats, lastActivityLabel)] });
+    if (detailed) {
+      const topSources = statsStore.getTopSources(interaction.guildId, 5);
+      const mostActiveHour = statsStore.getMostActiveHour(interaction.guildId);
+
+      await interaction.reply({
+        embeds: [
+          statsEmbed(guildStats, globalStats, lastActivityLabel, {
+            topSources,
+            mostActiveHour,
+          }),
+        ],
+      });
+    } else {
+      await interaction.reply({ embeds: [statsEmbed(guildStats, globalStats, lastActivityLabel)] });
+    }
   },
 };

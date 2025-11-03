@@ -385,8 +385,20 @@
       commands: [
         {
           name: "stats",
-          description: "Show per-guild and global playback statistics.",
-          usage: "/stats",
+          description: "Show per-guild and global playback statistics. Use detailed:true for more insights.",
+          usage: "/stats [detailed:<true|false>]",
+        },
+        {
+          name: "wrapped",
+          description:
+            "View your personal music wrapped or server-wide listening statistics with top tracks, artists, and insights.",
+          usage: "/wrapped me [user:<user>]\n/wrapped server",
+        },
+        {
+          name: "health",
+          description:
+            "View bot health and system metrics (Admin only). Check status, metrics, recent errors, or reset counters.",
+          usage: "/health status\n/health metrics\n/health errors [limit:<1-20>]\n/health reset",
         },
         {
           name: "changelog",
@@ -420,6 +432,26 @@
         },
       ],
       notes: [
+        {
+          name: "Music Wrapped & Stats",
+          value: [
+            "- `/wrapped me` shows your personal listening statistics: top tracks, top artists, listening patterns, and achievements.",
+            "- `/wrapped server` displays server-wide music statistics: total playtime, top sources, peak activity hours.",
+            "- `/stats` shows quick stats for the current server and global usage.",
+            "- `/stats detailed:true` includes top sources breakdown and most active hour visualization.",
+            "- All stats track automatically as you play music - no setup required!",
+          ].join("\n"),
+        },
+        {
+          name: "Health Monitoring (Admin)",
+          value: [
+            "- `/health status` provides an overview: overall health, active issues, quick metrics, and recent errors.",
+            "- `/health metrics` shows detailed system info: memory usage, CPU, event loop lag, Lavalink status, command success rates.",
+            "- `/health errors` displays recent error logs with timestamps and context (useful for troubleshooting).",
+            "- `/health reset` clears all health metrics counters (does not affect music stats).",
+            "- Health monitoring runs automatically and tracks errors, warnings, and performance metrics.",
+          ].join("\n"),
+        },
         {
           name: "Version Announcements",
           value: [

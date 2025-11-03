@@ -7,6 +7,7 @@ const { handleProposalInteraction } = require("../helpers/dj/interactions");
 const djStore = require("../helpers/dj/store");
 const { createPoru, lavalinkSetVolume } = require("../helpers/lavalink/index");
 const Log = require("../helpers/logs/log");
+const health = require("../helpers/monitoring/health");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -329,7 +330,9 @@ module.exports = {
 
     try {
       await command.execute(interaction);
+      health.recordCommand(true);
     } catch (error) {
+      health.recordCommand(false);
       Log.error(
         `Error executing ${interaction.commandName}`,
         error,
