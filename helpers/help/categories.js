@@ -199,10 +199,16 @@
       emoji: "📜",
       commands: [
         {
-          name: "queue",
+          name: "queue view",
           description:
             "Show the current queue with pagination controls. Pending DJ suggestions appear when DJ mode is active.",
-          usage: "/queue",
+          usage: "/queue view",
+        },
+        {
+          name: "queue export",
+          description:
+            "Export current session (queue + history) to a playlist. Saves all tracks played in current session plus queued tracks.",
+          usage: "/queue export name:<playlist name> [include-current:true]",
         },
         {
           name: "remove",
@@ -224,8 +230,55 @@
           description: "Toggle loop mode for the current track or queue (DJ restricted in DJ mode).",
           usage: "/loop [mode:<NONE|TRACK|QUEUE>]",
         },
+        {
+          name: "history view",
+          description: "View your recent searches with pagination. Filter to show only server searches or all.",
+          usage: "/history view [server-only:false]",
+        },
+        {
+          name: "history replay",
+          description: "Replay a track from your search history by entry number.",
+          usage: "/history replay number:<number> [prepend:false]",
+        },
+        {
+          name: "history search",
+          description: "Search your history for tracks by title or artist.",
+          usage: "/history search query:<search term>",
+        },
+        {
+          name: "history export",
+          description: "Export search history to a playlist. Optionally limit tracks or filter by server.",
+          usage: "/history export name:<playlist> [limit:50] [server-only:false]",
+        },
+        {
+          name: "history clear",
+          description: "Clear your search history. Optionally clear only server searches.",
+          usage: "/history clear [server-only:false]",
+        },
       ],
       notes: [
+        {
+          name: "Search History",
+          value: [
+            "- Every track you play with `/play` is saved to your personal search history (up to 100 searches).",
+            "- View your history with `/history view` - shows track title, artist, duration, source, and time ago.",
+            "- Replay any track from history with `/history replay number:<number>` (from history view).",
+            "- Search your history by track title or artist with `/history search`.",
+            "- Export your history to a playlist with `/history export` - great for creating 'Recently Played' playlists.",
+            "- Clear history with `/history clear` - option to clear only this server's searches or all.",
+            "- Server filter: Use `server-only:true` to see only searches from the current server.",
+          ].join("\n"),
+        },
+        {
+          name: "Queue Export",
+          value: [
+            "- Use `/queue export` to save your entire listening session as a playlist.",
+            "- Includes: Previously played tracks (history) + currently playing track + queued tracks.",
+            "- Perfect for saving a great DJ mix or music discovery session.",
+            "- Option to exclude current track with `include-current:false`.",
+            "- Creates a new user playlist that you can replay anytime with `/playlist play`.",
+          ].join("\n"),
+        },
         {
           name: "Smart Autoplay",
           value: [

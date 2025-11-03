@@ -3,10 +3,12 @@ const { ITEMS_PER_PAGE, buildQueueControls, decodeQueueId } = require("../../hel
 const djProposals = require("../../helpers/dj/proposals");
 const djStore = require("../../helpers/dj/store");
 const { buildPendingSuggestionsField } = require("../../helpers/dj/ui");
-const { errorEmbed, queueEmbed } = require("../../helpers/embeds");
+const { errorEmbed, queueEmbed, successEmbed } = require("../../helpers/embeds");
 const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { createPoru } = require("../../helpers/lavalink/index");
+const { playbackState } = require("../../helpers/lavalink/state");
 const Log = require("../../helpers/logs/log");
+const { createPlaylist, addTrack } = require("../../helpers/playlists/store");
 
 async function renderQueue(interaction, player, page = 0) {
   const totalPages = Math.max(1, Math.ceil(player.queue.length / ITEMS_PER_PAGE));
@@ -35,9 +37,33 @@ async function renderQueue(interaction, player, page = 0) {
 }
 
 module.exports = {
-  data: new SlashCommandBuilder().setName("queue").setDescription("Show the current music queue"),
+  data: new SlashCommandBuilder()
+    .setName("queue")
+    .setDescription("Manage the music queue")
+
+    .addSubcommand((subcommand) => subcommand.setName("view").setDescription("Show the current music queue"))
+
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("export")
+        .setDescription("Export current session (queue + history) to a playlist")
+        .addStringOption((option) => option.setName("name").setDescription("Playlist name").setRequired(true))
+        .addBooleanOption((option) =>
+          option
+            .setName("include-current")
+            .setDescription("Include currently playing track (default: true)")
+            .setRequired(false)
+        )
+    ),
 
   async execute(interaction) {
+    const subcommand = interaction.options.getSubcommand();
+
+    if (subcommand === "export") {
+      return handleExport(interaction);
+    }
+
+    // Default: view queue
     Log.info("/queue command used by " + interaction.user.tag + " in guild " + interaction.guild.name);
 
     await interaction.deferReply({ ephemeral: true });
@@ -79,3 +105,106 @@ module.exports = {
     await interaction.update({ embeds: [embed], components });
   },
 };
+
+async function handleExport(interaction) {
+  const playlistName = interaction.options.getString("name");
+  const includeCurrent = interaction.options.getBoolean("include-current") ?? true;
+
+  await interaction.deferReply();
+
+  const guard = await requireSharedVoice(interaction);
+  if (!guard.ok) return interaction.editReply(guard.response);
+
+  const poru = createPoru(interaction.client);
+  const player = poru.players.get(interaction.guild.id);
+
+  if (!player) {
+    return interaction.editReply({ embeds: [errorEmbed("No active player session.")] });
+  }
+
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
+  // Get session data
+  const sessionState = playbackState.get(guildId) || {};
+  const history = sessionState.history || [];
+  const currentTrack = player.currentTrack;
+  const queue = player.queue || [];
+
+  // Collect all tracks
+  const allTracks = [];
+
+  // Add history
+  if (history.length > 0) {
+    allTracks.push(...history.map((t) => ({ ...t, fromHistory: true })));
+  }
+
+  // Add current track
+  if (includeCurrent && currentTrack) {
+    allTracks.push({ ...currentTrack, fromCurrent: true });
+  }
+
+  // Add queue
+  if (queue.length > 0) {
+    allTracks.push(...queue.map((t) => ({ ...t, fromQueue: true })));
+  }
+
+  if (allTracks.length === 0) {
+    return interaction.editReply({
+      embeds: [errorEmbed("No tracks to export. Play some music first!")],
+    });
+  }
+
+  // Create playlist
+  const createResult = createPlaylist(userId, guildId, playlistName, {
+    type: "user",
+    description: `Exported from session on ${new Date().toLocaleDateString()}`,
+    public: false,
+  });
+
+  if (!createResult.success) {
+    return interaction.editReply({ embeds: [errorEmbed(createResult.error)] });
+  }
+
+  // Add all tracks
+  let addedCount = 0;
+  let skippedCount = 0;
+
+  for (const track of allTracks) {
+    // Skip if track doesn't have required info
+    if (!track.info?.title || !track.info?.author) {
+      skippedCount++;
+      continue;
+    }
+
+    const result = addTrack(userId, guildId, playlistName, track);
+
+    if (result.success) {
+      addedCount++;
+    } else {
+      skippedCount++;
+    }
+  }
+
+  const embed = successEmbed(`Exported session to playlist`)
+    .setDescription(`Created playlist **${playlistName}**`)
+    .addFields(
+      { name: "Tracks Added", value: addedCount.toString(), inline: true },
+      { name: "Skipped", value: skippedCount.toString(), inline: true },
+      { name: "Total", value: allTracks.length.toString(), inline: true }
+    );
+
+  if (history.length > 0) {
+    embed.addFields({ name: "From History", value: history.length.toString(), inline: true });
+  }
+  if (includeCurrent && currentTrack) {
+    embed.addFields({ name: "Current Track", value: "Included", inline: true });
+  }
+  if (queue.length > 0) {
+    embed.addFields({ name: "From Queue", value: queue.length.toString(), inline: true });
+  }
+
+  Log.info(`/queue export used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+
+  return interaction.editReply({ embeds: [embed] });
+}

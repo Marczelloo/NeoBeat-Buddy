@@ -4,6 +4,7 @@ const djStore = require("../../helpers/dj/store");
 const { buildProposalAnnouncement, buildProposalComponents, buildProposalEmbed } = require("../../helpers/dj/ui");
 const { errorEmbed, successEmbed, playlistEmbed, songEmbed } = require("../../helpers/embeds");
 const { updateGuildState } = require("../../helpers/guildState.js");
+const { recordSearch } = require("../../helpers/history/searchHistory");
 const { lavalinkPlay, lavalinkResolveTracks } = require("../../helpers/lavalink/index");
 const { getPoru } = require("../../helpers/lavalink/players");
 const Log = require("../../helpers/logs/log");
@@ -269,6 +270,11 @@ module.exports = {
       }
 
       track.info.loop = player.loop ?? "NONE";
+
+      // Record search in history (for non-playlist single tracks)
+      if (!isPlaylist && track) {
+        recordSearch(requester.id, interaction.guild.id, query, track);
+      }
 
       if (isPlaylist) {
         statsStore.trackPlaylistAdded(interaction.guild.id, playlistTrackCount);

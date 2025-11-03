@@ -1,12 +1,15 @@
 {
   "1.0.10": {
     "version": "1.0.10",
-    "date": "2025-11-02",
-    "title": "Deezer FLAC Quality Playback & Like/Unlike Toggle",
+    "date": "2025-11-03",
+    "title": "Deezer FLAC, Search History & Session Export",
     "features": [
       "Deezer FLAC lossless audio quality as default playback source",
       "Autocomplete now returns Deezer tracks with smart fallback to YouTube",
       "Quality display in player embed - shows audio quality for each source",
+      "Search history tracking - automatically saves all /play searches (up to 100 per user)",
+      "Search history commands - view, replay, search, export to playlist, and clear",
+      "Session queue export - save entire listening session (history + queue) as playlist",
       "Smart like/unlike detection - like button checks if track is already liked",
       "Unlike confirmation prompt when trying to like an already-liked track"
     ],
@@ -17,6 +20,8 @@
     ],
     "changes": [
       "Playback now prioritizes Deezer for higher quality audio",
+      "Queue command now has subcommands: view and export",
+      "History stored per-user with server filtering option",
       "Improved search and playback reliability",
       "Updated plugin configuration for better compatibility"
     ]

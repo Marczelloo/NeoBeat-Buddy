@@ -60,6 +60,8 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 - **Slash-only interface** for queueing, playback, and moderation safeguards.
 - **Deezer FLAC quality playback** — high-fidelity lossless audio as default source with automatic quality display.
 - **Live autocomplete search** — get instant song suggestions as you type in `/play` command with Deezer-first results.
+- **Search history tracking** — automatic history of all your searches with replay, search, export to playlist, and clear functions.
+- **Session queue export** — save entire listening sessions (history + queue) as playlists for easy replay.
 - **Adaptive smart autoplay** with Deezer recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
 - **24/7 radio mode** — bot stays in voice channel permanently and plays music continuously like a radio station.
 - **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), real-time visual feedback, and 10-minute inactivity auto-cleanup.
@@ -134,11 +136,29 @@ pnpm deploy:dev
 
 ### 📜 Queue & Looping
 
-- **`/queue`** — View the current queue with pagination controls. Pending DJ suggestions appear when DJ mode is active.
+- **`/queue view`** — View the current queue with pagination controls. Pending DJ suggestions appear when DJ mode is active.
+- **`/queue export name:<playlist> [include-current:true]`** — Export current session (queue + history) to a playlist. Saves all tracks played in current session plus queued tracks.
 - **`/remove [position:<number>] [title:<keyword>]`** — Remove a specific track from the queue by position or title search (DJ only in DJ mode).
 - **`/clearqueue`** — Remove every track from the queue (DJ only while DJ mode is enabled).
 - **`/shuffle`** — Randomize the queue order (DJ restricted in DJ mode).
 - **`/loop [mode:<NONE|TRACK|QUEUE>]`** — Toggle loop modes (DJ restricted in DJ mode).
+
+---
+
+### 🕒 Search History
+
+- **`/history view [server-only:false]`** — View your recent searches with pagination. Shows track title, artist, duration, source, and time ago.
+- **`/history replay number:<number> [prepend:false]`** — Replay a track from your search history by entry number (from `/history view`).
+- **`/history search query:<search term>`** — Search your history for tracks by title or artist.
+- **`/history export name:<playlist> [limit:50] [server-only:false]`** — Export search history to a playlist. Great for creating "Recently Played" playlists.
+- **`/history clear [server-only:false]`** — Clear your search history. Optionally clear only this server's searches.
+
+**How it works:**
+
+- Every track you play with `/play` is automatically saved to your personal search history (up to 100 searches).
+- Search history is per-user and persists across bot restarts.
+- Filter by server to see only searches from the current server.
+- Export to playlist to save your listening journey.
 
 ---
 

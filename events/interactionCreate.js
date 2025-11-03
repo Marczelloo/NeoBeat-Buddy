@@ -203,6 +203,13 @@ module.exports = {
         return;
       }
 
+      // History pagination buttons
+      if (interaction.customId.startsWith("history:")) {
+        const historyCommand = require("../commands/music/history");
+        await historyCommand.handlePaginationButtons(interaction);
+        return;
+      }
+
       const poru = createPoru(getClient());
       const player = poru.players.get(interaction.guild.id);
       if (!player) {

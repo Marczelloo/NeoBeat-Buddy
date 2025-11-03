@@ -32,8 +32,12 @@
 - [x] improved autocomplete with Spotify + YouTube merged results (better metadata, no duplicates)
 - [x] source display in player and queue embeds
 - [x] investigate Deezer FLAC direct playback (currently only works for autoplay recommendations, not direct playback)
-- [ ] save queue (all songs played in current session) as playlist, queue import / export
-- [ ] search history
+
+# Need to be tested
+
+- [x] save queue (all songs played in current session) as playlist, queue import / export
+- [x] search history
+
 - [ ] stats enchancment / listening wrapped
 - [ ] better logging + health monitoring
 
