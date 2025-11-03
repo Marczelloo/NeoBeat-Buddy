@@ -29,6 +29,8 @@ const metrics = {
 };
 
 let eventLoopTimer = null;
+let performanceTimer = null;
+let lavalinkTimer = null;
 
 // Monitor event loop lag
 function measureEventLoopLag() {
@@ -39,15 +41,39 @@ function measureEventLoopLag() {
   });
 }
 
+// Update Lavalink latency periodically
+function updateLavalinkLatency() {
+  try {
+    const { getPoru } = require("../lavalink/players");
+    const poru = getPoru();
+    if (poru && poru.nodes && poru.nodes.size > 0) {
+      const node = Array.from(poru.nodes.values())[0];
+      if (node && node.connected) {
+        const latency = node.stats?.ping || node.ping || null;
+        if (latency !== null) {
+          metrics.lavalink.latency = latency;
+        }
+      }
+    }
+  } catch (err) {
+    // Poru not available yet
+  }
+}
+
 function startMonitoring() {
   // Measure event loop lag every 30 seconds
   eventLoopTimer = setInterval(measureEventLoopLag, 30_000);
   measureEventLoopLag(); // Initial measurement
 
   // Update performance metrics every minute
-  setInterval(() => {
+  performanceTimer = setInterval(() => {
     updatePerformanceMetrics();
   }, 60_000);
+
+  // Update Lavalink latency every 30 seconds
+  lavalinkTimer = setInterval(() => {
+    updateLavalinkLatency();
+  }, 30_000);
 
   Log.info("Health monitoring started");
 }
@@ -56,6 +82,14 @@ function stopMonitoring() {
   if (eventLoopTimer) {
     clearInterval(eventLoopTimer);
     eventLoopTimer = null;
+  }
+  if (performanceTimer) {
+    clearInterval(performanceTimer);
+    performanceTimer = null;
+  }
+  if (lavalinkTimer) {
+    clearInterval(lavalinkTimer);
+    lavalinkTimer = null;
   }
   Log.info("Health monitoring stopped");
 }

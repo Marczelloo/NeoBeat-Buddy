@@ -60,6 +60,7 @@ async function init() {
         ...(parsed.global || {}),
       },
       guilds: parsed.guilds || {},
+      users: parsed.users || {},
     };
 
     if (!state.global.topSources) state.global.topSources = {};

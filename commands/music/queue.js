@@ -166,17 +166,34 @@ async function handleExport(interaction) {
     return interaction.editReply({ embeds: [errorEmbed(createResult.error)] });
   }
 
-  // Add all tracks
-  let addedCount = 0;
-  let skippedCount = 0;
+  // Remove duplicates by title+author combination (more reliable than identifier)
+  const uniqueTracks = [];
+  const seen = new Set();
 
   for (const track of allTracks) {
     // Skip if track doesn't have required info
     if (!track.info?.title || !track.info?.author) {
-      skippedCount++;
       continue;
     }
 
+    // Create unique key based on title+author (case-insensitive)
+    // Normalize whitespace and special characters for better matching
+    const title = track.info.title.toLowerCase().trim().replace(/\s+/g, " ");
+    const author = track.info.author.toLowerCase().trim().replace(/\s+/g, " ");
+    const uniqueKey = `${title}|||${author}`;
+
+    if (!seen.has(uniqueKey)) {
+      seen.add(uniqueKey);
+      uniqueTracks.push(track);
+    }
+  }
+
+  // Add all unique tracks
+  let addedCount = 0;
+  let skippedCount = 0;
+  const duplicatesRemoved = allTracks.length - uniqueTracks.length;
+
+  for (const track of uniqueTracks) {
     const result = addTrack(userId, guildId, playlistName, track);
 
     if (result.success) {
@@ -190,9 +207,13 @@ async function handleExport(interaction) {
     .setDescription(`Created playlist **${playlistName}**`)
     .addFields(
       { name: "Tracks Added", value: addedCount.toString(), inline: true },
-      { name: "Skipped", value: skippedCount.toString(), inline: true },
-      { name: "Total", value: allTracks.length.toString(), inline: true }
+      { name: "Duplicates Removed", value: duplicatesRemoved.toString(), inline: true },
+      { name: "Total Processed", value: allTracks.length.toString(), inline: true }
     );
+
+  if (skippedCount > 0) {
+    embed.addFields({ name: "Skipped (Errors)", value: skippedCount.toString(), inline: true });
+  }
 
   if (history.length > 0) {
     embed.addFields({ name: "From History", value: history.length.toString(), inline: true });

@@ -19,49 +19,49 @@ This version includes 4 major feature groups that need testing:
 
 ### Setup
 
-- [ ] Start fresh bot instance
-- [ ] Join voice channel
-- [ ] Verify `helpers/data/searchHistory.json` doesn't exist yet
+- [x] Start fresh bot instance
+- [x] Join voice channel
+- [x] Verify `helpers/data/searchHistory.json` doesn't exist yet
 
 ### 1.1 Auto-Recording Tests
 
 **Test Case:** Search history auto-saves on `/play`
 
-- [ ] Run `/play query:Marina Bubblegum Bitch`
-- [ ] Verify track plays successfully
-- [ ] Check `helpers/data/searchHistory.json` created
-- [ ] Verify entry contains:
-  - [ ] `query` field matches "Marina Bubblegum Bitch"
-  - [ ] `track` object has title, author, identifier, uri, length, sourceName
-  - [ ] `guildId` matches current server
-  - [ ] `timestamp` is valid ISO date
-- [ ] Play 4 more different songs
-- [ ] Verify history has 5 entries (newest last)
+- [x] Run `/play query:Marina Bubblegum Bitch`
+- [x] Verify track plays successfully
+- [x] Check `helpers/data/searchHistory.json` created
+- [x] Verify entry contains:
+  - [x] `query` field matches "Marina Bubblegum Bitch"
+  - [x] `track` object has title, author, identifier, uri, length, sourceName
+  - [x] `guildId` matches current server
+  - [x] `timestamp` is valid ISO date
+- [x] Play 4 more different songs
+- [x] Verify history has 5 entries (newest last)
 
 **Test Case:** Playlists don't record in history
 
-- [ ] Run `/play query:spotify playlist url`
-- [ ] Verify no new history entry created (playlists excluded)
+- [x] Run `/play query:spotify playlist url`
+- [x] Verify no new history entry created (playlists excluded)
 
 **Test Case:** Maximum history limit (100 entries)
 
-- [ ] Simulate 100+ searches (can mock in code or play 100 songs)
+- [] Simulate 100+ searches (can mock in code or play 100 songs)
 - [ ] Verify only last 100 entries kept (FIFO queue)
 
 ### 1.2 `/history view` Tests
 
 **Test Case:** Basic view with pagination
 
-- [ ] Run `/history view`
-- [ ] Verify embed shows:
-  - [ ] Title: "🕒 Your Search History"
-  - [ ] Up to 15 entries (oldest first)
-  - [ ] Each entry: number, title, artist, duration, source, time ago
-- [ ] Verify "Next" button appears if >15 entries
-- [ ] Click "Next" button
-- [ ] Verify page 2 displays next 15 entries
-- [ ] Verify "Previous" button appears
-- [ ] Click "Previous" to return to page 1
+- [x] Run `/history view`
+- [x] Verify embed shows:
+  - [x] Title: "🕒 Your Search History"
+  - [x] Up to 15 entries (oldest first)
+  - [x] Each entry: number, title, artist, duration, source, time ago
+- [x] Verify "Next" button appears if >15 entries
+- [x] Click "Next" button
+- [x] Verify page 2 displays next 15 entries
+- [x] Verify "Previous" button appears
+- [x] Click "Previous" to return to page 1
 
 **Test Case:** Server filtering
 
@@ -74,82 +74,82 @@ This version includes 4 major feature groups that need testing:
 
 **Test Case:** Empty history
 
-- [ ] Fresh user (or clear history)
-- [ ] Run `/history view`
-- [ ] Verify message: "Your search history is empty!"
+- [x] Fresh user (or clear history)
+- [x] Run `/history view`
+- [x] Verify message: "Your search history is empty!"
 
 ### 1.3 `/history replay` Tests
 
 **Test Case:** Replay track from history
 
-- [ ] Run `/history view` to see list
-- [ ] Note a track number (e.g., #3)
-- [ ] Run `/history replay number:3`
-- [ ] Verify track queued/played successfully
-- [ ] Verify success message shows track title
+- [x] Run `/history view` to see list
+- [x] Note a track number (e.g., #3)
+- [x] Run `/history replay number:3`
+- [x] Verify track queued/played successfully
+- [x] Verify success message shows track title
 
 **Test Case:** Prepend option
 
-- [ ] Have 3+ songs in queue
-- [ ] Run `/history replay number:1 prepend:true`
-- [ ] Verify track added to front of queue (plays next)
-- [ ] Run `/history replay number:2 prepend:false`
-- [ ] Verify track added to end of queue
+- [x] Have 3+ songs in queue
+- [x] Run `/history replay number:1 prepend:true`
+- [x] Verify track added to front of queue (plays next)
+- [x] Run `/history replay number:2 prepend:false`
+- [x] Verify track added to end of queue
 
 **Test Case:** Invalid track number
 
-- [ ] Run `/history replay number:999`
-- [ ] Verify error: "Track not found at position 999"
+- [x] Run `/history replay number:999`
+- [x] Verify error: "Track not found at position 999"
 
 **Test Case:** Voice channel checks
 
-- [ ] Leave voice channel
-- [ ] Run `/history replay number:1`
-- [ ] Verify error: "You need to be in a voice channel"
+- [x] Leave voice channel
+- [x] Run `/history replay number:1`
+- [x] Verify error: "You need to be in a voice channel"
 
 ### 1.4 `/history search` Tests
 
 **Test Case:** Search by title
 
-- [ ] Play: "Marina - Bubblegum Bitch", "MARINA - Primadonna", "Arctic Monkeys - Do I Wanna Know"
-- [ ] Run `/history search query:Marina`
-- [ ] Verify both Marina songs appear
-- [ ] Verify Arctic Monkeys does not appear
+- [x] Play: "Marina - Bubblegum Bitch", "MARINA - Primadonna", "Arctic Monkeys - Do I Wanna Know"
+- [x] Run `/history search query:Marina`
+- [x] Verify both Marina songs appear
+- [x] Verify Arctic Monkeys does not appear
 
 **Test Case:** Search by artist
 
-- [ ] Run `/history search query:Arctic Monkeys`
-- [ ] Verify "Do I Wanna Know" appears
+- [x] Run `/history search query:Arctic Monkeys`
+- [x] Verify "Do I Wanna Know" appears
 
 **Test Case:** Case-insensitive search
 
-- [ ] Run `/history search query:MARINA`
-- [ ] Run `/history search query:marina`
-- [ ] Run `/history search query:MaRiNa`
-- [ ] Verify all return same results
+- [x] Run `/history search query:MARINA`
+- [x] Run `/history search query:marina`
+- [x] Run `/history search query:MaRiNa`
+- [x] Verify all return same results
 
 **Test Case:** No results
 
-- [ ] Run `/history search query:NonexistentSong123`
-- [ ] Verify message: "No matching tracks found"
+- [x] Run `/history search query:NonexistentSong123`
+- [x] Verify message: "No matching tracks found"
 
 ### 1.5 `/history export` Tests
 
 **Test Case:** Export to playlist
 
-- [ ] Play 5 different songs
-- [ ] Run `/history export name:MyHistoryPlaylist`
-- [ ] Verify success message shows track count
-- [ ] Run `/playlist list`
-- [ ] Verify "MyHistoryPlaylist" exists
-- [ ] Run `/playlist play name:MyHistoryPlaylist`
-- [ ] Verify all 5 songs queue correctly
+- [x] Play 5 different songs
+- [x] Run `/history export name:MyHistoryPlaylist`
+- [x] Verify success message shows track count
+- [x] Run `/playlist list`
+- [x] Verify "MyHistoryPlaylist" exists
+- [x] Run `/playlist play name:MyHistoryPlaylist`
+- [x] Verify all 5 songs queue correctly
 
 **Test Case:** Export with limit
 
-- [ ] Have 20 songs in history
-- [ ] Run `/history export name:Top10 limit:10`
-- [ ] Verify playlist has only 10 tracks (most recent)
+- [x] Have 20 songs in history
+- [x] Run `/history export name:Top10 limit:10`
+- [x] Verify playlist has only 10 tracks (most recent)
 
 **Test Case:** Server filtering in export
 
@@ -159,20 +159,20 @@ This version includes 4 major feature groups that need testing:
 
 **Test Case:** Empty history export
 
-- [ ] Clear history
-- [ ] Run `/history export name:Empty`
-- [ ] Verify error: "Your history is empty"
+- [x] Clear history
+- [x] Run `/history export name:Empty`
+- [x] Verify error: "Your history is empty"
 
 ### 1.6 `/history clear` Tests
 
 **Test Case:** Clear all history
 
-- [ ] Have 10+ songs in history
-- [ ] Run `/history clear`
-- [ ] Confirm in modal
-- [ ] Verify success message
-- [ ] Run `/history view`
-- [ ] Verify empty history
+- [x] Have 10+ songs in history
+- [x] Run `/history clear`
+- [x] Confirm in modal
+- [x] Verify success message
+- [x] Run `/history view`
+- [x] Verify empty history
 
 **Test Case:** Clear server-only
 
@@ -191,36 +191,36 @@ This version includes 4 major feature groups that need testing:
 
 **Test Case:** Export active session
 
-- [ ] Join voice channel
-- [ ] Play 3 songs (let them finish)
-- [ ] Add 2 songs to queue
-- [ ] Currently playing 1 song
-- [ ] Run `/queue export name:MySession`
-- [ ] Verify success message shows:
-  - [ ] Total tracks (should be 6: 3 history + 1 current + 2 queue)
-  - [ ] Added count
-  - [ ] Skipped count (if any duplicates)
-- [ ] Run `/playlist play name:MySession`
-- [ ] Verify all 6 songs queue in correct order
+- [x] Join voice channel
+- [x] Play 3 songs (let them finish)
+- [x] Add 2 songs to queue
+- [x] Currently playing 1 song
+- [x] Run `/queue export name:MySession`
+- [x] Verify success message shows:
+  - [x] Total tracks (should be 6: 3 history + 1 current + 2 queue)
+  - [x] Added count
+  - [x] Skipped count (if any duplicates)
+- [x] Run `/playlist play name:MySession`
+- [x] Verify all 6 songs queue in correct order
 
 **Test Case:** Export with empty queue
 
-- [ ] Play 1 song (let it finish)
-- [ ] Queue is now empty
-- [ ] Run `/queue export name:SingleTrack`
-- [ ] Verify playlist created with just the 1 track from history
+- [x] Play 1 song (let it finish)
+- [x] Queue is now empty
+- [x] Run `/queue export name:SingleTrack`
+- [x] Verify playlist created with just the 1 track from history
 
 **Test Case:** No session state
 
-- [ ] Fresh guild, never played music
-- [ ] Run `/queue export name:Empty`
-- [ ] Verify error: "No active playback session"
+- [x] Fresh guild, never played music
+- [x] Run `/queue export name:Empty`
+- [x] Verify error: "No active playback session"
 
 **Test Case:** Duplicate handling
 
-- [ ] Play same song 3 times
-- [ ] Run `/queue export name:Duplicates`
-- [ ] Verify skipped count shows duplicates removed
+- [x] Play same song 3 times
+- [x] Run `/queue export name:Duplicates`
+- [] Verify skipped count shows duplicates removed
 - [ ] Verify playlist has song only once
 
 ---
@@ -250,27 +250,27 @@ This version includes 4 major feature groups that need testing:
 
 **Test Case:** Personal wrapped view
 
-- [ ] Play 20+ songs with variety of artists
-- [ ] Run `/wrapped me`
-- [ ] Verify embed shows:
-  - [ ] User's avatar thumbnail
-  - [ ] Total songs played
-  - [ ] Total listening time (hours and days)
-  - [ ] Average songs per day
-  - [ ] Activity level (e.g., "Regular User 🎵")
-  - [ ] Top 5 tracks with play counts
-  - [ ] Top 5 artists with song counts
-  - [ ] Most active hour
-  - [ ] Favorite source
-  - [ ] Current streak (if listened today/yesterday)
-  - [ ] Longest streak
-  - [ ] Footer with "Member since" and "Last active"
+- [x] Play 20+ songs with variety of artists
+- [x] Run `/wrapped me`
+- [x] Verify embed shows:
+  - [x] User's avatar thumbnail
+  - [x] Total songs played
+  - [x] Total listening time (hours and days)
+  - [x] Average songs per day
+  - [x] Activity level (e.g., "Regular User 🎵")
+  - [x] Top 5 tracks with play counts
+  - [x] Top 5 artists with song counts
+  - [x] Most active hour
+  - [x] Favorite source
+  - [x] Current streak (if listened today/yesterday)
+  - [x] Longest streak
+  - [x] Footer with "Member since" and "Last active"
 
 **Test Case:** Fresh user wrapped
 
-- [ ] New user (never played music)
-- [ ] Run `/wrapped me`
-- [ ] Verify message: "You haven't listened to any music yet!"
+- [x] New user (never played music)
+- [x] Run `/wrapped me`
+- [x] Verify message: "You haven't listened to any music yet!"
 
 **Test Case:** View another user's wrapped
 
@@ -282,21 +282,21 @@ This version includes 4 major feature groups that need testing:
 
 **Test Case:** Server-wide wrapped
 
-- [ ] Have 2+ users play music
-- [ ] Run `/wrapped server`
-- [ ] Verify embed shows:
-  - [ ] Server icon thumbnail
-  - [ ] Total songs played
-  - [ ] Total playtime
-  - [ ] Total listening sessions
-  - [ ] Avg songs per session
-  - [ ] Unique listeners count
-  - [ ] Peak listeners count
-  - [ ] Songs skipped
-  - [ ] Playlists added
-  - [ ] Top 5 sources with percentages
-  - [ ] Most active hour
-  - [ ] Footer with "Music playing since"
+- [x] Have 2+ users play music
+- [x] Run `/wrapped server`
+- [x] Verify embed shows:
+  - [x] Server icon thumbnail
+  - [x] Total songs played
+  - [x] Total playtime
+  - [x] Total listening sessions
+  - [x] Avg songs per session
+  - [x] Unique listeners count
+  - [x] Peak listeners count
+  - [x] Songs skipped
+  - [x] Playlists added
+  - [x] Top 5 sources with percentages
+  - [x] Most active hour
+  - [x] Footer with "Music playing since"
 
 **Test Case:** Fresh server
 
@@ -308,15 +308,15 @@ This version includes 4 major feature groups that need testing:
 
 **Test Case:** Basic stats view
 
-- [ ] Run `/stats`
-- [ ] Verify shows guild + global stats (as before)
+- [x] Run `/stats`
+- [x] Verify shows guild + global stats (as before)
 
 **Test Case:** Detailed stats view
 
-- [ ] Run `/stats detailed:true`
-- [ ] Verify additional fields appear:
-  - [ ] "📻 Top Sources" section with top 5 and percentages
-  - [ ] "⏰ Most Active Hour" section with hour and song count
+- [x] Run `/stats detailed:true`
+- [x] Verify additional fields appear:
+  - [x] "📻 Top Sources" section with top 5 and percentages
+  - [x] "⏰ Most Active Hour" section with hour and song count
 
 ### 3.5 Listening Streak Tests
 
@@ -343,121 +343,120 @@ This version includes 4 major feature groups that need testing:
 
 **Test Case:** Health monitoring starts on boot
 
-- [ ] Start bot
-- [ ] Check logs for "Health monitoring started"
-- [ ] Wait 30 seconds
-- [ ] Verify event loop lag measured (check metrics)
+- [x] Start bot
+- [x] Check logs for "Health monitoring started"
+- [x] Wait 30 seconds
+- [x] Verify event loop lag measured (check metrics)
 
 **Test Case:** Command tracking
 
-- [ ] Run 5 successful commands
-- [ ] Run 1 command that fails (e.g., invalid input)
-- [ ] Get metrics: verify `commands.total: 6`, `successful: 5`, `failed: 1`
+- [x] Run 5 successful commands
+- [x] Run 1 command that fails (e.g., invalid input)
+- [x] Get metrics: verify `commands.total: 6`, `successful: 5`, `failed: 1`
 
 **Test Case:** Track events recorded
 
-- [ ] Play 3 songs successfully
-- [ ] Play 1 song that fails to load
-- [ ] Skip 1 song
-- [ ] Get metrics: verify `tracks.played: 3`, `tracks.failed: 1`, `tracks.skipped: 1`
+- [x] Play 3 songs successfully
+- [x] Play 1 song that fails to load
+- [x] Skip 1 song
+- [x] Get metrics: verify `tracks.played: 3`, `tracks.failed: 1`, `tracks.skipped: 1`
 
 **Test Case:** Error recording
 
-- [ ] Trigger an error (e.g., invalid Lavalink command)
-- [ ] Verify error appears in health metrics
-- [ ] Verify error logged to `logs/logs.txt`
+- [x] Trigger an error (e.g., invalid Lavalink command)
+- [x] Verify error appears in health metrics
+- [x] Verify error logged to `logs/logs.txt`
 
 ### 4.2 `/health status` Tests (Admin Only)
 
 **Test Case:** Healthy status
 
-- [ ] Fresh bot with no issues
-- [ ] Run `/health status`
-- [ ] Verify:
-  - [ ] Overall status: "✅ Healthy"
-  - [ ] No issues listed
-  - [ ] Quick metrics shown (uptime, memory, Lavalink, commands)
-  - [ ] No recent errors section (if none)
+- [x] Fresh bot with no issues
+- [x] Run `/health status`
+- [x] Verify:
+  - [x] Overall status: "✅ Healthy"
+  - [x] No issues listed
+  - [x] Quick metrics shown (uptime, memory, Lavalink, commands)
+  - [x] No recent errors section (if none)
 
 **Test Case:** Issues detected
 
-- [ ] Trigger high memory usage (load many large files)
-- [ ] OR disconnect Lavalink
-- [ ] Run `/health status`
-- [ ] Verify:
-  - [ ] Overall status: "❌ Issues Detected"
-  - [ ] Issues listed (e.g., "Lavalink not connected")
+- [x] Trigger high memory usage (load many large files)
+- [x] OR disconnect Lavalink
+- [x] Run `/health status`
+- [x] Verify:
+  - [x] Overall status: "❌ Issues Detected"
+  - [x] Issues listed (e.g., "Lavalink not connected")
 
 **Test Case:** Non-admin user
 
-- [ ] Regular user (no admin permissions)
-- [ ] Run `/health status`
-- [ ] Verify error: "You need Administrator permission"
+- [x] Regular user (no admin permissions)
+- [x] Run `/health status`
+- [x] Verify error: "You need Administrator permission"
 
 ### 4.3 `/health metrics` Tests
 
 **Test Case:** Detailed metrics view
 
-- [ ] Run `/health metrics`
-- [ ] Verify embed shows:
-  - [ ] **System** section: platform, Node version, uptime
-  - [ ] **Memory** section: heap used/total, RSS, system totals
-  - [ ] **CPU** section: usage %, cores, event loop lag
-  - [ ] **Lavalink** section: status, reconnects, latency
-  - [ ] **Commands** section: total, successful, failed, success rate %
-  - [ ] **Tracks** section: played, failed, skipped
-  - [ ] **Errors & Warnings** section: total counts, recent errors
+- [x] Run `/health metrics`
+- [x] Verify embed shows:
+  - [x] **System** section: platform, Node version, uptime
+  - [x] **Memory** section: heap used/total, RSS, system totals
+  - [x] **CPU** section: usage %, cores, event loop lag
+  - [x] **Lavalink** section: status, reconnects, latency
+  - [x] **Commands** section: total, successful, failed, success rate %
+  - [x] **Tracks** section: played, failed, skipped
+  - [x] **Errors & Warnings** section: total counts, recent errors
 
 ### 4.4 `/health errors` Tests
 
 **Test Case:** View recent errors
 
-- [ ] Trigger 3 different errors
-- [ ] Run `/health errors`
-- [ ] Verify shows last 5 errors (default)
-- [ ] Each error shows: timestamp, message, context
+- [x] Trigger 3 different errors
+- [x] Run `/health errors`
+- [x] Verify shows last 5 errors (default)
+- [x] Each error shows: timestamp, message, context
 
 **Test Case:** Custom limit
 
-- [ ] Trigger 10 errors
-- [ ] Run `/health errors limit:3`
-- [ ] Verify shows only 3 most recent
+- [x] Trigger 10 errors
+- [x] Run `/health errors limit:3`
+- [x] Verify shows only 3 most recent
 
 **Test Case:** No errors
 
-- [ ] Fresh bot
-- [ ] Run `/health errors`
-- [ ] Verify message: "No errors recorded! 🎉"
+- [x] Fresh bot
+- [x] Run `/health errors`
+- [x] Verify message: "No errors recorded! 🎉"
 
 ### 4.5 `/health reset` Tests
 
 **Test Case:** Reset metrics
 
-- [ ] Run 10 commands
-- [ ] Play 5 songs
-- [ ] Trigger 2 errors
-- [ ] Run `/health reset`
-- [ ] Verify success message
-- [ ] Run `/health metrics`
-- [ ] Verify all counters reset to 0
-- [ ] Verify uptime NOT reset (only metrics)
+- [x] Run 10 commands
+- [x] Play 5 songs
+- [x] Trigger 2 errors
+- [x] Run `/health reset`
+- [x] Verify success message
+- [x] Run `/health metrics`
+- [x] Verify all counters reset to 0
+- [x] Verify uptime NOT reset (only metrics)
 
 ### 4.6 Lavalink Monitoring Tests
 
 **Test Case:** Connection status tracking
 
-- [ ] Start bot with Lavalink running
-- [ ] Verify `lavalink.connected: true`
-- [ ] Stop Lavalink
-- [ ] Wait for disconnect event
-- [ ] Verify `lavalink.connected: false`
-- [ ] Verify log: "Lavalink disconnected"
-- [ ] Verify reconnects counter incremented
+- [x] Start bot with Lavalink running
+- [x] Verify `lavalink.connected: true`
+- [x] Stop Lavalink
+- [x] Wait for disconnect event
+- [x] Verify `lavalink.connected: false`
+- [x] Verify log: "Lavalink disconnected"
+- [x] Verify reconnects counter incremented
+      **Test Case:** Latency tracking
 
-**Test Case:** Latency tracking
-
-- [ ] Check `/health metrics`
-- [ ] Verify latency shown (should be low, e.g., <100ms)
+- [x] Check `/health metrics`
+- [x] Verify latency shown (should be low, e.g., <100ms)
 
 ---
 

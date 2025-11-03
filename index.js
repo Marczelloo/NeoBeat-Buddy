@@ -436,7 +436,9 @@ health.startMonitoring();
 // Update Lavalink connection status
 poru.on("nodeConnect", (node) => {
   Log.success("Lavalink node connected", node.name);
-  health.updateLavalinkStatus(true);
+  // Get latency from node stats if available
+  const latency = node.stats?.ping || node.ping || null;
+  health.updateLavalinkStatus(true, latency);
 });
 
 poru.on("nodeDisconnect", (node) => {
