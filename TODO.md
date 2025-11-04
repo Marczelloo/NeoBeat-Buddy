@@ -32,14 +32,12 @@
 - [x] improved autocomplete with Spotify + YouTube merged results (better metadata, no duplicates)
 - [x] source display in player and queue embeds
 - [x] investigate Deezer FLAC direct playback (currently only works for autoplay recommendations, not direct playback)
-- [] check if synced lyrics are possible with deezer and if lyrics can be fetched from deezer
-
-# Need to be tested
-
 - [x] save queue (all songs played in current session) as playlist, queue import / export
 - [x] search history
 - [x] stats enchancment / listening wrapped
 - [x] better logging + health monitoring
+- [] swap or add possibility to change source of lyrics to deezer (an be synced with song)
+- [] let user pick from which source he want to search / play song (default deezer)
 
 ## FIXES
 

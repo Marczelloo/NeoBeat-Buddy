@@ -40,7 +40,7 @@ module.exports = {
     if (loopMode) {
       const poru = createPoru(interaction.client);
       const player = poru.players.get(interaction.guild.id);
-      await refreshNowPlayingMessage(interaction.client, interaction.guild.id, player);
+      await refreshNowPlayingMessage(interaction.client, interaction.guild.id, player, loopMode);
       return interaction.editReply({ embeds: [successEmbed(`Loop mode set to **${loopMode}**.`)] });
     }
 

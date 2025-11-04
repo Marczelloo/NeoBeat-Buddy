@@ -121,21 +121,39 @@ function updatePerformanceMetrics() {
 }
 
 function recordError(error, context = {}) {
-  const errorEntry = {
-    timestamp: new Date().toISOString(),
-    message: error.message || String(error),
-    stack: error.stack,
-    context,
-  };
+  try {
+    // Sanitize context to prevent circular references
+    const sanitizedContext = {};
+    for (const key in context) {
+      if (context.hasOwnProperty(key)) {
+        const value = context[key];
+        // Only include simple values
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+          sanitizedContext[key] = value;
+        } else if (value === null || value === undefined) {
+          sanitizedContext[key] = value;
+        }
+      }
+    }
 
-  metrics.errors.push(errorEntry);
+    const errorEntry = {
+      timestamp: new Date().toISOString(),
+      message: error.message || String(error),
+      stack: error.stack,
+      context: sanitizedContext,
+    };
 
-  // Keep only last 100 errors
-  if (metrics.errors.length > 100) {
-    metrics.errors.shift();
+    metrics.errors.push(errorEntry);
+
+    // Keep only last 100 errors
+    if (metrics.errors.length > 100) {
+      metrics.errors.shift();
+    }
+
+    // DO NOT call Log.error here - it creates infinite loop!
+  } catch (err) {
+    // Failed to record error - silently fail to prevent infinite loops
   }
-
-  Log.error("Error recorded in health monitoring", error, JSON.stringify(context));
 }
 
 function recordWarning(message, context = {}) {

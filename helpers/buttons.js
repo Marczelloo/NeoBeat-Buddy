@@ -19,6 +19,7 @@ const Log = require("./logs/log");
 const { formatDuration } = require("./utils");
 
 const LOOP_EMOJI = "1198248581304418396";
+const LOOP_QUEUE_EMOJI = "1198248581304418396"; // Same as LOOP_EMOJI for now
 const SHUFFLE_EMOJI = "1198248578146115605";
 const SKIP_EMOJI = "1198248590087307385";
 const REWIND_EMOJI = "1198248587369386134";
@@ -50,9 +51,9 @@ function resumeButton(disabled = false) {
 
 function loopButton(disabled = false, mode = "NONE") {
   const active = mode !== "NONE";
-  const label = mode === "QUEUE" ? "đź”" : LOOP_EMOJI;
+  const emoji = mode === "QUEUE" ? LOOP_QUEUE_EMOJI : LOOP_EMOJI;
 
-  return createButton("loop-button", active ? ButtonStyle.Success : ButtonStyle.Primary, label, disabled);
+  return createButton("loop-button", active ? ButtonStyle.Success : ButtonStyle.Primary, emoji, disabled);
 }
 
 function shuffleButton(disabled = false) {

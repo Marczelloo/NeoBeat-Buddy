@@ -389,18 +389,23 @@ async function lavalinkToggleLoop(guildId, mode) {
 
   if (!player) return null;
 
+  // Determine next loop mode
+  const currentLoop = player.loop || "NONE";
+
   const next =
     mode && ["NONE", "TRACK", "QUEUE"].includes(mode)
       ? mode
-      : player.loop === "NONE"
+      : currentLoop === "NONE"
       ? "TRACK"
-      : player.loop === "TRACK"
+      : currentLoop === "TRACK"
       ? "QUEUE"
       : "NONE";
 
+  // Set loop mode on player
   player.loop = next;
-  await player.setLoop(next);
+
   clearInactivityTimer(guildId, "toggleLoop");
+
   return next;
 }
 

@@ -222,9 +222,14 @@ class Log {
     // Record error in health monitoring if available
     try {
       const health = require("../monitoring/health");
-      health.recordError(arg instanceof Error ? arg : new Error(message), { additionalInfo });
+      // Only pass simple context to avoid circular references
+      const simpleContext = {
+        message,
+        caller: Log.getCallerFile(),
+      };
+      health.recordError(arg instanceof Error ? arg : new Error(message), simpleContext);
     } catch (err) {
-      // Health monitoring not available
+      // Health monitoring not available or failed - don't log to prevent infinite loop
     }
   }
 
