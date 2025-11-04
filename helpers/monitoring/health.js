@@ -42,16 +42,24 @@ function measureEventLoopLag() {
 }
 
 // Update Lavalink latency periodically
-function updateLavalinkLatency() {
+async function updateLavalinkLatency() {
   try {
     const { getPoru } = require("../lavalink/players");
     const poru = getPoru();
     if (poru && poru.nodes && poru.nodes.size > 0) {
       const node = Array.from(poru.nodes.values())[0];
-      if (node && node.connected) {
-        const latency = node.stats?.ping || node.ping || null;
-        if (latency !== null) {
-          metrics.lavalink.latency = latency;
+      if (node && node.connected && node.rest) {
+        try {
+          const start = Date.now();
+          await node.rest.get(`/v4/info`);
+          const latency = Date.now() - start;
+
+          if (!isNaN(latency) && latency >= 0) {
+            metrics.lavalink.latency = Math.round(latency);
+            metrics.lavalink.connected = true;
+          }
+        } catch (err) {
+          // Request failed, node might be disconnecting
         }
       }
     }

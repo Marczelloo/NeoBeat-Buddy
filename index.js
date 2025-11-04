@@ -436,14 +436,30 @@ connectClient();
 const poru = createPoru(client);
 client.on("raw", (d) => poru.packetUpdate(d));
 
+// Function to measure Lavalink node latency
+async function measureNodeLatency(node) {
+  if (!node || !node.rest) return null;
+
+  try {
+    const start = Date.now();
+    // Make a lightweight request to measure round-trip time
+    await node.rest.get(`/v4/info`);
+    const latency = Date.now() - start;
+    return Math.round(latency);
+  } catch (err) {
+    return null;
+  }
+}
+
 // Start health monitoring
 health.startMonitoring();
 
 // Update Lavalink connection status
-poru.on("nodeConnect", (node) => {
+poru.on("nodeConnect", async (node) => {
   Log.success("Lavalink node connected", node.name);
-  // Get latency from node stats if available
-  const latency = node.stats?.ping || node.ping || null;
+
+  // Measure latency by pinging the REST API
+  const latency = await measureNodeLatency(node);
   health.updateLavalinkStatus(true, latency);
 });
 
@@ -455,4 +471,12 @@ poru.on("nodeDisconnect", (node) => {
 poru.on("nodeError", (node, error) => {
   Log.error("❌ Lavalink error", error, `node=${node.name}`);
   health.recordError(error, { node: node.name });
+});
+
+// Update latency when node stats are received (every ~1 minute)
+poru.on("nodeStats", async (node) => {
+  const latency = await measureNodeLatency(node);
+  if (latency !== null) {
+    health.updateLavalinkStatus(true, latency);
+  }
 });
