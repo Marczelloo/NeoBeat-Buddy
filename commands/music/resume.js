@@ -10,7 +10,12 @@ module.exports = {
   data: new SlashCommandBuilder().setName("resume").setDescription("Resume the currently paused song"),
 
   async execute(interaction) {
-    Log.info(`/resume command used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+    Log.info(
+      "▶️ /resume command",
+      `user=${interaction.user.tag}`,
+      `guild=${interaction.guild.name}`,
+      `id=${interaction.guild.id}`
+    );
 
     await interaction.deferReply({ ephemeral: true });
 

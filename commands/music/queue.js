@@ -225,7 +225,12 @@ async function handleExport(interaction) {
     embed.addFields({ name: "From Queue", value: queue.length.toString(), inline: true });
   }
 
-  Log.info(`/queue export used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+  Log.info(
+    "💾 /queue export command",
+    `user=${interaction.user.tag}`,
+    `guild=${interaction.guild.name}`,
+    `id=${interaction.guild.id}`
+  );
 
   return interaction.editReply({ embeds: [embed] });
 }

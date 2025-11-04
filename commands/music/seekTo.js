@@ -17,7 +17,12 @@ module.exports = {
     .setDescription("Seek to a specific position in the current track"),
 
   async execute(interaction) {
-    Log.info(`/seekto command used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+    Log.info(
+      "⏩ /seekto command",
+      `user=${interaction.user.tag}`,
+      `guild=${interaction.guild.name}`,
+      `id=${interaction.guild.id}`
+    );
 
     await interaction.deferReply({ ephemeral: true });
 

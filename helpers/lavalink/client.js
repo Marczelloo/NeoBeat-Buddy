@@ -2,6 +2,7 @@ const { inspect } = require("util");
 const { Poru } = require("poru");
 const { errorEmbed } = require("../embeds");
 const { getGuildState } = require("../guildState.js");
+const { formatDuration } = require("../utils");
 const Log = require("../logs/log");
 const statsStore = require("../stats/store.js");
 const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
@@ -67,12 +68,16 @@ function createPoru(client) {
 
   poru.on("trackError", async (player, track, err) => {
     const errorSummary = err instanceof Error ? err.message : inspect(err, { depth: 1 });
+    const trackInfo = track?.info || {};
+    const trackTitle = trackInfo.title || "Unknown";
+    const source = trackInfo.sourceName || "unknown";
+
     Log.error(
-      "Lavalink track error",
-      "",
+      "❌ Track error",
+      `${trackTitle}`,
+      `source=${source}`,
+      `queue=${player.queue.length}`,
       `guild=${player.guildId}`,
-      `track=${describeTrack(track)}`,
-      `queueLength=${player.queue.length}`,
       `error=${errorSummary}`
     );
     const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
@@ -142,12 +147,21 @@ function createPoru(client) {
     const lyricsPayload = await fetchLyrics(player, track.info).catch(() => null);
     setLyricsState(player.guildId, lyricsPayload);
 
+    // Enhanced logging with more readable track info
+    const trackInfo = track.info || {};
+    const source = trackInfo.sourceName || "unknown";
+    const duration = trackInfo.isStream ? "🔴 LIVE" : formatDuration(trackInfo.length || 0);
+    const quality = track.pluginInfo?.quality || (source === "deezer" ? "FLAC" : "default");
+
     Log.info(
-      "Lavalink track started",
-      "",
-      `guild=${player.guildId}`,
-      `track=${describeTrack(track)}`,
-      `queueLength=${player.queue.length}`
+      "▶️  Track started",
+      `${trackInfo.title || "Unknown"}`,
+      `artist=${trackInfo.author || "Unknown"}`,
+      `source=${source}`,
+      `quality=${quality}`,
+      `duration=${duration}`,
+      `queue=${player.queue.length}`,
+      `guild=${player.guildId}`
     );
 
     try {
@@ -197,14 +211,35 @@ function createPoru(client) {
       );
     }
 
+    // Clean reason logging - only log the reason string, not the entire object
+    const cleanReason = typeof reason === "string" ? reason : reason?.reason || "unknown";
+    const trackInfo = track?.info || {};
+    const trackTitle = trackInfo.title || "Unknown";
+
+    // Determine reason emoji and label
+    let reasonLabel = cleanReason;
+    let reasonEmoji = "⏹️";
+    if (cleanReason === "finished") {
+      reasonEmoji = "✅";
+      reasonLabel = "completed";
+    } else if (cleanReason === "stopped") {
+      reasonEmoji = "⏹️";
+      reasonLabel = "stopped";
+    } else if (cleanReason === "replaced") {
+      reasonEmoji = "🔄";
+      reasonLabel = "replaced";
+    } else if (cleanReason === "load_failed") {
+      reasonEmoji = "❌";
+      reasonLabel = "failed to load";
+    }
+
     Log.info(
-      "Lavalink track ended",
-      "",
-      `guild=${player.guildId}`,
-      `track=${describeTrack(track)}`,
-      `reason=${reasonSummary}`,
-      `queueLength=${player.queue.length}`,
-      `next=${nextTrack}`
+      `${reasonEmoji} Track ended`,
+      `${trackTitle}`,
+      `reason=${reasonLabel}`,
+      `queue=${player.queue.length}`,
+      `next=${nextTrack}`,
+      `guild=${player.guildId}`
     );
 
     state.currentTrack = null;
@@ -235,7 +270,7 @@ function createPoru(client) {
   });
 
   poru.on("queueEnd", async (player) => {
-    Log.info("Lavalink queue end", "", `guild=${player.guildId}`);
+    Log.info("🏁 Queue ended", `guild=${player.guildId}`);
 
     const state = ensurePlaybackState(player.guildId);
     const lastTrack = state.currentTrack;
@@ -297,7 +332,8 @@ function createPoru(client) {
     const guildSettings = getGuildState(player.guildId);
 
     if (guildSettings?.autoplay && lastTrack) {
-      Log.info("Autoplay enabled, fetching related track", "", `guild=${player.guildId}`);
+      const lastTitle = lastTrack?.info?.title || "Unknown";
+      Log.info("🔁 Autoplay fetching", `basedOn=${lastTitle}`, `guild=${player.guildId}`);
 
       const { queueAutoplayTrack } = require("./autoplay");
       const added = await queueAutoplayTrack(player, lastTrack, player.textChannel);

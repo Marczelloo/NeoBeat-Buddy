@@ -245,7 +245,13 @@ async function handleReplay(interaction, userId, guildId) {
       { name: "Original Search", value: entry.query || "Direct link", inline: true }
     );
 
-  Log.info(`/history replay #${number} used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+  Log.info(
+    "⏮️ /history replay command",
+    `number=${number}`,
+    `user=${interaction.user.tag}`,
+    `guild=${interaction.guild.name}`,
+    `id=${interaction.guild.id}`
+  );
 
   return interaction.editReply({ embeds: [embed] });
 }
@@ -276,7 +282,12 @@ async function handleSearch(interaction, userId) {
     .setDescription(resultList)
     .setFooter({ text: `Found ${results.length} matches` });
 
-  Log.info(`/history search used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+  Log.info(
+    "🔍 /history search command",
+    `user=${interaction.user.tag}`,
+    `guild=${interaction.guild.name}`,
+    `id=${interaction.guild.id}`
+  );
 
   return interaction.reply({ embeds: [embed], ephemeral: true });
 }
@@ -330,7 +341,12 @@ async function handleExport(interaction, userId, guildId) {
       { name: "Source", value: serverOnly ? "This server only" : "All servers", inline: true }
     );
 
-  Log.info(`/history export used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+  Log.info(
+    "💾 /history export command",
+    `user=${interaction.user.tag}`,
+    `guild=${interaction.guild.name}`,
+    `id=${interaction.guild.id}`
+  );
 
   return interaction.editReply({ embeds: [embed] });
 }
@@ -344,7 +360,12 @@ async function handleClear(interaction, userId, guildId) {
     return interaction.reply({ embeds: [errorEmbed(result.error)], ephemeral: true });
   }
 
-  Log.info(`/history clear used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+  Log.info(
+    "🗑️ /history clear command",
+    `user=${interaction.user.tag}`,
+    `guild=${interaction.guild.name}`,
+    `id=${interaction.guild.id}`
+  );
 
   return interaction.reply({ embeds: [successEmbed(result.message)], ephemeral: true });
 }

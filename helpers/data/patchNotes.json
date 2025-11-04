@@ -36,7 +36,9 @@
       "Fixed loop button not working properly - now cycles correctly through all modes",
       "Fixed queue export creating duplicate tracks when exporting sessions",
       "Fixed Lavalink latency showing as N/A in health monitoring",
-      "Fixed user stats not being tracked properly when playing music"
+      "Fixed user stats not being tracked properly when playing music",
+      "Fixed missing formatDuration import causing track logging errors",
+      "Fixed malformed patchNotes.json causing announcer initialization failure"
     ],
     "changes": [
       "Playback now prioritizes Deezer for higher quality audio",
@@ -53,55 +55,14 @@
       "Track play/fail/skip events recorded for health metrics",
       "Queue export now intelligently removes duplicate songs from different sources",
       "Loop mode button now properly displays current state and cycles through all options",
-      "Health metrics now show accurate Lavalink connection latency"
-    ]
-  },
-    "version": "1.0.10",
-    "date": "2025-11-03",
-    "title": "Deezer FLAC, Search History, Session Export, Music Wrapped & Health Monitoring",
-    "features": [
-      "Deezer FLAC lossless audio quality as default playback source",
-      "Autocomplete now returns Deezer tracks with smart fallback to YouTube",
-      "Quality display in player embed - shows audio quality for each source",
-      "Search history tracking - automatically saves all /play searches (up to 100 per user)",
-      "Search history commands - view, replay, search, export to playlist, and clear",
-      "Session queue export - save entire listening session (history + queue) as playlist",
-      "Smart like/unlike detection - like button checks if track is already liked",
-      "Unlike confirmation prompt when trying to like an already-liked track",
-      "Personal music wrapped - view your listening stats with /wrapped me",
-      "Top tracks, top artists, listening patterns, and streak tracking",
-      "Server-wide wrapped statistics with /wrapped server",
-      "Activity levels and achievements based on listening history",
-      "Comprehensive health monitoring system with real-time metrics",
-      "Admin health commands - status, metrics, errors, and reset",
-      "System performance tracking: memory, CPU, event loop lag",
-      "Lavalink connection monitoring and latency tracking",
-      "Command success rate tracking and error aggregation",
-      "Enhanced logging with automatic log rotation (10MB, 5 files)",
-      "Structured JSON logs option for machine parsing",
-      "Performance metrics logging with metric() function",
-      "Detailed stats command with top sources and activity hours"
-    ],
-    "fixes": [
-      "Fixed Lavalink startup issues with plugin compatibility",
-      "Fixed autocomplete returning incorrect results",
-      "Fixed playback errors for valid Deezer searches",
-      "Improved error tracking and reporting",
-      "Better health status detection for system issues"
-    ],
-    "changes": [
-      "Playback now prioritizes Deezer for higher quality audio",
-      "Queue command now has subcommands: view and export",
-      "History stored per-user with server filtering option",
-      "Improved search and playback reliability",
-      "Updated plugin configuration for better compatibility",
-      "User stats now track per-user: tracks, artists, sources, listening time",
-      "Stats store expanded with daily/monthly activity tracking",
-      "Health monitoring auto-starts on bot initialization",
-      "Logs automatically rotate when reaching size limit",
-      "New environment variables: LOG_LEVEL, JSON_LOGS",
-      "Error logs now automatically record in health monitoring",
-      "Track play/fail/skip events recorded for health metrics"
+      "Health metrics now show accurate Lavalink connection latency",
+      "Enhanced logging system with emoji indicators for all operations",
+      "All track lifecycle events now show readable metadata instead of encoded data",
+      "Command logs now include user, guild, and ID for better debugging",
+      "Playback operations (pause, resume, skip, stop) now log track and state changes",
+      "Consistent log format across all modules with visual emoji indicators",
+      "Deezer search results now show track titles instead of technical metadata",
+      "Fallback system logs now include track transitions and sources"
     ]
   },
   "1.0.9": {

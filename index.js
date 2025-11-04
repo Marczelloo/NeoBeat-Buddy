@@ -116,19 +116,20 @@ client.on("channelUpdate", async (oldChannel, newChannel) => {
       const loopMode = player.loop;
       const textChannel = player.textChannel;
 
+      const trackTitle = currentTrack?.info?.title || "none";
+
       Log.info(
-        "Saving playback state before reconnection",
-        "",
-        `guild=${newChannel.guild.id}`,
-        `track=${currentTrack?.info?.title || "none"}`,
+        "💾 Saving playback state",
+        `track=${trackTitle}`,
         `position=${currentPosition}ms`,
-        `queueLength=${queue.length}`,
-        `isPaused=${isPaused}`
+        `queue=${queue.length}`,
+        `paused=${isPaused}`,
+        `guild=${newChannel.guild.id}`
       );
 
       // Destroy old connection
       await player.destroy();
-      Log.info("Destroyed old player connection", "", `guild=${newChannel.guild.id}`);
+      Log.info("🔌 Player destroyed", `guild=${newChannel.guild.id}`);
 
       // Wait for Discord to settle
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -141,7 +142,7 @@ client.on("channelUpdate", async (oldChannel, newChannel) => {
         deaf: true,
       });
 
-      Log.info("Created new player connection", "", `guild=${newChannel.guild.id}`);
+      Log.info("🔌 Player created", `guild=${newChannel.guild.id}`);
 
       // Restore volume and loop mode
       await newPlayer.setVolume(volume);
@@ -153,7 +154,7 @@ client.on("channelUpdate", async (oldChannel, newChannel) => {
         await newPlayer.queue.add(track);
       }
 
-      Log.info("Restored queue", "", `guild=${newChannel.guild.id}`, `queueLength=${queue.length}`);
+      Log.info("✅ Queue restored", `size=${queue.length}`, `guild=${newChannel.guild.id}`);
 
       // Resume playback if there was a track playing
       if (currentTrack) {
@@ -210,7 +211,12 @@ client.on("channelUpdate", async (oldChannel, newChannel) => {
 
 client.on("voiceStateUpdate", (oldState, newState) => {
   if (oldState.member.user.id === client.user.id && newState.channelId === null) {
-    Log.info("Bot left the voice channel:", oldState.channel, newState.guild.name, newState.guild.id);
+    Log.info(
+      "👋 Bot left voice",
+      `channel=${oldState.channel.name}`,
+      `guild=${newState.guild.name}`,
+      `id=${newState.guild.id}`
+    );
   }
 });
 
@@ -345,8 +351,8 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     const newMembers = newChannel.members.size;
 
     if (oldMembers !== newMembers && newMembers === 1) {
-      Log.info("Bot is alone in the voice channel:", newChannel.name, guild.name, guild.id);
-      Log.info("Bot will leave the voice channel in 60 seconds:", newChannel.name, guild.name, guild.id);
+      Log.info("😴 Bot alone in voice", `channel=${newChannel.name}`, `guild=${guild.name}`, `id=${guild.id}`);
+      Log.info("⏱️ Leaving in 60 seconds", `guild=${guild.id}`);
     }
   }
 });
@@ -392,7 +398,7 @@ function reconnectClient() {
 statsStore
   .init()
   .then(() => {
-    Log.info("Stats store initialized");
+    Log.info("✅ Stats store initialized");
   })
   .catch((err) => {
     Log.error("Failed to initialize stats store:", err);
@@ -401,7 +407,7 @@ statsStore
 djStore
   .init()
   .then(() => {
-    Log.info("DJ store initialized");
+    Log.info("✅ DJ store initialized");
   })
   .catch((err) => {
     Log.error("Failed to initialize DJ store:", err);
@@ -410,7 +416,7 @@ djStore
 guildState
   .init()
   .then(() => {
-    Log.info("Guild state initialized");
+    Log.info("✅ Guild state initialized");
   })
   .catch((err) => {
     Log.error("Failed to initialize guild state:", err);
@@ -419,7 +425,7 @@ guildState
 equalizerStore
   .init()
   .then(() => {
-    Log.info("Equalizer store initialized");
+    Log.info("✅ Equalizer store initialized");
   })
   .catch((err) => {
     Log.error("Failed to initialize equalizer store:", err);
@@ -442,11 +448,11 @@ poru.on("nodeConnect", (node) => {
 });
 
 poru.on("nodeDisconnect", (node) => {
-  Log.error("Lavalink node disconnected", node.name);
+  Log.error("❌ Lavalink disconnected", `node=${node.name}`);
   health.updateLavalinkStatus(false);
 });
 
 poru.on("nodeError", (node, error) => {
-  Log.error("Lavalink node error", error, `node=${node.name}`);
+  Log.error("❌ Lavalink error", error, `node=${node.name}`);
   health.recordError(error, { node: node.name });
 });

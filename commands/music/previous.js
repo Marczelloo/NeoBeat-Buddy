@@ -10,7 +10,12 @@ module.exports = {
     .setDescription("Replay the previous track or restart the current one."),
 
   async execute(interaction) {
-    Log.info(`/previous command used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+    Log.info(
+      "⏮️ /previous command",
+      `user=${interaction.user.tag}`,
+      `guild=${interaction.guild.name}`,
+      `id=${interaction.guild.id}`
+    );
 
     await interaction.deferReply({ ephemeral: true });
 

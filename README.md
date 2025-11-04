@@ -64,7 +64,7 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 - **Session queue export** — save entire listening sessions (history + queue) as playlists for easy replay.
 - **Music Wrapped & Insights** — personal and server-wide listening statistics with top tracks, artists, listening patterns, streaks, and achievements.
 - **Health monitoring** — comprehensive system metrics, error tracking, Lavalink status, performance monitoring, and admin diagnostics.
-- **Enhanced logging** — structured JSON logs, automatic log rotation, error aggregation, and performance metrics tracking.
+- **Enhanced logging** — structured JSON logs, automatic log rotation, error aggregation, performance metrics tracking, and emoji-based visual indicators for all operations with readable track metadata.
 - **Adaptive smart autoplay** with Deezer recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
 - **24/7 radio mode** — bot stays in voice channel permanently and plays music continuously like a radio station.
 - **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), real-time visual feedback, and 10-minute inactivity auto-cleanup.

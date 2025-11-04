@@ -9,7 +9,12 @@ module.exports = {
   data: new SlashCommandBuilder().setName("shuffle").setDescription("Shuffle the current queue"),
 
   async execute(interaction) {
-    Log.info(`/shuffle command used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+    Log.info(
+      "🔀 /shuffle command",
+      `user=${interaction.user.tag}`,
+      `guild=${interaction.guild.name}`,
+      `id=${interaction.guild.id}`
+    );
 
     await interaction.deferReply({ ephemeral: true });
 

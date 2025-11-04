@@ -79,27 +79,27 @@ async function tryQueueFallbackTrack(player, failedTrack) {
       player.queue.unshift(fallbackTrack);
       failedTrack.userData.fallbackAttempts = previousAttempts + 1;
 
+      const fromTitle = failedTrack?.info?.title || "Unknown";
+      const toTitle = fallbackTrack?.info?.title || "Unknown";
+
       Log.info(
-        "Queued fallback track",
-        "",
-        `guild=${player.guildId}`,
-        `from=${describeTrack(failedTrack)}`,
-        `to=${describeTrack(fallbackTrack)}`,
+        "🔄 Fallback queued",
+        `from=${fromTitle}`,
+        `to=${toTitle}`,
         `source=${source}`,
-        `queueLength=${player.queue.length}`,
-        `note=Lavalink will auto-advance to fallback`
+        `queue=${player.queue.length}`,
+        `guild=${player.guildId}`
       );
 
       return fallbackTrack;
     } catch (fallbackErr) {
       const summary = fallbackErr instanceof Error ? fallbackErr.message : inspect(fallbackErr, { depth: 1 });
       Log.warning(
-        "Fallback lookup failed",
-        "",
-        `guild=${player.guildId}`,
+        "⚠️ Fallback failed",
         `query=${query}`,
         `source=${source}`,
-        `error=${summary}`
+        `error=${summary}`,
+        `guild=${player.guildId}`
       );
     }
   }

@@ -13,7 +13,12 @@ module.exports = {
     .addStringOption((option) => option.setName("title").setDescription("Title/keyword of the song to remove")),
 
   async execute(interaction) {
-    Log.info(`/remove command used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+    Log.info(
+      "➖ /remove command",
+      `user=${interaction.user.tag}`,
+      `guild=${interaction.guild.name}`,
+      `id=${interaction.guild.id}`
+    );
 
     await interaction.deferReply({ ephemeral: true });
 

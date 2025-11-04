@@ -173,7 +173,12 @@ module.exports = {
   },
 
   async execute(interaction) {
-    Log.info("/play command used by " + interaction.user.tag + " in guild " + interaction.guild.name);
+    Log.info(
+      "🎵 /play command",
+      `user=${interaction.user.tag}`,
+      `guild=${interaction.guild.name}`,
+      `id=${interaction.guild.id}`
+    );
 
     await interaction.deferReply();
 

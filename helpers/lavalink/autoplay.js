@@ -47,12 +47,12 @@ async function queueAutoplayTrack(player, lastTrack, textChannelId) {
     await player.queue.add(cloned);
 
     Log.info(
-      "Autoplay track queued",
-      "",
-      `guild=${player.guildId}`,
-      `track=${cloned.info?.title}`,
-      `artist=${cloned.info?.author}`,
-      `queueLength=${player.queue.length}`
+      "➕ Autoplay queued",
+      `${cloned.info?.title || "Unknown"}`,
+      `artist=${cloned.info?.author || "Unknown"}`,
+      `source=${cloned.info?.sourceName || "unknown"}`,
+      `queue=${player.queue.length}`,
+      `guild=${player.guildId}`
     );
 
     if (!player.currentTrack && player.queue.length > 0) {
@@ -61,7 +61,7 @@ async function queueAutoplayTrack(player, lastTrack, textChannelId) {
 
     return true;
   } catch (err) {
-    Log.error("Failed to queue autoplay track", err, `guild=${player.guildId}`);
+    Log.error("❌ Autoplay failed", err, `guild=${player.guildId}`);
     return false;
   }
 }

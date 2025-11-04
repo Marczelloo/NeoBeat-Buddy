@@ -10,7 +10,12 @@ module.exports = {
   data: new SlashCommandBuilder().setName("stop").setDescription("Stop the music and clear the queue"),
 
   async execute(interaction) {
-    Log.info(`/stop command used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+    Log.info(
+      "⏹️ /stop command",
+      `user=${interaction.user.tag}`,
+      `guild=${interaction.guild.name}`,
+      `id=${interaction.guild.id}`
+    );
 
     await interaction.deferReply({ ephemeral: true });
 

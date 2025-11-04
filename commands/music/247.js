@@ -13,7 +13,12 @@ module.exports = {
     .setDescription("Toggle 24/7 radio mode - bot stays in channel and plays continuously"),
 
   async execute(interaction) {
-    Log.info(`/247 command used by ${interaction.user.tag} in guild ${interaction.guild.name}`);
+    Log.info(
+      "📻 /247 command",
+      `user=${interaction.user.tag}`,
+      `guild=${interaction.guild.name}`,
+      `id=${interaction.guild.id}`
+    );
 
     await interaction.deferReply();
 
@@ -64,7 +69,7 @@ module.exports = {
 
     if (newState) {
       // Enable 24/7 mode
-      Log.info("24/7 radio mode enabled", "", `guild=${guildId}`, `by=${interaction.user.tag}`);
+      Log.info("📻 24/7 mode enabled", `user=${interaction.user.tag}`, `guild=${guildId}`);
 
       // If queue is empty, start playing immediately
       if (player.queue.length === 0 && !player.currentTrack) {
@@ -88,7 +93,7 @@ module.exports = {
       });
     } else {
       // Disable 24/7 mode
-      Log.info("24/7 radio mode disabled", "", `guild=${guildId}`, `by=${interaction.user.tag}`);
+      Log.info("🔇 24/7 mode disabled", `user=${interaction.user.tag}`, `guild=${guildId}`);
 
       return interaction.editReply({
         embeds: [

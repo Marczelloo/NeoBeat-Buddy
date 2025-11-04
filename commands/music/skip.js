@@ -11,7 +11,12 @@ module.exports = {
   data: new SlashCommandBuilder().setName("skip").setDescription("Skip the currently playing song"),
 
   async execute(interaction) {
-    Log.info("/skip command used by " + interaction.user.tag + " in guild " + interaction.guild.name);
+    Log.info(
+      "⏭️ /skip command",
+      `user=${interaction.user.tag}`,
+      `guild=${interaction.guild.name}`,
+      `id=${interaction.guild.id}`
+    );
 
     await interaction.deferReply({ ephemeral: true });
 

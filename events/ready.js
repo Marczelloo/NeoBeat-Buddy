@@ -123,7 +123,7 @@ module.exports = {
 
         // Check if 24/7 radio mode is enabled
         if (state?.radio247) {
-          Log.info("24/7 radio mode active, queuing next track", "", `guild=${player.guildId}`);
+          Log.info("📻 24/7 mode queuing", `guild=${player.guildId}`);
 
           // Import autoplay function dynamically to avoid circular deps
           const { queueAutoplayTrack } = require("../helpers/lavalink/autoplay");
@@ -135,7 +135,7 @@ module.exports = {
           if (lastTrack) {
             await queueAutoplayTrack(player, lastTrack, channelId);
           } else {
-            Log.warning("24/7 mode active but no history to base recommendations on", "", `guild=${player.guildId}`);
+            Log.warning("⚠️ 24/7 active but no history", `guild=${player.guildId}`);
           }
           return;
         }
@@ -155,7 +155,7 @@ module.exports = {
       });
 
       // Send version announcements to all guilds
-      Log.info("Checking for version announcements...");
+      Log.info("📢 Checking for version announcements...");
       let announcementsSent = 0;
       for (const [guildId, guild] of client.guilds.cache) {
         try {
@@ -170,7 +170,7 @@ module.exports = {
       if (announcementsSent > 0) {
         Log.success(`Sent version announcements to ${announcementsSent} guild(s)`);
       } else {
-        Log.info("No new announcements to send");
+        Log.info("✅ No new announcements to send");
       }
     } catch (err) {
       Log.error("Failed to initialize Poru in ready event", err);

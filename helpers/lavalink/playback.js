@@ -71,7 +71,7 @@ async function lavalinkResolveTracks(query) {
 
     // Try Deezer first using direct HTTP request
     try {
-      Log.info("Attempting Deezer search", `query=${searchQuery}`);
+      Log.info("🔍 Deezer search", `query=${searchQuery}`);
       const node = poru.leastUsedNodes[0];
       if (node) {
         const deezerUrl = `http://${node.options.host}:${
@@ -84,9 +84,9 @@ async function lavalinkResolveTracks(query) {
 
         if (deezerData?.loadType === "search" && Array.isArray(deezerData?.data) && deezerData.data.length > 0) {
           Log.info(
-            "Deezer search successful",
-            `tracks=${deezerData.data.length}`,
-            `source=${deezerData.data[0]?.info?.sourceName}`,
+            "✅ Deezer found tracks",
+            `count=${deezerData.data.length}`,
+            `topResult=${deezerData.data[0]?.info?.title || "Unknown"}`,
             `query=${searchQuery}`
           );
           res = {
@@ -95,11 +95,7 @@ async function lavalinkResolveTracks(query) {
             playlistInfo: deezerData.playlistInfo,
           };
         } else {
-          Log.info(
-            "Deezer search returned no results, falling back to YouTube",
-            `loadType=${deezerData?.loadType}`,
-            `query=${searchQuery}`
-          );
+          Log.info("⚠️ Deezer no results, trying YouTube", `loadType=${deezerData?.loadType}`, `query=${searchQuery}`);
         }
       }
     } catch (err) {
@@ -199,28 +195,21 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
     else await player.queue.add(track);
   }
 
-  const currentDescription = player.currentTrack ? describeTrack(player.currentTrack) : "none";
+  const currentTitle = player.currentTrack?.info?.title || "none";
   Log.info(
-    "Playback state check",
-    "",
-    `guild=${guildId}`,
-    `isPlaying=${player.isPlaying}`,
-    `isPaused=${player.isPaused}`,
-    `current=${currentDescription}`,
-    `queueLength=${player.queue.length}`
+    "🔍 Playback check",
+    `current=${currentTitle}`,
+    `playing=${player.isPlaying}`,
+    `paused=${player.isPaused}`,
+    `queue=${player.queue.length}`,
+    `guild=${guildId}`
   );
 
   if (!player.currentTrack && player.queue.length > 0) {
     await player.play();
   }
 
-  Log.info(
-    "Queue updated",
-    "",
-    `guild=${guildId}`,
-    `tracksAdded=${tracksToAdd.length}`,
-    `queueLength=${player.queue.length}`
-  );
+  Log.info("➕ Queue updated", `added=${tracksToAdd.length}`, `queue=${player.queue.length}`, `guild=${guildId}`);
 
   clearInactivityTimer(guildId, "playRequest");
 
@@ -240,6 +229,11 @@ async function lavalinkStop(guildId) {
 
   if (!player) return false;
 
+  const queueSize = player.queue.length;
+  const currentTrack = player.currentTrack?.info?.title || "none";
+
+  Log.info("⏹️ Player stopped", `currentTrack=${currentTrack}`, `clearedQueue=${queueSize}`, `guild=${guildId}`);
+
   player.queue.clear();
   await player.destroy();
   clearInactivityTimer(guildId, "stopCommand");
@@ -258,6 +252,8 @@ async function lavalinkPause(guildId) {
   const player = getPlayer(guildId);
 
   if (player && !player.isPaused) {
+    const trackTitle = player.currentTrack?.info?.title || "Unknown";
+    Log.info("⏸️ Player paused", `track=${trackTitle}`, `guild=${guildId}`);
     await player.pause(true);
     clearInactivityTimer(guildId, "pauseCommand");
     return true;
@@ -270,6 +266,8 @@ async function lavalinkResume(guildId) {
   const player = getPlayer(guildId);
 
   if (player && player.isPaused) {
+    const trackTitle = player.currentTrack?.info?.title || "Unknown";
+    Log.info("▶️ Player resumed", `track=${trackTitle}`, `guild=${guildId}`);
     await player.pause(false);
     clearInactivityTimer(guildId, "resumeCommand");
     return true;
@@ -281,6 +279,17 @@ async function lavalinkResume(guildId) {
 async function lavalinkSkip(guildId) {
   const player = getPlayer(guildId);
   if (!player || (!player.currentTrack && player.queue.length === 0)) return false;
+
+  const skippedTitle = player.currentTrack?.info?.title || "Unknown";
+  const nextTitle = player.queue[0]?.info?.title || "none";
+
+  Log.info(
+    "⏭️ Track skipped",
+    `from=${skippedTitle}`,
+    `to=${nextTitle}`,
+    `queue=${player.queue.length}`,
+    `guild=${guildId}`
+  );
 
   const result = await player.skip();
 
@@ -315,11 +324,21 @@ async function lavalinkRemoveFromQueue(guildId, { position, title }) {
   if (index < 0 || index >= player.queue.length) return { status: "not_found" };
 
   const removed = player.queue.remove(index);
+  const removedTitle = removed?.info?.title ?? "Unknown title";
+
+  Log.info(
+    "➖ Track removed",
+    `track=${removedTitle}`,
+    `position=${index + 1}`,
+    `queue=${player.queue.length}`,
+    `guild=${guildId}`
+  );
+
   clearInactivityTimer(guildId, "removeFromQueue");
 
   return {
     status: "removed",
-    trackTitle: removed?.info?.title ?? "Unknown title",
+    trackTitle: removedTitle,
     index: index + 1,
   };
 }
@@ -352,6 +371,17 @@ async function lavalinkPrevious(guildId) {
 
   const previous = history.pop();
   const currentClone = cloneTrack(player.currentTrack);
+
+  const previousTitle = previous?.info?.title || "Unknown";
+  const currentTitle = currentClone?.info?.title || "none";
+
+  Log.info(
+    "⏮️ Previous track",
+    `from=${currentTitle}`,
+    `to=${previousTitle}`,
+    `historySize=${history.length}`,
+    `guild=${guildId}`
+  );
 
   if (currentClone?.track) {
     player.queue.unshift(currentClone);
