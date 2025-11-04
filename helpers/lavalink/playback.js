@@ -52,60 +52,83 @@ async function ensurePlayer(guildId, voiceId, textId) {
   return player;
 }
 
-async function lavalinkResolveTracks(query) {
+async function lavalinkResolveTracks(query, source = "deezer") {
   const poru = getPoru();
   let q = String(query || "").trim();
   const isUrl = /^(https?:\/\/)/i.test(q);
 
   // For URLs (Spotify/YouTube links), let Lavalink handle via providers chain
-  // For search queries without dzsearch prefix, try Deezer first for FLAC quality
+  // For search queries, use the specified source
   let res = null;
-  const isDeezerSearch = q.toLowerCase().startsWith("dzsearch:");
+  const hasSourcePrefix = q.match(/^(dzsearch:|ytsearch:|spsearch:|ytmsearch:)/i);
 
-  if (!isUrl && !isDeezerSearch) {
-    // Remove ytsearch prefix if present
+  if (!isUrl && !hasSourcePrefix) {
+    // Remove any existing search prefix
     let searchQuery = q;
     if (q.toLowerCase().startsWith("ytsearch:")) {
       searchQuery = q.slice("ytsearch:".length).trim();
     }
 
-    // Try Deezer first using direct HTTP request
+    // Try specified source first
     try {
-      Log.info("🔍 Deezer search", `query=${searchQuery}`);
+      const sourcePrefix = source === "youtube" ? "ytsearch" : source === "spotify" ? "spsearch" : "dzsearch";
+      const sourceName = source === "youtube" ? "YouTube" : source === "spotify" ? "Spotify" : "Deezer";
+      
+      Log.info(`🔍 ${sourceName} search`, `query=${searchQuery}`);
       const node = poru.leastUsedNodes[0];
       if (node) {
-        const deezerUrl = `http://${node.options.host}:${
+        const searchUrl = `http://${node.options.host}:${
           node.options.port
-        }/v4/loadtracks?identifier=${encodeURIComponent(`dzsearch:${searchQuery}`)}`;
-        const deezerResponse = await fetch(deezerUrl, {
+        }/v4/loadtracks?identifier=${encodeURIComponent(`${sourcePrefix}:${searchQuery}`)}`;
+        const searchResponse = await fetch(searchUrl, {
           headers: { Authorization: node.options.password },
         });
-        const deezerData = await deezerResponse.json();
+        const searchData = await searchResponse.json();
 
-        if (deezerData?.loadType === "search" && Array.isArray(deezerData?.data) && deezerData.data.length > 0) {
+        if (searchData?.loadType === "search" && Array.isArray(searchData?.data) && searchData.data.length > 0) {
           Log.info(
-            "✅ Deezer found tracks",
-            `count=${deezerData.data.length}`,
-            `topResult=${deezerData.data[0]?.info?.title || "Unknown"}`,
+            `✅ ${sourceName} found tracks`,
+            `count=${searchData.data.length}`,
+            `topResult=${searchData.data[0]?.info?.title || "Unknown"}`,
             `query=${searchQuery}`
           );
           res = {
-            loadType: deezerData.loadType,
-            tracks: deezerData.data,
-            playlistInfo: deezerData.playlistInfo,
+            loadType: searchData.loadType,
+            tracks: searchData.data,
+            playlistInfo: searchData.playlistInfo,
           };
         } else {
-          Log.info("⚠️ Deezer no results, trying YouTube", `loadType=${deezerData?.loadType}`, `query=${searchQuery}`);
+          Log.info(`⚠️ ${sourceName} no results, trying fallback`, `loadType=${searchData?.loadType}`, `query=${searchQuery}`);
+          
+          // Fallback to YouTube if primary source failed
+          if (source !== "youtube") {
+            const ytUrl = `http://${node.options.host}:${
+              node.options.port
+            }/v4/loadtracks?identifier=${encodeURIComponent(`ytsearch:${searchQuery}`)}`;
+            const ytResponse = await fetch(ytUrl, {
+              headers: { Authorization: node.options.password },
+            });
+            const ytData = await ytResponse.json();
+            
+            if (ytData?.loadType === "search" && Array.isArray(ytData?.data) && ytData.data.length > 0) {
+              Log.info("✅ YouTube fallback found tracks", `count=${ytData.data.length}`, `query=${searchQuery}`);
+              res = {
+                loadType: ytData.loadType,
+                tracks: ytData.data,
+                playlistInfo: ytData.playlistInfo,
+              };
+            }
+          }
         }
       }
     } catch (err) {
-      Log.warn("Deezer search failed, falling back to YouTube", err, `query=${searchQuery}`);
+      Log.warn(`${source} search failed, falling back to YouTube`, err, `query=${searchQuery}`);
     }
   }
 
-  // If Deezer didn't work, it's a URL, or already has a source prefix, resolve normally
+  // If source search didn't work, it's a URL, or already has a source prefix, resolve normally
   if (!res) {
-    const resolveQuery = isDeezerSearch ? q : isUrl ? q : q;
+    const resolveQuery = hasSourcePrefix ? q : isUrl ? q : q;
     res = await poru.resolve({ query: resolveQuery });
   }
 
@@ -158,10 +181,10 @@ async function lavalinkResolveTracks(query) {
   };
 }
 
-async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepend = false }) {
+async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepend = false, source = "deezer" }) {
   const player = await ensurePlayer(guildId, voiceId, textId);
 
-  const resolution = await lavalinkResolveTracks(query);
+  const resolution = await lavalinkResolveTracks(query, source);
   const tracksToAdd = resolution.tracks.map((track) => cloneTrack(track));
 
   if (!tracksToAdd.length) {

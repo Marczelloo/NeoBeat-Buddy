@@ -3,7 +3,7 @@ const djProposals = require("../../helpers/dj/proposals");
 const djStore = require("../../helpers/dj/store");
 const { buildProposalAnnouncement, buildProposalComponents, buildProposalEmbed } = require("../../helpers/dj/ui");
 const { errorEmbed, successEmbed, playlistEmbed, songEmbed } = require("../../helpers/embeds");
-const { updateGuildState } = require("../../helpers/guildState.js");
+const { getGuildState, updateGuildState } = require("../../helpers/guildState.js");
 const { recordSearch } = require("../../helpers/history/searchHistory");
 const { lavalinkPlay, lavalinkResolveTracks } = require("../../helpers/lavalink/index");
 const { getPoru } = require("../../helpers/lavalink/players");
@@ -20,6 +20,18 @@ module.exports = {
         .setDescription("The URL or search term of the song to play")
         .setRequired(true)
         .setAutocomplete(true)
+    )
+    .addStringOption((option) =>
+      option
+        .setName("source")
+        .setDescription("Search source (default: server preference)")
+        .setRequired(false)
+        .addChoices(
+          { name: "🎵 Auto (Smart Selection)", value: "auto" },
+          { name: "🎼 Deezer (FLAC Quality)", value: "deezer" },
+          { name: "▶️ YouTube", value: "youtube" },
+          { name: "🎧 Spotify", value: "spotify" }
+        )
     )
     .addBooleanOption((option) =>
       option
@@ -49,46 +61,81 @@ module.exports = {
     }
 
     try {
-      // Use direct Lavalink API to search Deezer first, fallback to default search
+      // Check if user has selected a source
+      const selectedSource = interaction.options.getString("source");
+      
+      // Determine which source to use for autocomplete
+      let searchSource;
+      if (selectedSource && selectedSource !== "auto") {
+        // User explicitly chose a source - use it
+        searchSource = selectedSource;
+      } else {
+        // No explicit choice - use server default
+        const guildSettings = getGuildState(interaction.guildId);
+        searchSource = guildSettings?.defaultSource || "deezer";
+      }
+
+      // Use direct Lavalink API to search based on determined source
       const poru = getPoru();
       const node = poru.leastUsedNodes[0];
       let results = null;
 
       if (node) {
         try {
-          // Try Deezer search first for FLAC quality
-          const deezerUrl = `http://${node.options.host}:${
+          let searchQuery;
+          
+          // Build search query based on source
+          switch (searchSource) {
+            case "deezer":
+              searchQuery = `dzsearch:${focusedValue}`;
+              break;
+            case "youtube":
+              searchQuery = `ytsearch:${focusedValue}`;
+              break;
+            case "spotify":
+              searchQuery = `spsearch:${focusedValue}`;
+              break;
+            case "auto":
+            default:
+              // Auto mode: Try Deezer first, fallback to YouTube
+              searchQuery = `dzsearch:${focusedValue}`;
+              break;
+          }
+
+          const searchUrl = `http://${node.options.host}:${
             node.options.port
-          }/v4/loadtracks?identifier=${encodeURIComponent(`dzsearch:${focusedValue}`)}`;
-          const deezerResponse = await fetch(deezerUrl, {
+          }/v4/loadtracks?identifier=${encodeURIComponent(searchQuery)}`;
+          const response = await fetch(searchUrl, {
             headers: { Authorization: node.options.password },
           });
-          const deezerData = await deezerResponse.json();
+          const data = await response.json();
 
-          if (deezerData?.loadType === "search" && Array.isArray(deezerData?.data) && deezerData.data.length > 0) {
-            // If Deezer has enough results (3+), use them exclusively
-            if (deezerData.data.length >= 3) {
-              results = {
-                loadType: deezerData.loadType,
-                tracks: deezerData.data,
-              };
-            } else {
-              // If Deezer has few results, combine with YouTube for more options
+          if (data?.loadType === "search" && Array.isArray(data?.data) && data.data.length > 0) {
+            // For auto mode with Deezer, combine with YouTube if results are few
+            if (searchSource === "auto" && data.data.length < 3) {
               const ytResults = await poru.resolve({ query: focusedValue });
               const ytTracks = ytResults?.tracks || [];
 
               results = {
                 loadType: "search",
-                tracks: [...deezerData.data, ...ytTracks], // Deezer first, then YouTube
+                tracks: [...data.data, ...ytTracks],
+              };
+            } else {
+              results = {
+                loadType: data.loadType,
+                tracks: data.data,
               };
             }
+          } else if (searchSource === "auto") {
+            // Deezer had no results in auto mode, try YouTube
+            results = await poru.resolve({ query: focusedValue });
           }
         } catch {
-          // Deezer failed, will fallback below
+          // Source search failed, fallback to default
         }
       }
 
-      // Fallback to default search if Deezer didn't work
+      // Fallback to default search if source-specific search didn't work
       if (!results) {
         results = await poru.resolve({ query: focusedValue });
       }
@@ -194,6 +241,16 @@ module.exports = {
       return interaction.editReply({ embeds: [errorEmbed("Please provide a valid URL or search term.")] });
 
     const prepend = interaction.options.getBoolean("prepend") ?? false;
+    
+    // Get source preference
+    const selectedSource = interaction.options.getString("source");
+    let source;
+    if (selectedSource && selectedSource !== "auto") {
+      source = selectedSource;
+    } else {
+      const guildSettings = getGuildState(interaction.guildId);
+      source = guildSettings?.defaultSource || "deezer";
+    }
 
     const requester = {
       id: interaction.user.id,
@@ -206,7 +263,7 @@ module.exports = {
 
     if (config.enabled && !isDj) {
       try {
-        const preview = await lavalinkResolveTracks(query);
+        const preview = await lavalinkResolveTracks(query, source);
         const proposal = djProposals.createProposal(interaction.guild.id, {
           query,
           prepend,
@@ -256,6 +313,7 @@ module.exports = {
           query: query,
           requester: requester,
           prepend: prepend,
+          source: source,
         });
 
       if (!track || !track.info) {

@@ -69,6 +69,7 @@ const createDefaultState = () => ({
   announcementChannel: null,
   announcementsEnabled: true,
   lastAnnouncedVersion: null,
+  defaultSource: "deezer",
 });
 
 function getGuildState(guildId) {

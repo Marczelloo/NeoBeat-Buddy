@@ -29,6 +29,28 @@ module.exports = {
         .addSubcommand((sub) =>
           sub.setName("reset").setDescription("Reset announcement state (for testing - will resend announcement)")
         )
+    )
+    .addSubcommandGroup((group) =>
+      group
+        .setName("source")
+        .setDescription("Configure default music search source")
+        .addSubcommand((sub) =>
+          sub
+            .setName("default")
+            .setDescription("Set the default search source for this server")
+            .addStringOption((option) =>
+              option
+                .setName("source")
+                .setDescription("Default music search source")
+                .setRequired(true)
+                .addChoices(
+                  { name: "🎼 Deezer (FLAC Quality)", value: "deezer" },
+                  { name: "▶️ YouTube", value: "youtube" },
+                  { name: "🎧 Spotify", value: "spotify" }
+                )
+            )
+        )
+        .addSubcommand((sub) => sub.setName("status").setDescription("View current search source settings"))
     ),
 
   async execute(interaction) {
@@ -37,6 +59,10 @@ module.exports = {
 
     if (subcommandGroup === "announcements") {
       return handleAnnouncements(interaction, subcommand);
+    }
+
+    if (subcommandGroup === "source") {
+      return handleSource(interaction, subcommand);
     }
 
     await interaction.reply({
@@ -165,6 +191,71 @@ async function handleAnnouncements(interaction, subcommand) {
     default:
       return interaction.reply({
         content: "❌ Unknown announcement subcommand.",
+        ephemeral: true,
+      });
+  }
+}
+
+async function handleSource(interaction, subcommand) {
+  const guildId = interaction.guild.id;
+  const state = getGuildState(guildId);
+
+  switch (subcommand) {
+    case "default": {
+      const source = interaction.options.getString("source");
+      
+      updateGuildState(guildId, {
+        defaultSource: source,
+      });
+
+      const sourceNames = {
+        deezer: "🎼 Deezer (FLAC Quality)",
+        youtube: "▶️ YouTube",
+        spotify: "🎧 Spotify",
+      };
+
+      return interaction.reply({
+        content: `✅ Default search source set to **${sourceNames[source]}**\n\nThis will be used when no source is specified in \`/play\`. Users can still override this per-query by selecting a different source.`,
+        ephemeral: true,
+      });
+    }
+
+    case "status": {
+      const { EmbedBuilder } = require("discord.js");
+      const currentSource = state?.defaultSource || "deezer";
+      
+      const sourceDescriptions = {
+        deezer: "🎼 **Deezer** - FLAC quality audio",
+        youtube: "▶️ **YouTube** - Wide variety of content",
+        spotify: "🎧 **Spotify** - High quality streaming",
+      };
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle("🎵 Music Search Source Configuration")
+        .addFields(
+          {
+            name: "Default Source",
+            value: sourceDescriptions[currentSource],
+            inline: false,
+          },
+          {
+            name: "How it works",
+            value: "• Default source is used when no source is specified in `/play`\n• Users can override by selecting a source in the command\n• Autocomplete results will match the selected/default source",
+            inline: false,
+          }
+        )
+        .setTimestamp();
+
+      return interaction.reply({
+        embeds: [embed],
+        ephemeral: true,
+      });
+    }
+
+    default:
+      return interaction.reply({
+        content: "❌ Unknown source subcommand.",
         ephemeral: true,
       });
   }
