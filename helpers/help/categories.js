@@ -9,8 +9,8 @@
         {
           name: "play",
           description:
-            "Queue a track from a URL or search query with autocomplete suggestions. In DJ mode, non-DJs submit suggestions for approval.",
-          usage: "/play query:<song or url> [prepend:true]",
+            "Queue a track from a URL or search query with autocomplete suggestions. Choose search source (Auto/Deezer/YouTube/Spotify). In DJ mode, non-DJs submit suggestions for approval.",
+          usage: "/play query:<song or url> [source:<Auto|Deezer|YouTube|Spotify>] [prepend:true]",
         },
         {
           name: "pause",
@@ -69,6 +69,21 @@
           name: "like",
           description: "Add the currently playing track to your Liked Songs playlist.",
           usage: "/like",
+        },
+      ],
+      notes: [
+        {
+          name: "Music Source Selection",
+          value: [
+            "- Choose your preferred music source in `/play` command: Auto, Deezer, YouTube, or Spotify.",
+            "- **Auto Mode** (default): Combines Deezer and YouTube results for maximum variety and quality.",
+            "- **Deezer**: FLAC lossless quality audio - best for high-fidelity listening.",
+            "- **YouTube**: Largest music catalog with remixes, covers, and rare tracks.",
+            "- **Spotify**: Curated playlists and albums (requires Spotify link or exact name).",
+            "- Set server-wide default with `/setup source default` - users can still override per-query.",
+            "- **Position-independent**: Select source before or after typing your query - autocomplete adapts automatically.",
+            "- **Smart fallback**: If primary source fails, bot automatically tries YouTube as backup.",
+          ].join("\n"),
         },
       ],
     },
@@ -414,6 +429,12 @@
             "\n/setup announcements channel channel:<channel>\n/setup announcements enable\n/setup announcements disable\n/setup announcements status\n/setup announcements reset",
         },
         {
+          name: "setup source",
+          description:
+            "Configure default music search source: set server-wide preference or view current settings.",
+          usage: "/setup source default source:<deezer|youtube|spotify>\n/setup source status",
+        },
+        {
           name: "user",
           description: "Inspect a user's profile, flags, and status.",
           usage: "/user user:<member>",
@@ -450,6 +471,16 @@
             "- `/health errors` displays recent error logs with timestamps and context (useful for troubleshooting).",
             "- `/health reset` clears all health metrics counters (does not affect music stats).",
             "- Health monitoring runs automatically and tracks errors, warnings, and performance metrics.",
+          ].join("\n"),
+        },
+        {
+          name: "Music Source Configuration",
+          value: [
+            "- `/setup source default` sets the server-wide default search source (Deezer, YouTube, or Spotify).",
+            "- Default source is used when users don't specify a source in `/play` command.",
+            "- Users can always override the default by selecting a different source in `/play`.",
+            "- `/setup source status` shows current default source and explains how it works.",
+            "- Server defaults to Deezer (FLAC quality) if not configured.",
           ].join("\n"),
         },
         {
