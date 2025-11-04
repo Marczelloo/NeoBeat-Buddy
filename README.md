@@ -58,8 +58,9 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 ## Features
 
 - **Slash-only interface** for queueing, playback, and moderation safeguards.
+- **Music source selection** — choose your preferred search source (Deezer, YouTube, or Spotify) per-server or per-query with position-independent autocomplete.
 - **Deezer FLAC quality playback** — high-fidelity lossless audio as default source with automatic quality display.
-- **Live autocomplete search** — get instant song suggestions as you type in `/play` command with Deezer-first results.
+- **Live autocomplete search** — get instant song suggestions as you type in `/play` command with source-aware results and Auto mode combining multiple sources.
 - **Search history tracking** — automatic history of all your searches with replay, search, export to playlist, and clear functions.
 - **Session queue export** — save entire listening sessions (history + queue) as playlists for easy replay.
 - **Music Wrapped & Insights** — personal and server-wide listening statistics with top tracks, artists, listening patterns, streaks, and achievements.

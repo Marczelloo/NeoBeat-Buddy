@@ -4,6 +4,10 @@
     "date": "2025-11-03",
     "title": "Deezer FLAC, Search History, Session Export, Music Wrapped & Health Monitoring",
     "features": [
+      "Music source selection - choose between Auto, Deezer, YouTube, or Spotify in /play command",
+      "Server-wide default source preference via /setup source default",
+      "Position-independent autocomplete - select source before or after typing query",
+      "Auto mode combines Deezer and YouTube results for maximum variety",
       "Deezer FLAC lossless audio quality as default playback source",
       "Autocomplete now returns Deezer tracks with smart fallback to YouTube",
       "Quality display in player embed - shows audio quality for each source",
@@ -41,6 +45,9 @@
       "Fixed malformed patchNotes.json causing announcer initialization failure"
     ],
     "changes": [
+      "Autocomplete now respects selected source dynamically (Auto/Deezer/YouTube/Spotify)",
+      "Guild state now stores defaultSource preference (defaults to Deezer)",
+      "Playback functions accept source parameter for flexible searching",
       "Playback now prioritizes Deezer for higher quality audio",
       "Queue command now has subcommands: view and export",
       "History stored per-user with server filtering option",
