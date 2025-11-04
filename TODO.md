@@ -38,6 +38,7 @@
 - [x] better logging + health monitoring
 - [] swap or add possibility to change source of lyrics to deezer (an be synced with song)
 - [] let user pick from which source he want to search / play song (default deezer)
+- [ ] migrate from storing data in json to db, (postgress with prism orm)
 
 ## FIXES
 
@@ -72,7 +73,7 @@
 - [x] create docker file and compose lavalink and bot
 - [x] remove global.js since lavalink poru/lavalink maintain most of these functions and migrate the needed ones
 - [x] cleanup help command and sepperate it into smaller chunks
-- [] add more logging and improve track logs
+- [x] add more logging and improve track logs
 - [] cleanup code, refactor, switch to ts, add db integration for storing data
 - [] create website for bot
 
