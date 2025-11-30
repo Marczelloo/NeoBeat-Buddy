@@ -38,7 +38,11 @@ describe("Lyrics System", () => {
     describe("chunkLyrics", () => {
       it("should split lyrics into chunks respecting max size", () => {
         const longLyrics = Array.from({ length: 100 }, (_, i) => `Line ${i + 1} with some text`).join("\n");
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
         const chunks = chunkLyrics(longLyrics, 500);
 
         assert.ok(chunks.length > 1);
@@ -55,14 +59,22 @@ describe("Lyrics System", () => {
       it("should return empty array for null/undefined", () => {
         const chunks1 = chunkLyrics(null);
         const chunks2 = chunkLyrics(undefined);
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
         assert.deepStrictEqual(chunks1, []);
         assert.deepStrictEqual(chunks2, []);
       });
 
       it("should handle single line lyrics", () => {
         const chunks = chunkLyrics("Single line");
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
         assert.strictEqual(chunks.length, 1);
         assert.strictEqual(chunks[0], "Single line");
       });
@@ -166,9 +178,14 @@ describe("Lyrics System", () => {
 
       it("should limit to MAX_EMBEDS", () => {
         // Create very long lyrics that would need many chunks
+<<<<<<< HEAD
         const longLyrics = Array.from(
           { length: 500 },
           (_, i) => `Line ${i + 1} with lots of extra text to make it longer and fill up space`
+=======
+        const longLyrics = Array.from({ length: 500 }, (_, i) => 
+          `Line ${i + 1} with lots of extra text to make it longer and fill up space`
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
         ).join("\n");
 
         const result = buildLyricsResponse({
@@ -181,12 +198,17 @@ describe("Lyrics System", () => {
       });
 
       it("should add content message when exceeding MAX_EMBEDS", () => {
+<<<<<<< HEAD
         const longLyrics = Array.from(
           { length: 500 },
           (_, i) =>
             `Line ${
               i + 1
             } with lots of extra text to make it longer and ensure we exceed the maximum allowed embeds limit`
+=======
+        const longLyrics = Array.from({ length: 500 }, (_, i) => 
+          `Line ${i + 1} with lots of extra text to make it longer and ensure we exceed the maximum allowed embeds limit`
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
         ).join("\n");
 
         const result = buildLyricsResponse({
@@ -379,7 +401,11 @@ describe("Lyrics Error Handling", () => {
     it("should handle Lavalink connection failure gracefully", async () => {
       // Mock a failed fetch
       const mockError = new Error("Connection refused");
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       // The lyrics system should not crash on network errors
       try {
         throw mockError;
@@ -458,7 +484,13 @@ describe("Lyrics Error Handling", () => {
 
     it("should clean YouTube suffixes from title", () => {
       const title = "Song Name (Official Music Video)";
+<<<<<<< HEAD
       const cleaned = title.replace(/\(official\s*(video|audio|music\s*video)?\)/gi, "").trim();
+=======
+      const cleaned = title
+        .replace(/\(official\s*(video|audio|music\s*video)?\)/gi, "")
+        .trim();
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
 
       assert.strictEqual(cleaned, "Song Name");
     });
@@ -482,10 +514,17 @@ describe("Lyrics Button Integration", () => {
 
     it("should toggle between synced and static", () => {
       let synced = true;
+<<<<<<< HEAD
 
       synced = !synced;
       assert.strictEqual(synced, false);
 
+=======
+      
+      synced = !synced;
+      assert.strictEqual(synced, false);
+      
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       synced = !synced;
       assert.strictEqual(synced, true);
     });
@@ -494,7 +533,11 @@ describe("Lyrics Button Integration", () => {
   describe("Active Sessions Tracking", () => {
     it("should track active lyrics sessions per channel", () => {
       const activeLyricsSessions = new Map();
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       activeLyricsSessions.set("channel-123", {
         messageId: "msg-456",
         userId: "user-789",
@@ -517,10 +560,17 @@ describe("Lyrics Button Integration", () => {
 
     it("should prevent duplicate sessions per channel", () => {
       const activeLyricsSessions = new Map();
+<<<<<<< HEAD
 
       // First session
       activeLyricsSessions.set("channel-123", { messageId: "msg-1" });
 
+=======
+      
+      // First session
+      activeLyricsSessions.set("channel-123", { messageId: "msg-1" });
+      
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       // Second session replaces first
       activeLyricsSessions.set("channel-123", { messageId: "msg-2" });
 

@@ -10,7 +10,14 @@ module.exports = {
     .setName("lyrics")
     .setDescription("Show lyrics for the currently playing song")
     .addBooleanOption((option) =>
+<<<<<<< HEAD
       option.setName("synced").setDescription("Enable live synced lyrics (if available)").setRequired(false)
+=======
+      option
+        .setName("synced")
+        .setDescription("Enable live synced lyrics (if available)")
+        .setRequired(false)
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
     ),
 
   async execute(interaction) {

@@ -248,15 +248,23 @@ async function fetchSpotifyRecommendations(seedTrackId, limit = 10, targetGenres
     }
 
     // Get the artist's top tracks as recommendations
+<<<<<<< HEAD
     const topTracksResponse = await fetch(`https://api.spotify.com/v1/artists/${seedArtistId}/top-tracks?market=US`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+=======
+    const topTracksResponse = await fetch(
+      `https://api.spotify.com/v1/artists/${seedArtistId}/top-tracks?market=US`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
 
     let tracks = [];
 
     if (topTracksResponse.ok) {
       const topTracksData = await topTracksResponse.json();
       // Filter out the seed track itself
+<<<<<<< HEAD
       tracks = (topTracksData.tracks || []).filter((t) => t.id !== seedTrackId);
     }
 
@@ -264,6 +272,16 @@ async function fetchSpotifyRecommendations(seedTrackId, limit = 10, targetGenres
     const relatedResponse = await fetch(`https://api.spotify.com/v1/artists/${seedArtistId}/related-artists`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+=======
+      tracks = (topTracksData.tracks || []).filter(t => t.id !== seedTrackId);
+    }
+
+    // Also get related artists and their top tracks for variety
+    const relatedResponse = await fetch(
+      `https://api.spotify.com/v1/artists/${seedArtistId}/related-artists`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
 
     if (relatedResponse.ok) {
       const relatedData = await relatedResponse.json();
@@ -271,9 +289,16 @@ async function fetchSpotifyRecommendations(seedTrackId, limit = 10, targetGenres
 
       // Get top track from each related artist
       for (const artist of relatedArtists) {
+<<<<<<< HEAD
         const artistTopResponse = await fetch(`https://api.spotify.com/v1/artists/${artist.id}/top-tracks?market=US`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+=======
+        const artistTopResponse = await fetch(
+          `https://api.spotify.com/v1/artists/${artist.id}/top-tracks?market=US`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
 
         if (artistTopResponse.ok) {
           const artistTopData = await artistTopResponse.json();
@@ -285,10 +310,14 @@ async function fetchSpotifyRecommendations(seedTrackId, limit = 10, targetGenres
 
     // If we have genre targets, also try genre-based search
     if (targetGenres.length > 0 && tracks.length < limit) {
+<<<<<<< HEAD
       const genreQuery = targetGenres
         .slice(0, 2)
         .map((g) => `genre:"${g}"`)
         .join(" ");
+=======
+      const genreQuery = targetGenres.slice(0, 2).map(g => `genre:"${g}"`).join(" ");
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       const searchResponse = await fetch(
         `https://api.spotify.com/v1/search?q=${encodeURIComponent(genreQuery)}&type=track&limit=10&market=US`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -298,7 +327,11 @@ async function fetchSpotifyRecommendations(seedTrackId, limit = 10, targetGenres
         const searchData = await searchResponse.json();
         const searchTracks = searchData.tracks?.items || [];
         // Add tracks not already in our list
+<<<<<<< HEAD
         const existingIds = new Set(tracks.map((t) => t.id));
+=======
+        const existingIds = new Set(tracks.map(t => t.id));
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
         for (const track of searchTracks) {
           if (!existingIds.has(track.id) && track.id !== seedTrackId) {
             tracks.push(track);

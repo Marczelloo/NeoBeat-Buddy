@@ -12,7 +12,11 @@ function requiredVotes(count, threshold) {
 
 function clearExpiredVoters(session) {
   if (!session.voterTimestamps) return false;
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
   const now = Date.now();
   const expiredVoters = [];
 

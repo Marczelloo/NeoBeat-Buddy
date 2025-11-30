@@ -1,6 +1,10 @@
 /**
  * Test script for Deezer synced lyrics
+<<<<<<< HEAD
  *
+=======
+ * 
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
  * This script mimics real bot behavior with session and player
  * Run with: node test-deezer-lyrics.js
  */
@@ -31,7 +35,11 @@ async function testLyrics() {
   try {
     // Check Lavalink status
     const infoResponse = await fetch(`${baseUrl}/v4/info`, { headers });
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
     if (!infoResponse.ok) {
       console.error("❌ Lavalink connection failed");
       console.error(`   Status: ${infoResponse.status} ${infoResponse.statusText}`);
@@ -41,7 +49,11 @@ async function testLyrics() {
     const info = await infoResponse.json();
     console.log("✅ Connected to Lavalink");
     console.log(`   Version: ${info.version.semver}`);
+<<<<<<< HEAD
     console.log(`   Plugins: ${info.plugins?.map((p) => p.name).join(", ") || "none"}`);
+=======
+    console.log(`   Plugins: ${info.plugins?.map(p => p.name).join(", ") || "none"}`);
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
     console.log("");
 
     // Test tracks
@@ -90,7 +102,11 @@ async function testLyrics() {
         if (lyricsResponse.ok) {
           const lyrics = await lyricsResponse.json();
           const isSynced = lyrics.lines && Array.isArray(lyrics.lines) && lyrics.lines.length > 0;
+<<<<<<< HEAD
 
+=======
+          
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
           console.log(`   ✅ Lyrics found!`);
           console.log(`   📚 Source: ${lyrics.sourceName || "unknown"}`);
           console.log(`   🏷️  Provider: ${lyrics.provider || "unknown"}`);
@@ -103,31 +119,56 @@ async function testLyrics() {
             console.log(`   📄 First 5 synced lines:`);
             lyrics.lines.slice(0, 5).forEach((line) => {
               const timestamp = line.timestamp
+<<<<<<< HEAD
                 ? `[${Math.floor(line.timestamp / 60000)}:${String(
                     Math.floor((line.timestamp % 60000) / 1000)
                   ).padStart(2, "0")}]`
+=======
+                ? `[${Math.floor(line.timestamp / 60000)}:${String(Math.floor((line.timestamp % 60000) / 1000)).padStart(
+                    2,
+                    "0"
+                  )}]`
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
                 : "";
               console.log(`      ${timestamp} ${line.line}`);
             });
             console.log(`   📄 Last 3 synced lines:`);
             lyrics.lines.slice(-3).forEach((line) => {
               const timestamp = line.timestamp
+<<<<<<< HEAD
                 ? `[${Math.floor(line.timestamp / 60000)}:${String(
                     Math.floor((line.timestamp % 60000) / 1000)
                   ).padStart(2, "0")}]`
+=======
+                ? `[${Math.floor(line.timestamp / 60000)}:${String(Math.floor((line.timestamp % 60000) / 1000)).padStart(
+                    2,
+                    "0"
+                  )}]`
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
                 : "";
               console.log(`      ${timestamp} ${line.line}`);
             });
           } else if (lyrics.text) {
+<<<<<<< HEAD
             const textLines = lyrics.text.split("\n").filter((l) => l.trim());
             console.log(`   📝 Plain text lines: ${textLines.length}`);
             console.log(`   📄 First 5 lines:`);
             textLines.slice(0, 5).forEach((line) => {
+=======
+            const textLines = lyrics.text.split('\n').filter(l => l.trim());
+            console.log(`   📝 Plain text lines: ${textLines.length}`);
+            console.log(`   📄 First 5 lines:`);
+            textLines.slice(0, 5).forEach(line => {
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
               console.log(`      ${line.slice(0, 80)}`);
             });
             if (textLines.length > 5) {
               console.log(`   📄 Last 3 lines:`);
+<<<<<<< HEAD
               textLines.slice(-3).forEach((line) => {
+=======
+              textLines.slice(-3).forEach(line => {
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
                 console.log(`      ${line.slice(0, 80)}`);
               });
             }

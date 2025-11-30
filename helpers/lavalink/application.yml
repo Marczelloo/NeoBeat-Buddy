@@ -57,10 +57,17 @@ logging:
 
 plugins:
   lavalyrics:
+<<<<<<< HEAD
     sources: # Priority order for lyrics sources (tries in this order)
       - deezer # Try Deezer's native lyrics first
       - spotify # Then Spotify lyrics
       - youtube # Then YouTube lyrics
+=======
+    sources:  # Priority order for lyrics sources (tries in this order)
+      - deezer     # Try Deezer's native lyrics first
+      - spotify    # Then Spotify lyrics
+      - youtube    # Then YouTube lyrics
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       # LRCLIB is automatic fallback when above sources don't have lyrics
   youtube:
     enabled: true
@@ -95,7 +102,11 @@ plugins:
       ytmsearch: true
     lyrics-sources:
       deezer: true
+<<<<<<< HEAD
       spotify: false # Disabled - LavaSrc can't extract Spotify secret from current web player
+=======
+      spotify: false  # Disabled - LavaSrc can't extract Spotify secret from current web player
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       youtube: true
       yandexmusic: false
       vkmusic: false

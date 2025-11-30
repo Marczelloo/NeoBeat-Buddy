@@ -887,7 +887,10 @@ The autoplay system now uses a strict priority order, only falling back to lower
    - **Only used when Deezer + Spotify provide < 5 candidates**
 
 4. **📉 YouTube Search** (last resort, +10 score bonus)
+<<<<<<< HEAD
 
+=======
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
    - Generic YouTube search as fallback
    - **Only triggered when YouTube Mix also fails**
 
@@ -899,6 +902,7 @@ The autoplay system now uses a strict priority order, only falling back to lower
 
 Each candidate receives a score based on:
 
+<<<<<<< HEAD
 | Factor                 | Points                     | Description                                                                 |
 | ---------------------- | -------------------------- | --------------------------------------------------------------------------- |
 | **Genre Match**        | +30 per genre              | Matching genre from your top genres (weighted by frequency)                 |
@@ -915,6 +919,24 @@ Each candidate receives a score based on:
 | **Skip Learning**      | -20 per skip               | Artist you've skipped recently (30min window)                               |
 | **Genre Skip**         | -15 per skip               | Genre you've skipped recently                                               |
 | **Duplicate**          | -1000                      | Already played in last 100 tracks (ID + title/artist match)                 |
+=======
+| Factor                 | Points          | Description                                                   |
+| ---------------------- | --------------- | ------------------------------------------------------------- |
+| **Genre Match**        | +30 per genre   | Matching genre from your top genres (weighted by frequency)   |
+| **Genre Drift**        | -25             | No genre overlap when you have ≥3 top genres                  |
+| **Tempo/BPM Match**    | +15 / +8 / -5   | Within 15 BPM (+15), 30 BPM (+8), or >60 BPM (-5)             |
+| **Time-of-Day**        | +12 / +6        | Energy matches time of day (optimal +12, acceptable +6)       |
+| **Popularity**         | +10 / -5 / -3   | Sweet spot 50-85 (+10), obscure <25 (-5), overplayed >95 (-3) |
+| **Mood Progression**   | +12 / +8        | Continues valence trend (+12) or maintains stability (+8)     |
+| **Energy Arc**         | +15 / +10       | Continues energy trend (+15) or maintains plateau (+10)       |
+| **Artist Familiarity** | +5 per play     | How often you've played this artist                           |
+| **Duration Match**     | +10 / +5 / -5   | Within 20% (+10), 40% (+5), or >40% (-5) of average           |
+| **Source Quality**     | +40 / +35 / +15 / +10 / +8 | Deezer (+40), Spotify (+35), YT Mix (+15), YT Search (+10), Top Artist (+8) |
+| **Smart Diversity**    | +20 / -5 to -40 | Context-aware: vibe match reduces penalty, consecutive -40    |
+| **Skip Learning**      | -20 per skip    | Artist you've skipped recently (30min window)                 |
+| **Genre Skip**         | -15 per skip    | Genre you've skipped recently                                 |
+| **Duplicate**          | -1000           | Already played in last 100 tracks (ID + title/artist match)   |
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
 
 #### Time-of-Day Energy Factors
 

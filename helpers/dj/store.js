@@ -45,7 +45,15 @@ function normalizeConfig(raw) {
 
 async function init() {
   if (ready) return;
+  
+  // Prevent multiple simultaneous init calls
+  if (initPromise) return initPromise;
+  
+  initPromise = (async () => {
+    try {
+      const raw = await fs.readFile(DATA_FILE, "utf-8");
 
+<<<<<<< HEAD
   // Prevent multiple simultaneous init calls
   if (initPromise) return initPromise;
 
@@ -60,6 +68,15 @@ async function init() {
         return;
       }
 
+=======
+      if (!raw || raw.trim() === "") {
+        await ensureDataDir();
+        await persist();
+        ready = true;
+        return;
+      }
+
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object" && parsed.guilds && typeof parsed.guilds === "object") {
         for (const [guildId, cfg] of Object.entries(parsed.guilds)) {
@@ -74,7 +91,11 @@ async function init() {
 
     ready = true;
   })();
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
   return initPromise;
 }
 
@@ -97,12 +118,20 @@ async function persist() {
 
 function ensureGuildConfig(guildId) {
   if (!guildId) throw new Error("ensureGuildConfig requires guildId");
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
   // Auto-init if not ready (synchronous fallback)
   if (!ready && !initPromise) {
     init().catch((err) => Log.error("DJ store auto-init failed", err));
   }
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
   if (!state.guilds[guildId]) {
     state.guilds[guildId] = { ...DEFAULT_CONFIG };
   }

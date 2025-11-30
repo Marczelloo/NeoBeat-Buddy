@@ -253,7 +253,11 @@ async function handleControlButtons(interaction, player) {
     case "lyrics-button": {
       const { buildSyncedLyricsDisplay } = require("./lavalink/lyricsFormatter");
       const payload = getLyricsState(guildId);
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       if (!payload || (!payload.lyrics && !payload.lines)) {
         return interaction.editReply({ embeds: [errorEmbed("No lyrics were found for this track.")] });
       }

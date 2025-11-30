@@ -52,6 +52,7 @@ async function handleProposalInteraction(interaction) {
     try {
       // Verify the voice channel is still valid, or use DJ's current voice channel
       let voiceChannelId = proposal.voiceChannelId;
+<<<<<<< HEAD
 
       // Check if original voice channel still exists and has members
       const originalVoiceChannel = await interaction.client.channels.fetch(voiceChannelId).catch(() => null);
@@ -59,6 +60,15 @@ async function handleProposalInteraction(interaction) {
       // If original channel doesn't exist or DJ is in a different channel, use DJ's channel
       const djVoiceChannel = interaction.member.voice?.channel;
 
+=======
+      
+      // Check if original voice channel still exists and has members
+      const originalVoiceChannel = await interaction.client.channels.fetch(voiceChannelId).catch(() => null);
+      
+      // If original channel doesn't exist or DJ is in a different channel, use DJ's channel
+      const djVoiceChannel = interaction.member.voice?.channel;
+      
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       if (!originalVoiceChannel || (djVoiceChannel && djVoiceChannel.id !== voiceChannelId)) {
         if (djVoiceChannel) {
           voiceChannelId = djVoiceChannel.id;

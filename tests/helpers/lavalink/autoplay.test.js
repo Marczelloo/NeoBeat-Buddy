@@ -333,7 +333,16 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
       it("should detect duplicates by normalized title/artist", () => {
         const candidates = [
+<<<<<<< HEAD
           createMockCandidate("Song Title (Official Video)", "Artist Name", "new-id", "deezer_recommendations"),
+=======
+          createMockCandidate(
+            "Song Title (Official Video)",
+            "Artist Name",
+            "new-id",
+            "deezer_recommendations"
+          ),
+>>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
         ];
         const profile = createMinimalProfile({
           recentIdentifiers: ["other-id"],
