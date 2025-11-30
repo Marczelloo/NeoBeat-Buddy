@@ -203,7 +203,7 @@ async function handleSource(interaction, subcommand) {
   switch (subcommand) {
     case "default": {
       const source = interaction.options.getString("source");
-      
+
       updateGuildState(guildId, {
         defaultSource: source,
       });
@@ -223,7 +223,7 @@ async function handleSource(interaction, subcommand) {
     case "status": {
       const { EmbedBuilder } = require("discord.js");
       const currentSource = state?.defaultSource || "deezer";
-      
+
       const sourceDescriptions = {
         deezer: "🎼 **Deezer** - FLAC quality audio",
         youtube: "▶️ **YouTube** - Wide variety of content",
@@ -241,7 +241,8 @@ async function handleSource(interaction, subcommand) {
           },
           {
             name: "How it works",
-            value: "• Default source is used when no source is specified in `/play`\n• Users can override by selecting a source in the command\n• Autocomplete results will match the selected/default source",
+            value:
+              "• Default source is used when no source is specified in `/play`\n• Users can override by selecting a source in the command\n• Autocomplete results will match the selected/default source",
             inline: false,
           }
         )

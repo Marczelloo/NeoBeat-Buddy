@@ -56,22 +56,26 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       }
     }
 
-    // Factor 3: Source quality
+    // Factor 3: Source quality - prioritize Deezer and Spotify over YouTube
     if (candidate.source === "deezer_recommendations") {
+      score += 40;
+      scoringDetails.push("source:+40(deezer)");
+    } else if (candidate.source === "spotify_recommendations") {
       score += 35;
-      scoringDetails.push("source:+35");
+      scoringDetails.push("source:+35(spotify)");
     } else if (candidate.source === "spotify") {
-      score += 30;
-      scoringDetails.push("source:+30");
+      // Legacy support
+      score += 35;
+      scoringDetails.push("source:+35(spotify)");
     } else if (candidate.source === "youtube_mix") {
       score += 15;
-      scoringDetails.push("source:+15");
+      scoringDetails.push("source:+15(yt-mix)");
     } else if (candidate.source === "youtube_search") {
-      score += 12;
-      scoringDetails.push("source:+12");
-    } else if (candidate.source === "top_artist_search") {
       score += 10;
-      scoringDetails.push("source:+10");
+      scoringDetails.push("source:+10(yt-search)");
+    } else if (candidate.source === "top_artist_search") {
+      score += 8;
+      scoringDetails.push("source:+8(top-artist)");
     }
 
     // Factor 4: Genre matching

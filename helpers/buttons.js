@@ -145,9 +145,11 @@ async function handleControlButtons(interaction, player) {
         skipVotes.clear(guildId);
         if (livePlayer?.currentTrack) recordSkip(guildId, livePlayer.currentTrack, "manual_skip");
         await interaction.reply({ content: "Song skipped.", ephemeral: true });
+        return;
       }
 
-      return interaction.reply({ content: "No music is currently playing.", ephemeral: true });
+      await interaction.reply({ content: "No music is currently playing.", ephemeral: true });
+      return;
     }
 
     const listeners = voiceChannel.members.filter((member) => !member.user.bot);
@@ -249,18 +251,40 @@ async function handleControlButtons(interaction, player) {
       await lavalinkShuffle(guildId);
       break;
     case "lyrics-button": {
+      const { buildSyncedLyricsDisplay } = require("./lavalink/lyricsFormatter");
       const payload = getLyricsState(guildId);
+
       if (!payload || (!payload.lyrics && !payload.lines)) {
         return interaction.editReply({ embeds: [errorEmbed("No lyrics were found for this track.")] });
       }
 
+      const trackTitle = payload.track?.title ?? player.currentTrack?.info?.title ?? "Unknown track";
+
+      // Use synced lyrics if available (default for button)
+      if (payload.synced && Array.isArray(payload.lines) && payload.lines.length > 0) {
+        // Create a pseudo-interaction for synced display
+        const pseudoInteraction = {
+          ...interaction,
+          editReply: async (data) => interaction.followUp(data),
+          guildId: interaction.guildId,
+        };
+
+        await buildSyncedLyricsDisplay({
+          interaction: pseudoInteraction,
+          player,
+          payload,
+          trackTitle,
+        });
+
+        return;
+      }
+
+      // Fall back to static lyrics
       const text =
         payload.lyrics || (Array.isArray(payload.lines) ? payload.lines.map((entry) => entry.line).join("\n") : null);
 
       if (!text)
         return interaction.editReply({ embeds: [errorEmbed("The lyrics provider returned an empty result.")] });
-
-      const trackTitle = payload.track?.title ?? player.currentTrack?.info?.title ?? "Unknown track";
 
       const { embeds, content } = buildLyricsResponse({
         text,

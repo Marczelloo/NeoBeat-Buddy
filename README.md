@@ -66,12 +66,12 @@ A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, ada
 - **Music Wrapped & Insights** — personal and server-wide listening statistics with top tracks, artists, listening patterns, streaks, and achievements.
 - **Health monitoring** — comprehensive system metrics, error tracking, Lavalink status, performance monitoring, and admin diagnostics.
 - **Enhanced logging** — structured JSON logs, automatic log rotation, error aggregation, performance metrics tracking, and emoji-based visual indicators for all operations with readable track metadata.
-- **Adaptive smart autoplay** with Deezer recommendations — maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
+- **Adaptive smart autoplay** with priority-based recommendations — uses Deezer first, then Spotify, then YouTube as last resort. Maintains genre consistency, tempo flow, time-aware energy adjustments, mood progression, and context-aware artist diversity.
 - **24/7 radio mode** — bot stays in voice channel permanently and plays music continuously like a radio station.
 - **Interactive EQ mixer panel** with 15-band control, A/B comparison, custom preset saving (up to 10 per user), real-time visual feedback, and 10-minute inactivity auto-cleanup.
 - **DJ mode** with role-based permissions, skip voting (dj/vote/hybrid modes), and track suggestion approval workflow.
 - **Real-time statistics** per guild and globally via `/stats` — tracks songs played, listening hours, unique users, peak listeners, top sources, and hourly activity patterns.
-- **Lyrics lookup** for the current track with `/lyrics` (powered by Genius API).
+- **Lyrics lookup** for the current track with `/lyrics` — live synced lyrics from Deezer with real-time updates and highlighted current line, fallback to LRC Library and Genius API.
 - **Interactive queue management** with pagination, track removal by position or keyword, and shuffle.
 - **Persistent state** — now playing messages, EQ configurations, DJ settings, guild stats, and autoplay preferences survive restarts.
 - **Enhanced stability** — automatic voice region reconnection when Discord changes servers, improved duplicate prevention (tracks last 100 songs), and fixed fallback source playback.
@@ -132,7 +132,7 @@ pnpm deploy:dev
 - **`/previous`** — Restart the current track or jump to the previous one from history (DJ restricted in DJ mode).
 - **`/seekto position:<seconds|mm:ss|hh:mm:ss>`** — Jump to a specific timestamp in the current track (DJ restricted in DJ mode).
 - **`/volume level:<0-100>`** — Set the playback volume (DJ only in DJ mode).
-- **`/lyrics`** — Display lyrics for the currently playing song.
+- **`/lyrics [synced:true|false]`** — Display lyrics for the currently playing song. Use `synced:true` for live updating lyrics with highlighted current line (Deezer/LRC Library), or `synced:false` for full static lyrics. Player button defaults to synced.
 - **`/autoplay enable:<true|false>`** — Toggle adaptive genre-aware smart autoplay mode (DJ only).
 - **`/247`** — Toggle 24/7 radio mode — bot stays in voice and plays continuously (DJ only).
 
@@ -174,11 +174,13 @@ pnpm deploy:dev
 
 1. **Analyzes your listening history** — Tracks the last 15 songs played to understand your music taste, genre preferences, tempo patterns, and mood trends.
 
-2. **Multi-source recommendations** — Pulls suggestions from:
+2. **Priority-based recommendation sources** — Pulls suggestions with intelligent fallback:
 
-   - **Deezer Recommendations (primary)** — Returns 40 high-quality recommendations based on the last track in your queue
-   - **YouTube Mix** — Related tracks from YouTube's radio feature (fallback/supplement)
-   - **Top artist search** — Songs from your most-played artists
+   - **🥇 Deezer Recommendations (highest priority)** — Returns 25 high-quality recommendations based on the last track. Uses `dzrec:` endpoint for native recommendations.
+   - **🥈 Spotify Recommendations (second priority)** — Enriched with genre, popularity, and audio features data via Spotify API. Searches via `spsearch:` for playable tracks.
+   - **🥉 YouTube Mix (fallback)** — Related tracks from YouTube's radio feature. Only used when premium sources provide less than 5 candidates.
+   - **📉 YouTube Search (last resort)** — Generic search fallback. Only triggered when all other sources fail.
+   - **📉 Top Artist Search (absolute last resort)** — Songs from your most-played artists. Only when nothing else works.
 
 3. **Genre consistency** — Maintains your music style:
 
@@ -350,7 +352,7 @@ If you're listening to rock:
 
 **When enabled**, autoplay triggers automatically when the queue ends, seamlessly continuing your listening session with curated recommendations that match your genre preferences, tempo flow, mood, and energy levels.
 
-**Note:** Deezer credentials are required for the best autoplay experience with genre consistency. Without Deezer, the bot falls back to YouTube Mix recommendations (no genre awareness). Spotify credentials are optional and only used for metadata enrichment.
+**Note:** Deezer credentials are required for the best autoplay experience with genre consistency. Without Deezer, the bot falls back to YouTube Mix recommendations (no genre awareness). Spotify credentials are optional but recommended — they provide rich metadata (genres, audio features, popularity) for better scoring, but playback will still work without them.
 
 ---
 
@@ -858,45 +860,61 @@ NeoBeat-Buddy/
 - Calculates average release year and tempo (BPM)
 - Builds a comprehensive listening profile used for scoring candidates
 
-#### Multi-Source Candidate Collection
+#### Multi-Source Candidate Collection (Priority Order)
 
-1. **Deezer Recommendations** (primary)
+The autoplay system now uses a strict priority order, only falling back to lower-priority sources when higher-priority sources fail or provide insufficient results (less than 5 candidates):
 
-   - Uses Deezer's recommendation algorithm based on seed track
-   - Returns 40 high-quality recommendations with full metadata
+1. **🥇 Deezer Recommendations** (highest priority, +40 score bonus)
+
+   - Uses Deezer's `dzrec:{trackId}` endpoint for native recommendations
+   - Returns up to 25 high-quality recommendations with full metadata
    - Fast and reliable - no additional API calls needed
    - Provides artist, title, duration, and track identifiers
+   - **Always attempted first**
 
-2. **YouTube Mix** (fallback/supplement)
+2. **🥈 Spotify Recommendations** (second priority, +35 score bonus)
+
+   - Uses Spotify's `/recommendations` API based on seed track
+   - Enriched with genre, popularity, audio features (tempo, energy, valence)
+   - Resolves tracks via Lavalink's `spsearch:` for playback
+   - **Always attempted after Deezer to add variety and metadata**
+
+3. **🥉 YouTube Mix** (fallback, +15 score bonus)
 
    - Uses YouTube's radio playlist feature
-   - Provides 20 related tracks
+   - Provides up to 20 related tracks
    - No genre/tempo/mood information available
+   - **Only used when Deezer + Spotify provide < 5 candidates**
 
-3. **Top Artist Search** (supplement)
+4. **📉 YouTube Search** (last resort, +10 score bonus)
+
+   - Generic YouTube search as fallback
+   - **Only triggered when YouTube Mix also fails**
+
+5. **📉 Top Artist Search** (absolute last resort, +8 score bonus)
    - Searches for songs by your most-played artists
-   - Only used when strong genre profile exists
+   - **Only used when all other sources return nothing**
 
 #### 12-Factor Scoring System
 
 Each candidate receives a score based on:
 
-| Factor                 | Points          | Description                                                   |
-| ---------------------- | --------------- | ------------------------------------------------------------- |
-| **Genre Match**        | +30 per genre   | Matching genre from your top genres (weighted by frequency)   |
-| **Genre Drift**        | -25             | No genre overlap when you have ≥3 top genres                  |
-| **Tempo/BPM Match**    | +15 / +8 / -5   | Within 15 BPM (+15), 30 BPM (+8), or >60 BPM (-5)             |
-| **Time-of-Day**        | +12 / +6        | Energy matches time of day (optimal +12, acceptable +6)       |
-| **Popularity**         | +10 / -5 / -3   | Sweet spot 50-85 (+10), obscure <25 (-5), overplayed >95 (-3) |
-| **Mood Progression**   | +12 / +8        | Continues valence trend (+12) or maintains stability (+8)     |
-| **Energy Arc**         | +15 / +10       | Continues energy trend (+15) or maintains plateau (+10)       |
-| **Artist Familiarity** | +5 per play     | How often you've played this artist                           |
-| **Duration Match**     | +10 / +5 / -5   | Within 20% (+10), 40% (+5), or >40% (-5) of average           |
-| **Source Quality**     | +35 / +15 / +10 | Deezer (+35), YouTube Mix (+15), Search (+10)                 |
-| **Smart Diversity**    | +20 / -5 to -40 | Context-aware: vibe match reduces penalty, consecutive -40    |
-| **Skip Learning**      | -20 per skip    | Artist you've skipped recently (30min window)                 |
-| **Genre Skip**         | -15 per skip    | Genre you've skipped recently                                 |
-| **Duplicate**          | -1000           | Already played in last 100 tracks (ID + title/artist match)   |
+| Factor                 | Points                     | Description                                                                 |
+| ---------------------- | -------------------------- | --------------------------------------------------------------------------- |
+| **Genre Match**        | +30 per genre              | Matching genre from your top genres (weighted by frequency)                 |
+| **Genre Drift**        | -25                        | No genre overlap when you have ≥3 top genres                                |
+| **Tempo/BPM Match**    | +15 / +8 / -5              | Within 15 BPM (+15), 30 BPM (+8), or >60 BPM (-5)                           |
+| **Time-of-Day**        | +12 / +6                   | Energy matches time of day (optimal +12, acceptable +6)                     |
+| **Popularity**         | +10 / -5 / -3              | Sweet spot 50-85 (+10), obscure <25 (-5), overplayed >95 (-3)               |
+| **Mood Progression**   | +12 / +8                   | Continues valence trend (+12) or maintains stability (+8)                   |
+| **Energy Arc**         | +15 / +10                  | Continues energy trend (+15) or maintains plateau (+10)                     |
+| **Artist Familiarity** | +5 per play                | How often you've played this artist                                         |
+| **Duration Match**     | +10 / +5 / -5              | Within 20% (+10), 40% (+5), or >40% (-5) of average                         |
+| **Source Quality**     | +40 / +35 / +15 / +10 / +8 | Deezer (+40), Spotify (+35), YT Mix (+15), YT Search (+10), Top Artist (+8) |
+| **Smart Diversity**    | +20 / -5 to -40            | Context-aware: vibe match reduces penalty, consecutive -40                  |
+| **Skip Learning**      | -20 per skip               | Artist you've skipped recently (30min window)                               |
+| **Genre Skip**         | -15 per skip               | Genre you've skipped recently                                               |
+| **Duplicate**          | -1000                      | Already played in last 100 tracks (ID + title/artist match)                 |
 
 #### Time-of-Day Energy Factors
 
@@ -1113,7 +1131,8 @@ This project is licensed under the **Educational & Research License** - see the 
 - **Lavalink** - Audio streaming framework
 - **Poru** - Lavalink client for Node.js
 - **Discord.js** - Discord API library
-- **Genius API** - Lyrics provider
+- **LavaSrc** - Deezer synced lyrics and LRC Library integration
+- **Genius API** - Fallback lyrics provider
 - **Spotify Web API** - Genre-aware recommendations and audio feature analysis
 
 ---

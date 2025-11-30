@@ -63,7 +63,7 @@ module.exports = {
     try {
       // Check if user has selected a source
       const selectedSource = interaction.options.getString("source");
-      
+
       // Determine which source to use for autocomplete
       let searchSource;
       if (selectedSource && selectedSource !== "auto") {
@@ -83,7 +83,7 @@ module.exports = {
       if (node) {
         try {
           let searchQuery;
-          
+
           // Build search query based on source
           switch (searchSource) {
             case "deezer":
@@ -241,7 +241,7 @@ module.exports = {
       return interaction.editReply({ embeds: [errorEmbed("Please provide a valid URL or search term.")] });
 
     const prepend = interaction.options.getBoolean("prepend") ?? false;
-    
+
     // Get source preference
     const selectedSource = interaction.options.getString("source");
     let source;

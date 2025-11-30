@@ -15,6 +15,7 @@ const DEFAULT_CONFIG = {
 const state = { guilds: {} };
 let saveTimer = null;
 let ready = false;
+let initPromise = null;
 
 const ALLOWED_SKIP_MODES = new Set(["dj", "vote", "hybrid"]);
 
@@ -45,29 +46,36 @@ function normalizeConfig(raw) {
 async function init() {
   if (ready) return;
 
-  try {
-    const raw = await fs.readFile(DATA_FILE, "utf-8");
+  // Prevent multiple simultaneous init calls
+  if (initPromise) return initPromise;
 
-    if (!raw || raw.trim() === "") {
+  initPromise = (async () => {
+    try {
+      const raw = await fs.readFile(DATA_FILE, "utf-8");
+
+      if (!raw || raw.trim() === "") {
+        await ensureDataDir();
+        await persist();
+        ready = true;
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && parsed.guilds && typeof parsed.guilds === "object") {
+        for (const [guildId, cfg] of Object.entries(parsed.guilds)) {
+          state.guilds[guildId] = normalizeConfig(cfg);
+        }
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
       await ensureDataDir();
       await persist();
-      ready = true;
-      return;
     }
 
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && parsed.guilds && typeof parsed.guilds === "object") {
-      for (const [guildId, cfg] of Object.entries(parsed.guilds)) {
-        state.guilds[guildId] = normalizeConfig(cfg);
-      }
-    }
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-    await ensureDataDir();
-    await persist();
-  }
+    ready = true;
+  })();
 
-  ready = true;
+  return initPromise;
 }
 
 function scheduleSave() {
@@ -89,6 +97,12 @@ async function persist() {
 
 function ensureGuildConfig(guildId) {
   if (!guildId) throw new Error("ensureGuildConfig requires guildId");
+
+  // Auto-init if not ready (synchronous fallback)
+  if (!ready && !initPromise) {
+    init().catch((err) => Log.error("DJ store auto-init failed", err));
+  }
+
   if (!state.guilds[guildId]) {
     state.guilds[guildId] = { ...DEFAULT_CONFIG };
   }

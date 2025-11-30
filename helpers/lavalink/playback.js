@@ -73,7 +73,7 @@ async function lavalinkResolveTracks(query, source = "deezer") {
     try {
       const sourcePrefix = source === "youtube" ? "ytsearch" : source === "spotify" ? "spsearch" : "dzsearch";
       const sourceName = source === "youtube" ? "YouTube" : source === "spotify" ? "Spotify" : "Deezer";
-      
+
       Log.info(`🔍 ${sourceName} search`, `query=${searchQuery}`);
       const node = poru.leastUsedNodes[0];
       if (node) {
@@ -98,8 +98,12 @@ async function lavalinkResolveTracks(query, source = "deezer") {
             playlistInfo: searchData.playlistInfo,
           };
         } else {
-          Log.info(`⚠️ ${sourceName} no results, trying fallback`, `loadType=${searchData?.loadType}`, `query=${searchQuery}`);
-          
+          Log.info(
+            `⚠️ ${sourceName} no results, trying fallback`,
+            `loadType=${searchData?.loadType}`,
+            `query=${searchQuery}`
+          );
+
           // Fallback to YouTube if primary source failed
           if (source !== "youtube") {
             const ytUrl = `http://${node.options.host}:${
@@ -109,7 +113,7 @@ async function lavalinkResolveTracks(query, source = "deezer") {
               headers: { Authorization: node.options.password },
             });
             const ytData = await ytResponse.json();
-            
+
             if (ytData?.loadType === "search" && Array.isArray(ytData?.data) && ytData.data.length > 0) {
               Log.info("✅ YouTube fallback found tracks", `count=${ytData.data.length}`, `query=${searchQuery}`);
               res = {

@@ -36,8 +36,8 @@
 - [x] search history
 - [x] stats enchancment / listening wrapped
 - [x] better logging + health monitoring
-- [] swap or add possibility to change source of lyrics to deezer (an be synced with song)
-- [] let user pick from which source he want to search / play song (default deezer)
+- [x] swap or add possibility to change source of lyrics to deezer (and be synced with song)
+- [x] let user pick from which source he want to search / play song (default deezer)
 - [ ] migrate from storing data in json to db, (postgress with prism orm)
 
 ## FIXES

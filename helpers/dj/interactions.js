@@ -50,9 +50,30 @@ async function handleProposalInteraction(interaction) {
 
   if (action === "approve") {
     try {
+      // Verify the voice channel is still valid, or use DJ's current voice channel
+      let voiceChannelId = proposal.voiceChannelId;
+
+      // Check if original voice channel still exists and has members
+      const originalVoiceChannel = await interaction.client.channels.fetch(voiceChannelId).catch(() => null);
+
+      // If original channel doesn't exist or DJ is in a different channel, use DJ's channel
+      const djVoiceChannel = interaction.member.voice?.channel;
+
+      if (!originalVoiceChannel || (djVoiceChannel && djVoiceChannel.id !== voiceChannelId)) {
+        if (djVoiceChannel) {
+          voiceChannelId = djVoiceChannel.id;
+        } else if (!originalVoiceChannel) {
+          await interaction.reply({
+            content: "The original voice channel is no longer available. Please join a voice channel first.",
+            ephemeral: true,
+          });
+          return;
+        }
+      }
+
       await lavalinkPlay({
         guildId,
-        voiceId: proposal.voiceChannelId,
+        voiceId: voiceChannelId,
         textId: proposal.textChannelId ?? interaction.channelId,
         query: proposal.query,
         requester: proposal.requester,

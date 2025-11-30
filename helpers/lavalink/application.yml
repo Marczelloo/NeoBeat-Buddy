@@ -42,6 +42,9 @@ lavalink:
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.15.0"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
+    - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
+      repository: "https://maven.lavalink.dev/releases"
+      snapshot: false
 
 logging:
   file:
@@ -51,7 +54,14 @@ logging:
       max-history: 7
       max-file-size: 25MB
       total-size-cap: 500MB
+
 plugins:
+  lavalyrics:
+    sources: # Priority order for lyrics sources (tries in this order)
+      - deezer # Try Deezer's native lyrics first
+      - spotify # Then Spotify lyrics
+      - youtube # Then YouTube lyrics
+      # LRCLIB is automatic fallback when above sources don't have lyrics
   youtube:
     enabled: true
     allowSearch: true
@@ -83,9 +93,17 @@ plugins:
       deezer: true
       youtube: true
       ytmsearch: true
+    lyrics-sources:
+      deezer: true
+      spotify: false # Disabled - LavaSrc can't extract Spotify secret from current web player
+      youtube: true
+      yandexmusic: false
+      vkmusic: false
+      lrcLib: true
     spotify:
       clientId: ${SPOTIFY_CLIENT_ID}
       clientSecret: ${SPOTIFY_CLIENT_SECRET}
+      spDc: ${SPOTIFY_SP_DC}
       countryCode: PL
       playlistPageSize: 100
     deezer:

@@ -215,58 +215,102 @@ async function getAudioFeatures(trackIds) {
 }
 
 /**
- * Fetches raw recommendations from Spotify API
+ * Fetches recommendations using Spotify's search API with genre/artist filters
+ * Note: The /recommendations endpoint was deprecated in November 2024
+ * This alternative uses search with seed artist's related artists
  * @param {string} seedTrackId - Seed track ID
  * @param {number} limit - Number of recommendations
- * @param {Array<string>} targetGenres - Target genres
- * @param {Object} targetFeatures - Target audio features
- * @returns {Promise<Array>} Raw Spotify track recommendations
+ * @param {Array<string>} targetGenres - Target genres (used for search filters)
+ * @param {Object} targetFeatures - Target audio features (not used in search approach)
+ * @returns {Promise<Array>} Spotify track results
  */
 async function fetchSpotifyRecommendations(seedTrackId, limit = 10, targetGenres = [], targetFeatures = null) {
   const token = await getSpotifyToken();
   if (!token) return [];
 
   try {
-    const params = new URLSearchParams({
-      seed_tracks: seedTrackId,
-      limit: limit.toString(),
-      market: "US",
-    });
-
-    if (targetGenres.length > 0) {
-      const genreSeeds = targetGenres.slice(0, 2).join(",");
-      params.append("seed_genres", genreSeeds);
-    }
-
-    if (targetFeatures) {
-      if (targetFeatures.energy !== undefined) {
-        params.append("target_energy", targetFeatures.energy.toFixed(2));
-      }
-      if (targetFeatures.danceability !== undefined) {
-        params.append("target_danceability", targetFeatures.danceability.toFixed(2));
-      }
-      if (targetFeatures.valence !== undefined) {
-        params.append("target_valence", targetFeatures.valence.toFixed(2));
-      }
-      if (targetFeatures.acousticness !== undefined) {
-        params.append("target_acousticness", targetFeatures.acousticness.toFixed(2));
-      }
-      if (targetFeatures.tempo !== undefined) {
-        params.append("target_tempo", Math.round(targetFeatures.tempo).toString());
-      }
-    }
-
-    const response = await fetch(`https://api.spotify.com/v1/recommendations?${params.toString()}`, {
+    // First, get the seed track details to find the artist
+    const trackResponse = await fetch(`https://api.spotify.com/v1/tracks/${seedTrackId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (!response.ok) {
-      Log.warning("Spotify recommendations failed", "", `status=${response.status}`);
+    if (!trackResponse.ok) {
+      Log.warning("Failed to get seed track", "", `status=${trackResponse.status}`);
       return [];
     }
 
-    const data = await response.json();
-    return data.tracks || [];
+    const seedTrack = await trackResponse.json();
+    const seedArtistId = seedTrack.artists?.[0]?.id;
+
+    if (!seedArtistId) {
+      Log.warning("No artist found for seed track");
+      return [];
+    }
+
+    // Get the artist's top tracks as recommendations
+    const topTracksResponse = await fetch(`https://api.spotify.com/v1/artists/${seedArtistId}/top-tracks?market=US`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    let tracks = [];
+
+    if (topTracksResponse.ok) {
+      const topTracksData = await topTracksResponse.json();
+      // Filter out the seed track itself
+      tracks = (topTracksData.tracks || []).filter((t) => t.id !== seedTrackId);
+    }
+
+    // Also get related artists and their top tracks for variety
+    const relatedResponse = await fetch(`https://api.spotify.com/v1/artists/${seedArtistId}/related-artists`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (relatedResponse.ok) {
+      const relatedData = await relatedResponse.json();
+      const relatedArtists = (relatedData.artists || []).slice(0, 3);
+
+      // Get top track from each related artist
+      for (const artist of relatedArtists) {
+        const artistTopResponse = await fetch(`https://api.spotify.com/v1/artists/${artist.id}/top-tracks?market=US`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (artistTopResponse.ok) {
+          const artistTopData = await artistTopResponse.json();
+          // Add first 2 tracks from each related artist
+          tracks.push(...(artistTopData.tracks || []).slice(0, 2));
+        }
+      }
+    }
+
+    // If we have genre targets, also try genre-based search
+    if (targetGenres.length > 0 && tracks.length < limit) {
+      const genreQuery = targetGenres
+        .slice(0, 2)
+        .map((g) => `genre:"${g}"`)
+        .join(" ");
+      const searchResponse = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(genreQuery)}&type=track&limit=10&market=US`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        const searchTracks = searchData.tracks?.items || [];
+        // Add tracks not already in our list
+        const existingIds = new Set(tracks.map((t) => t.id));
+        for (const track of searchTracks) {
+          if (!existingIds.has(track.id) && track.id !== seedTrackId) {
+            tracks.push(track);
+            existingIds.add(track.id);
+          }
+        }
+      }
+    }
+
+    // Shuffle and limit
+    const shuffled = tracks.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, limit);
   } catch (err) {
     Log.error("Error getting Spotify recommendations", err);
     return [];
