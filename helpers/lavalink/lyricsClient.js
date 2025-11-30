@@ -106,6 +106,64 @@ function extractFormattedLyrics($) {
   return text;
 }
 
+/**
+ * Fetch synced lyrics from Lavalink (Deezer/LRCLib)
+ * Returns LRC format with timestamps if available
+ */
+async function fetchLyricsFromLavalink(track, node) {
+  if (!node || !track?.info?.identifier) {
+    return null;
+  }
+
+  try {
+    const encodedTrack = encodeURIComponent(track.track);
+    const response = await node.rest.get(`/v4/lyrics?track=${encodedTrack}`);
+
+    if (!response || !response.text) {
+      return null;
+    }
+
+    // Check if lyrics are synced (LRC format)
+    const isSynced = response.lines && Array.isArray(response.lines) && response.lines.length > 0;
+
+    if (isSynced) {
+      // Return synced lyrics with timestamps
+      Log.info(
+        "📜 Synced lyrics fetched from Lavalink",
+        "",
+        `source=${response.source || "unknown"}`,
+        `lines=${response.lines.length}`
+      );
+
+      return {
+        source: response.source || "lavalink",
+        lyrics: response.text,
+        lines: response.lines, // Array of {timestamp, line}
+        synced: true,
+      };
+    }
+
+    // Plain text lyrics
+    if (response.text) {
+      Log.info("📜 Lyrics fetched from Lavalink", "", `source=${response.source || "unknown"}`);
+
+      return {
+        source: response.source || "lavalink",
+        lyrics: response.text,
+        synced: false,
+      };
+    }
+
+    return null;
+  } catch (err) {
+    // 404 or other errors - lyrics not found
+    if (err.statusCode !== 404) {
+      Log.warning("Lavalink lyrics fetch failed", "", `error=${err?.message || err}`);
+    }
+    return null;
+  }
+}
+
 async function fetchLyricsFromGenius(searchTerm, trackInfo = {}) {
   const key = process.env.GENIUS_API_KEY;
 
@@ -141,6 +199,11 @@ async function fetchLyricsFromGenius(searchTerm, trackInfo = {}) {
   return formatted || null;
 }
 
+/**
+ * Fetch lyrics with fallback priority:
+ * 1. Lavalink (Deezer synced lyrics / LRCLib)
+ * 2. Genius (fallback if Lavalink fails)
+ */
 async function fetchLyrics(player, trackInfo = {}) {
   const searchTerm = buildSearchTerm(trackInfo);
 
@@ -149,11 +212,22 @@ async function fetchLyrics(player, trackInfo = {}) {
     return null;
   }
 
+  // Try Lavalink first (Deezer synced lyrics + LRCLib)
+  const currentTrack = player?.currentTrack;
+  if (currentTrack) {
+    const lavalinkLyrics = await fetchLyricsFromLavalink(currentTrack, player.node);
+
+    if (lavalinkLyrics) {
+      return lavalinkLyrics;
+    }
+  }
+
+  // Fallback to Genius
   const lyrics = await fetchLyricsFromGenius(searchTerm, trackInfo);
 
   if (lyrics) {
-    Log.info("Lyrics fetched from Genius", "", `guild=${player.guildId}`, `query=${searchTerm}`);
-    return { source: "genius", lyrics, url: null };
+    Log.info("📜 Lyrics fetched from Genius", "", `guild=${player.guildId}`, `query=${searchTerm}`);
+    return { source: "genius", lyrics, synced: false };
   }
 
   Log.warning("Lyrics not found", "", `guild=${player.guildId}`, `query=${searchTerm}`);

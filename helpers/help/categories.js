@@ -50,8 +50,13 @@
         },
         {
           name: "lyrics",
-          description: "Display lyrics for the currently playing song.",
-          usage: "/lyrics",
+          description: "Display lyrics for the currently playing song. Use synced option for live updating lyrics.",
+          usage: "/lyrics [synced:true|false]",
+          notes:
+            "• Synced lyrics update in real-time with highlighted current line (if available from Deezer/LRC Library)\n" +
+            "• Static lyrics show full text (fallback to Genius if synced unavailable)\n" +
+            "• Player button defaults to synced display for better experience\n" +
+            "• Sources: Deezer → LRC Library → Genius",
         },
         {
           name: "autoplay",
@@ -430,8 +435,7 @@
         },
         {
           name: "setup source",
-          description:
-            "Configure default music search source: set server-wide preference or view current settings.",
+          description: "Configure default music search source: set server-wide preference or view current settings.",
           usage: "/setup source default source:<deezer|youtube|spotify>\n/setup source status",
         },
         {

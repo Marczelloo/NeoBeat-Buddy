@@ -224,12 +224,12 @@ describe("Smart Autoplay System", () => {
 
     beforeEach(() => {
       delete require.cache[require.resolve("../../../helpers/lavalink/state")];
-      delete require.cache[require.resolve("../../../helpers/lavalink/smartAutoplay")];
+      delete require.cache[require.resolve("../../../helpers/lavalink/sessionProfile")];
 
       const state = require("../../../helpers/lavalink/state");
-      const autoplay = require("../../../helpers/lavalink/smartAutoplay");
+      const sessionProfile = require("../../../helpers/lavalink/sessionProfile");
 
-      buildSessionProfile = autoplay.buildSessionProfile;
+      buildSessionProfile = sessionProfile.buildSessionProfile;
       playbackState = state.playbackState;
 
       playbackState.clear();
@@ -283,12 +283,12 @@ describe("Smart Autoplay System", () => {
 
     beforeEach(() => {
       delete require.cache[require.resolve("../../../helpers/lavalink/state")];
-      delete require.cache[require.resolve("../../../helpers/lavalink/smartAutoplay")];
+      delete require.cache[require.resolve("../../../helpers/lavalink/sessionProfile")];
 
       const state = require("../../../helpers/lavalink/state");
-      const autoplay = require("../../../helpers/lavalink/smartAutoplay");
+      const sessionProfile = require("../../../helpers/lavalink/sessionProfile");
 
-      buildSessionProfile = autoplay.buildSessionProfile;
+      buildSessionProfile = sessionProfile.buildSessionProfile;
       playbackState = state.playbackState;
 
       playbackState.clear();
@@ -326,12 +326,12 @@ describe("Smart Autoplay System", () => {
 
     beforeEach(() => {
       delete require.cache[require.resolve("../../../helpers/lavalink/state")];
-      delete require.cache[require.resolve("../../../helpers/lavalink/smartAutoplay")];
+      delete require.cache[require.resolve("../../../helpers/lavalink/sessionProfile")];
 
       const state = require("../../../helpers/lavalink/state");
-      const autoplay = require("../../../helpers/lavalink/smartAutoplay");
+      const sessionProfile = require("../../../helpers/lavalink/sessionProfile");
 
-      buildSessionProfile = autoplay.buildSessionProfile;
+      buildSessionProfile = sessionProfile.buildSessionProfile;
       playbackState = state.playbackState;
 
       playbackState.clear();

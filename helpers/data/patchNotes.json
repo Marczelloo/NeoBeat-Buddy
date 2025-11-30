@@ -1,4 +1,45 @@
 {
+  "1.0.11": {
+    "version": "1.0.11",
+    "date": "2025-11-30",
+    "title": "Live Karaoke Lyrics, Smarter Autoplay & DJ Mode Fixes",
+    "features": [
+      "Real-time lyrics that follow along with the music - like karaoke!",
+      "See exactly which line is playing with a ▶ highlight",
+      "Lyrics automatically scroll and update as the song plays",
+      "Click the lyrics button on the player for instant synced lyrics",
+      "Choose between live updating lyrics or full song lyrics with /lyrics command",
+      "Works best with Deezer tracks - falls back to other sources if needed",
+      "Shows progress through the song (e.g., line 15 of 87)",
+      "Timestamps displayed for each line so you know what's coming",
+      "Automatically stops when you skip or the song ends",
+      "Redesigned autoplay system - prioritizes Deezer and Spotify over YouTube",
+      "Smart source fallback - only uses YouTube when premium sources fail",
+      "Spotify recommendations now integrated into autoplay for better variety"
+    ],
+    "fixes": [
+      "Fixed DJ mode skip voting - votes now count properly",
+      "Fixed DJ mode hybrid skip returning twice causing errors",
+      "Fixed DJ mode proposal approval failing when voice channel is unavailable",
+      "Fixed DJ mode store race condition during initialization",
+      "Fixed autoplay falling back to YouTube too early",
+      "Fixed Spotify recommendations API 404 error (deprecated endpoint replaced)",
+      "Fixed lyrics sync being too slow and not matching actual audio",
+      "Fixed lyrics line counter showing literal text instead of numbers"
+    ],
+    "changes": [
+      "Lyrics now come from multiple sources for better availability",
+      "Player lyrics button shows live synced lyrics by default",
+      "/lyrics command has new 'synced' option - use /lyrics synced:true for live lyrics",
+      "Improved lyrics accuracy - no more wrong song lyrics!",
+      "Autoplay now checks Deezer first, then Spotify, then YouTube as last resort",
+      "Better autoplay scoring - Deezer tracks get +40 points, Spotify +35, YouTube Mix +15",
+      "DJ mode now falls back to DJ's voice channel if original requester's channel is gone",
+      "Lyrics sync now uses position interpolation for accurate timing",
+      "Lyrics update 4x faster (250ms vs 1000ms) with 300ms lookahead for better sync",
+      "Spotify recommendations now use artist top tracks + related artists instead of deprecated API"
+    ]
+  },
   "1.0.10": {
     "version": "1.0.10",
     "date": "2025-11-03",
