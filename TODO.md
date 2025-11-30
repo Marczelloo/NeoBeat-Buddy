@@ -38,6 +38,8 @@
 - [x] better logging + health monitoring
 - [x] swap or add possibility to change source of lyrics to deezer (and be synced with song)
 - [x] let user pick from which source he want to search / play song (default deezer)
+- [ ] create command that lets me send embedded message to selected channel by me, add option for cusomization embed
+- [ ] create some kind of report/ticket system cause i recently created live demo server and i need functionality for reporting feedback with bugs, issues etc.
 - [ ] migrate from storing data in json to db, (postgress with prism orm)
 
 ## FIXES
