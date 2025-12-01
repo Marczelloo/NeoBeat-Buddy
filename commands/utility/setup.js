@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
 const announcer = require("../../helpers/announcements/announcer");
 const { updateGuildState, getGuildState } = require("../../helpers/guildState");
+const userPrefs = require("../../helpers/users/preferences");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -36,14 +37,31 @@ module.exports = {
         .setDescription("Configure default music search source")
         .addSubcommand((sub) =>
           sub
-            .setName("default")
+            .setName("server")
             .setDescription("Set the default search source for this server")
             .addStringOption((option) =>
               option
                 .setName("source")
-                .setDescription("Default music search source")
+                .setDescription("Default music search source for the server")
                 .setRequired(true)
                 .addChoices(
+                  { name: "🎼 Deezer (FLAC Quality)", value: "deezer" },
+                  { name: "▶️ YouTube", value: "youtube" },
+                  { name: "🎧 Spotify", value: "spotify" }
+                )
+            )
+        )
+        .addSubcommand((sub) =>
+          sub
+            .setName("me")
+            .setDescription("Set your personal default search source (overrides server default)")
+            .addStringOption((option) =>
+              option
+                .setName("source")
+                .setDescription("Your personal default music search source")
+                .setRequired(true)
+                .addChoices(
+                  { name: "🌐 Use Server Default", value: "server" },
                   { name: "🎼 Deezer (FLAC Quality)", value: "deezer" },
                   { name: "▶️ YouTube", value: "youtube" },
                   { name: "🎧 Spotify", value: "spotify" }
@@ -198,31 +216,54 @@ async function handleAnnouncements(interaction, subcommand) {
 
 async function handleSource(interaction, subcommand) {
   const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
   const state = getGuildState(guildId);
 
+  const sourceNames = {
+    deezer: "🎼 Deezer (FLAC Quality)",
+    youtube: "▶️ YouTube",
+    spotify: "🎧 Spotify",
+    server: "🌐 Server Default",
+  };
+
   switch (subcommand) {
-    case "default": {
+    case "server": {
       const source = interaction.options.getString("source");
 
       updateGuildState(guildId, {
         defaultSource: source,
       });
 
-      const sourceNames = {
-        deezer: "🎼 Deezer (FLAC Quality)",
-        youtube: "▶️ YouTube",
-        spotify: "🎧 Spotify",
-      };
+      return interaction.reply({
+        content: `✅ Server default search source set to **${sourceNames[source]}**\n\nThis will be used when no source is specified in \`/play\`. Users can override this with \`/setup source me\` or per-query.`,
+        ephemeral: true,
+      });
+    }
+
+    case "me": {
+      const source = interaction.options.getString("source");
+
+      if (source === "server") {
+        userPrefs.setUserDefaultSource(userId, null);
+        return interaction.reply({
+          content: `✅ Your personal source preference has been **cleared**.\n\nYou will now use the server's default source.`,
+          ephemeral: true,
+        });
+      }
+
+      userPrefs.setUserDefaultSource(userId, source);
 
       return interaction.reply({
-        content: `✅ Default search source set to **${sourceNames[source]}**\n\nThis will be used when no source is specified in \`/play\`. Users can still override this per-query by selecting a different source.`,
+        content: `✅ Your personal default source set to **${sourceNames[source]}**\n\nThis overrides the server default. Use \`/setup source me\` with "Use Server Default" to clear.`,
         ephemeral: true,
       });
     }
 
     case "status": {
       const { EmbedBuilder } = require("discord.js");
-      const currentSource = state?.defaultSource || "deezer";
+      const serverSource = state?.defaultSource || "deezer";
+      const userSource = userPrefs.getUserDefaultSource(userId);
+      const effectiveSource = userSource || serverSource;
 
       const sourceDescriptions = {
         deezer: "🎼 **Deezer** - FLAC quality audio",
@@ -235,14 +276,24 @@ async function handleSource(interaction, subcommand) {
         .setTitle("🎵 Music Search Source Configuration")
         .addFields(
           {
-            name: "Default Source",
-            value: sourceDescriptions[currentSource],
+            name: "Server Default",
+            value: sourceDescriptions[serverSource],
+            inline: true,
+          },
+          {
+            name: "Your Preference",
+            value: userSource ? sourceDescriptions[userSource] : "🌐 Using server default",
+            inline: true,
+          },
+          {
+            name: "Effective Source",
+            value: sourceDescriptions[effectiveSource],
             inline: false,
           },
           {
             name: "How it works",
             value:
-              "• Default source is used when no source is specified in `/play`\n• Users can override by selecting a source in the command\n• Autocomplete results will match the selected/default source",
+              "• **Server default**: Used by all users who haven't set a personal preference\n• **Personal preference**: Overrides server default for you\n• **Per-query override**: Always takes priority (using source option in `/play`)",
             inline: false,
           }
         )
@@ -250,6 +301,20 @@ async function handleSource(interaction, subcommand) {
 
       return interaction.reply({
         embeds: [embed],
+        ephemeral: true,
+      });
+    }
+
+    // Legacy support for "default" subcommand
+    case "default": {
+      const source = interaction.options.getString("source");
+
+      updateGuildState(guildId, {
+        defaultSource: source,
+      });
+
+      return interaction.reply({
+        content: `✅ Server default search source set to **${sourceNames[source]}**\n\nThis will be used when no source is specified in \`/play\`. Users can override this with \`/setup source me\` or per-query.`,
         ephemeral: true,
       });
     }

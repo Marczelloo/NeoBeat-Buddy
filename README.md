@@ -670,6 +670,191 @@ _EQ settings persist across bot restarts and are restored automatically when the
 
 ---
 
+### 📧 Custom Embeds
+
+- **`/embed channel:<channel>`**  
+  Send a custom embedded message to any channel. Opens a modal where you can customize:
+  - **Title**: Embed title (required)
+  - **Description**: Main content (required)
+  - **Color**: Hex color code (e.g., `#ff5500`, defaults to Discord blue)
+  - **Footer**: Optional footer text
+  - **Thumbnail URL**: Small image in top-right corner
+  - **Image URL**: Large image at the bottom
+  - **Fields**: Add multiple fields with format `name|value;name2|value2` (up to 25)
+
+---
+
+### 🎫 Ticket System
+
+A complete ticket/report system for collecting feedback, bug reports, and support requests.
+
+#### Setup
+
+- **`/ticket setup category:<category> [support-role:<role>] [log-channel:<channel>]`**  
+  Initialize the ticket system for your server.
+  - **category**: Category where ticket channels will be created
+  - **support-role**: (Optional) Role that can see and manage all tickets
+  - **log-channel**: (Optional) Channel where closed ticket transcripts are logged
+
+#### Using Tickets
+
+- **`/ticket create type:<type>`**  
+  Create a new ticket. Opens a modal for title and description.
+
+  - Types: `bug`, `feedback`, `suggestion`, `issue`, `question`
+
+- **`/ticket close [reason:<reason>]`**  
+  Close your current ticket (can only be used in ticket channels).
+
+- **`/ticket delete`**  
+  Permanently delete a closed ticket channel.
+
+- **`/ticket list [status:<open|closed|all>]`**  
+  View all tickets in the server with filtering options.
+
+- **`/ticket user user:<member>`**  
+  View all tickets created by a specific user.
+
+#### Features
+
+- **Private Channels**: Each ticket creates a private channel only visible to the creator and support team
+- **Claim System**: Support staff can claim tickets to indicate they're handling it
+- **Transcript Logging**: When tickets are closed, a summary is posted to the log channel
+- **Ticket Types**: Categorize tickets by type (bug, feedback, suggestion, issue, question)
+- **Status Tracking**: Track open vs closed tickets
+
+---
+
+### 🛡️ Moderation Commands
+
+Server moderation tools for managing members.
+
+#### Member Actions
+
+- **`/mod kick member:<user> [reason:<reason>]`**  
+  Kick a member from the server. Member can rejoin with an invite.
+
+- **`/mod ban member:<user> [reason:<reason>] [delete-messages:<days>]`**  
+  Ban a member from the server. Optionally delete their recent messages (1-7 days).
+
+- **`/mod unban user:<user-id> [reason:<reason>]`**  
+  Unban a previously banned user by their user ID.
+
+- **`/mod timeout member:<user> duration:<duration> [reason:<reason>]`**  
+  Timeout a member for a specified duration. They cannot send messages or join voice.
+  - Duration format: `1m`, `1h`, `1d` (minutes, hours, days)
+  - Maximum timeout: 28 days
+
+#### Warning System
+
+- **`/mod warn member:<user> reason:<reason>`**  
+  Issue a warning to a member. Warnings are logged and can be viewed later.
+
+- **`/mod warnings member:<user>`**  
+  View all warnings for a specific member with timestamps and reasons.
+
+- **`/mod clearwarnings member:<user> [warning-id:<id>]`**  
+  Clear all warnings for a member, or remove a specific warning by ID.
+
+#### Features
+
+- **DM Notifications**: Members receive a DM when they're kicked, banned, or warned
+- **Embed Logging**: All actions are confirmed with detailed embeds
+- **Warning Persistence**: Warnings are saved and persist across bot restarts
+- **Permission Checks**: Each action requires appropriate Discord permissions
+
+---
+
+### 📊 Server Logging
+
+Automatic logging system to track server activity across 4 categories.
+
+#### Setup
+
+- **`/logs setup [access-role:<role>]`**  
+  Set up the logging system. Creates a "📊 Server Logs" category with 4 private channels:
+
+  - 💬 message-logs
+  - 🔊 voice-logs
+  - 📋 server-logs
+  - 🤖 bot-logs
+
+  All channels are read-only and visible only to admins (and optionally the access role).
+
+#### Management
+
+- **`/logs enable category:<category>`**  
+  Enable a log category. Categories: `message`, `voice`, `server`, `bot`, or `all`.
+
+- **`/logs disable category:<category>`**  
+  Disable a log category.
+
+- **`/logs access role:<role> action:<grant|revoke>`**  
+  Grant or revoke log channel access for a role.
+
+- **`/logs status`**  
+  View current logging configuration and enabled categories.
+
+- **`/logs delete`**  
+  Delete all logging channels and disable the system.
+
+#### What Gets Logged
+
+**💬 Message Logs:**
+
+- Message edits (before and after content)
+- Message deletions (with content if cached)
+- Shows who deleted the message (from audit log)
+
+**🔊 Voice Logs:**
+
+- Join/leave voice channels
+- Moving between channels
+- Server mute/unmute and deafen/undeafen
+- Starting/stopping streams and camera
+
+**📋 Server Logs:**
+
+- Member join/leave (with account age warning for new accounts)
+- Nickname changes
+- Role additions/removals (with who made the change)
+- Member bans/unbans
+- Timeouts applied/removed
+
+**🤖 Bot Logs:**
+
+- All slash command usage
+- Command parameters used
+- Success/failure status
+- Error messages when commands fail
+
+---
+
+### 🎵 Per-User Source Preferences
+
+- **`/setup source server source:<source>`**  
+  Set the server-wide default search source (requires Manage Guild).
+
+- **`/setup source me source:<source>`**  
+  Set your personal default source. Options:
+
+  - 🌐 Use Server Default (clears your preference)
+  - 🎼 Deezer (FLAC Quality)
+  - ▶️ YouTube
+  - 🎧 Spotify
+
+- **`/setup source status`**  
+  View server default, your preference, and effective source.
+
+**Priority Order:**
+
+1. Source selected in `/play` command (always highest)
+2. Your personal preference (`/setup source me`)
+3. Server default (`/setup source server`)
+4. Deezer (if nothing configured)
+
+---
+
 ## Production Deployment (Raspberry Pi / Server)
 
 ### Docker Stack (Recommended)
@@ -813,7 +998,7 @@ docker load -i neo-bot.tar
 NeoBeat-Buddy/
 ├── commands/
 │   ├── music/          # Playback, queue, autoplay, and DJ commands
-│   └── utility/        # Stats, help, user commands
+│   └── utility/        # Stats, help, user, embed, ticket, moderation commands
 ├── events/             # Discord.js event handlers
 ├── helpers/
 │   ├── data/           # Persistent JSON stores (git-ignored)
@@ -822,7 +1007,9 @@ NeoBeat-Buddy/
 │   │   ├── stats.json
 │   │   ├── guildState.json
 │   │   ├── equalizer.json
-│   │   └── customPresets.json
+│   │   ├── customPresets.json
+│   │   ├── tickets.json
+│   │   └── warnings.json
 │   ├── dj/             # DJ mode logic
 │   ├── equalizer/      # EQ presets, mixer panel, custom presets
 │   ├── help/           # Help command categories

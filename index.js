@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
-const { Client, Collection, GatewayIntentBits } = require("discord.js");
+const { Client, Collection, GatewayIntentBits, Partials } = require("discord.js");
 
 const token = process.env.DISCORD_TOKEN;
 const { setClient } = require("./helpers/clientRegistry.js");
@@ -13,6 +13,8 @@ const { createPoru } = require("./helpers/lavalink/index.js");
 const Log = require("./helpers/logs/log.js");
 const health = require("./helpers/monitoring/health.js");
 const statsStore = require("./helpers/stats/store.js");
+const userPrefs = require("./helpers/users/preferences.js");
+const logsCommand = require("./commands/utility/logs.js");
 
 if (!token) {
   Log.error("DISCORD_TOKEN is not set in the environment variables.");
@@ -47,6 +49,7 @@ const client = new Client({
     GatewayIntentBits.AutoModerationConfiguration,
     GatewayIntentBits.AutoModerationExecution,
   ],
+  partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User],
 });
 
 client.commands = new Collection();
@@ -429,6 +432,24 @@ equalizerStore
   })
   .catch((err) => {
     Log.error("Failed to initialize equalizer store:", err);
+  });
+
+userPrefs
+  .init()
+  .then(() => {
+    Log.info("✅ User preferences initialized");
+  })
+  .catch((err) => {
+    Log.error("Failed to initialize user preferences:", err);
+  });
+
+logsCommand
+  .loadConfig()
+  .then(() => {
+    Log.info("✅ Server logs config initialized");
+  })
+  .catch((err) => {
+    Log.error("Failed to initialize server logs config:", err);
   });
 
 connectClient();
