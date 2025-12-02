@@ -1,4 +1,38 @@
 {
+  "1.0.12": {
+    "version": "1.0.12",
+    "date": "2025-12-01",
+    "title": "Embeds, Tickets, Moderation, Server Logs & User Preferences",
+    "features": [
+      "Custom embed sender - create beautiful embedded messages with /embed command",
+      "Complete ticket/report system with /ticket for bug reports, feedback, and support requests",
+      "Moderation commands - /mod with kick, ban, unban, timeout, warn, warnings, clearwarnings",
+      "Automatic server logging system with 4 categories: message, voice, server, and bot logs",
+      "Log channels auto-created with /logs setup - private channels for admins only",
+      "Grant log access to specific roles with /logs access",
+      "Per-user default music source preference with /setup source me",
+      "Personal source overrides server default - priority: command > user > server",
+      "Message logs track edits and deletions with content and author info",
+      "Voice logs track joins, leaves, moves, mutes, deafens, streaming, and camera",
+      "Server logs track member joins/leaves, role changes, nicknames, bans, and timeouts",
+      "Bot logs track all command usage with parameters, user, channel, and errors",
+      "Warning system with persistent storage - track member warnings over time"
+    ],
+    "fixes": [
+      "Fixed Docker healthcheck using wrong environment variable name",
+      "Fixed embed command failing due to customId length limit",
+      "Fixed version announcements not triggering after updates"
+    ],
+    "changes": [
+      "New /embed command with modal for full embed customization",
+      "New /ticket command with setup, create, close, delete, list, user subcommands",
+      "New /mod command with 7 moderation subcommands",
+      "New /logs command with setup, enable, disable, access, status, delete subcommands",
+      "/setup source now has 'server' and 'me' subcommands instead of 'default'",
+      "Help command includes new Moderation and Tickets categories",
+      "Play command now checks user preference before server default"
+    ]
+  },
   "1.0.11": {
     "version": "1.0.11",
     "date": "2025-11-30",

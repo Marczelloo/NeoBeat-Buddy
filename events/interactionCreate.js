@@ -1,4 +1,11 @@
-﻿const { Events, TextInputStyle, ModalBuilder, TextInputBuilder, ActionRowBuilder } = require("discord.js");
+﻿const {
+  Events,
+  TextInputStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  ActionRowBuilder,
+  EmbedBuilder,
+} = require("discord.js");
 const queueCommand = require("../commands/music/queue");
 const helpCommand = require("../commands/utility/help");
 const { handleControlButtons, refreshNowPlayingMessage } = require("../helpers/buttons");
@@ -8,6 +15,89 @@ const djStore = require("../helpers/dj/store");
 const { createPoru, lavalinkSetVolume } = require("../helpers/lavalink/index");
 const Log = require("../helpers/logs/log");
 const health = require("../helpers/monitoring/health");
+
+// Bot logs helper
+async function logBotCommand(interaction, success, error = null) {
+  try {
+    const logsCommand = require("../commands/utility/logs");
+    const config = logsCommand.getGuildLogsConfig(interaction.guild?.id);
+
+    if (!config?.enabled || !config?.categories?.bot || !config?.channels?.bot) return;
+
+    const channel = await interaction.guild.channels.fetch(config.channels.bot).catch(() => null);
+    if (!channel) return;
+
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: interaction.user.tag,
+        iconURL: interaction.user.displayAvatarURL(),
+      })
+      .setTimestamp();
+
+    // Build command string
+    let commandStr = `/${interaction.commandName}`;
+    if (interaction.options) {
+      const subcommandGroup = interaction.options.getSubcommandGroup?.(false);
+      const subcommand = interaction.options.getSubcommand?.(false);
+      if (subcommandGroup) commandStr += ` ${subcommandGroup}`;
+      if (subcommand) commandStr += ` ${subcommand}`;
+
+      // Add options
+      const options = interaction.options.data;
+      for (const opt of options) {
+        if (opt.type === 1 || opt.type === 2) {
+          // Subcommand or group
+          if (opt.options) {
+            for (const subOpt of opt.options) {
+              if (subOpt.type === 1 && subOpt.options) {
+                for (const o of subOpt.options) {
+                  commandStr += ` ${o.name}:${o.value}`;
+                }
+              } else if (subOpt.value !== undefined) {
+                commandStr += ` ${subOpt.name}:${subOpt.value}`;
+              }
+            }
+          }
+        } else if (opt.value !== undefined) {
+          commandStr += ` ${opt.name}:${opt.value}`;
+        }
+      }
+    }
+
+    if (success) {
+      embed
+        .setColor(0x57f287)
+        .setTitle("✅ Command Executed")
+        .addFields(
+          { name: "Command", value: `\`${commandStr.slice(0, 1024)}\``, inline: false },
+          { name: "User", value: `<@${interaction.user.id}>`, inline: true },
+          { name: "Channel", value: `<#${interaction.channel?.id}>`, inline: true }
+        );
+    } else {
+      embed
+        .setColor(0xed4245)
+        .setTitle("❌ Command Failed")
+        .addFields(
+          { name: "Command", value: `\`${commandStr.slice(0, 1024)}\``, inline: false },
+          { name: "User", value: `<@${interaction.user.id}>`, inline: true },
+          { name: "Channel", value: `<#${interaction.channel?.id}>`, inline: true }
+        );
+      if (error) {
+        embed.addFields({
+          name: "Error",
+          value: `\`\`\`${String(error.message || error).slice(0, 1000)}\`\`\``,
+          inline: false,
+        });
+      }
+    }
+
+    embed.setFooter({ text: `User ID: ${interaction.user.id}` });
+
+    await channel.send({ embeds: [embed] });
+  } catch (err) {
+    // Silently fail - don't break command execution for logging
+  }
+}
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -173,6 +263,13 @@ module.exports = {
         return;
       }
 
+      // Handle ticket buttons
+      if (interaction.customId.startsWith("ticket_")) {
+        const ticketCommand = require("../commands/utility/ticket");
+        await ticketCommand.handleTicketButton(interaction);
+        return;
+      }
+
       if (interaction.customId.startsWith("queue|")) {
         if (typeof queueCommand.handlePaginationButtons === "function") {
           await queueCommand.handlePaginationButtons(interaction);
@@ -259,6 +356,20 @@ module.exports = {
     }
 
     if (interaction.isModalSubmit()) {
+      // Handle embed modal
+      if (interaction.customId === "embed_modal") {
+        const embedCommand = require("../commands/utility/embed");
+        await embedCommand.handleModal(interaction);
+        return;
+      }
+
+      // Handle ticket modals
+      if (interaction.customId.startsWith("ticket_create:") || interaction.customId.startsWith("ticket_respond:")) {
+        const ticketCommand = require("../commands/utility/ticket");
+        await ticketCommand.handleModal(interaction);
+        return;
+      }
+
       if (interaction.customId !== "player-volume-modal") return;
 
       const rawValue = interaction.fields.getTextInputValue("player-volume-value").trim();
@@ -331,8 +442,12 @@ module.exports = {
     try {
       await command.execute(interaction);
       health.recordCommand(true);
+      // Log successful command to bot-logs channel
+      await logBotCommand(interaction, true);
     } catch (error) {
       health.recordCommand(false);
+      // Log failed command to bot-logs channel
+      await logBotCommand(interaction, false, error);
       Log.error(
         `Error executing ${interaction.commandName}`,
         error,

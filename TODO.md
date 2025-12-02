@@ -38,8 +38,11 @@
 - [x] better logging + health monitoring
 - [x] swap or add possibility to change source of lyrics to deezer (and be synced with song)
 - [x] let user pick from which source he want to search / play song (default deezer)
-- [ ] create command that lets me send embedded message to selected channel by me, add option for cusomization embed
-- [ ] create some kind of report/ticket system cause i recently created live demo server and i need functionality for reporting feedback with bugs, issues etc.
+- [x] create command that lets me send embedded message to selected channel by me, add option for cusomization embed
+- [x] create some kind of report/ticket system cause i recently created live demo server and i need functionality for reporting feedback with bugs, issues etc.
+- [x] add moderation commands
+- [x] add auto logs functionality with 4 categories, message-log collecting all messages sent by users and sending logs to special channel, voice-log collecting all info about activity on voice channels like joining disconecting etc, auto-log collecting informations about things that are going on server like when user joins/leaves, someone gets role,change their nickname etc and last category bot-logs collecting all info about using bots commands and his responses/errors etc, create setup command for this and while set up it can create whole category in discord channels and auto create seperate channels with access only for admins and later roles that will be granted access, these channels should be read only and only visible to allowed persons
+- [x] add option to set default source for play command per user
 - [ ] migrate from storing data in json to db, (postgress with prism orm)
 
 ## FIXES

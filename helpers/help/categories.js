@@ -435,8 +435,37 @@
         },
         {
           name: "setup source",
-          description: "Configure default music search source: set server-wide preference or view current settings.",
-          usage: "/setup source default source:<deezer|youtube|spotify>\n/setup source status",
+          description:
+            "Configure default music search source: server-wide default, personal preference, or view settings.",
+          usage:
+            "/setup source server source:<deezer|youtube|spotify>\n/setup source me source:<server|deezer|youtube|spotify>\n/setup source status",
+        },
+        {
+          name: "logs setup",
+          description:
+            "Set up automatic server logging. Creates log category and channels for messages, voice, server events, and bot commands.",
+          usage: "/logs setup [access-role:<role>]",
+        },
+        {
+          name: "logs enable/disable",
+          description: "Enable or disable specific log categories.",
+          usage:
+            "/logs enable category:<message|voice|server|bot|all>\n/logs disable category:<message|voice|server|bot|all>",
+        },
+        {
+          name: "logs access",
+          description: "Grant or revoke log channel access for a role.",
+          usage: "/logs access role:<role> action:<grant|revoke>",
+        },
+        {
+          name: "logs status",
+          description: "View current logging configuration.",
+          usage: "/logs status",
+        },
+        {
+          name: "logs delete",
+          description: "Delete all logging channels and disable logging.",
+          usage: "/logs delete",
         },
         {
           name: "user",
@@ -480,11 +509,26 @@
         {
           name: "Music Source Configuration",
           value: [
-            "- `/setup source default` sets the server-wide default search source (Deezer, YouTube, or Spotify).",
-            "- Default source is used when users don't specify a source in `/play` command.",
-            "- Users can always override the default by selecting a different source in `/play`.",
-            "- `/setup source status` shows current default source and explains how it works.",
+            "- `/setup source server` sets the server-wide default search source (Deezer, YouTube, or Spotify).",
+            "- `/setup source me` sets your personal default source that overrides server default.",
+            "- Use 'Use Server Default' option to clear your personal preference.",
+            "- **Priority**: Per-query selection > Personal preference > Server default.",
+            "- Users can always override by selecting a source in `/play` command.",
+            "- `/setup source status` shows server default, your preference, and effective source.",
             "- Server defaults to Deezer (FLAC quality) if not configured.",
+          ].join("\n"),
+        },
+        {
+          name: "Server Logging System",
+          value: [
+            "- Use `/logs setup` to create a complete logging system for your server.",
+            "- **Auto-creates**: Log category with 4 read-only channels (admins only by default).",
+            "- **Message Logs**: Tracks message edits and deletions with content and author.",
+            "- **Voice Logs**: Tracks joins, leaves, moves, mutes, deafens, streaming, and camera.",
+            "- **Server Logs**: Tracks member joins/leaves, role changes, nickname changes, bans, and timeouts.",
+            "- **Bot Logs**: Tracks all bot command usage with user, channel, and any errors.",
+            "- Grant access to specific roles with `/logs access role:@Moderators action:grant`.",
+            "- Enable/disable individual categories with `/logs enable` or `/logs disable`.",
           ].join("\n"),
         },
         {
@@ -506,6 +550,165 @@
             "- `/dj skipmode` chooses how skip requests behave: `dj` (DJ decides), `vote` (threshold-based votes), or `hybrid` (vote first, DJ fallback).",
             "- `/dj permissions strict:true` locks DJ management to the DJ role; `false` lets server managers help.",
             "- `/dj status` shows the current role, skip mode, vote threshold, and strict mode state.",
+          ].join("\n"),
+        },
+      ],
+    },
+    moderation: {
+      label: "Moderation",
+      description: "Server moderation and management tools.",
+      emoji: "🛡️",
+      commands: [
+        {
+          name: "mod kick",
+          description: "Kick a member from the server.",
+          usage: "/mod kick user:<member> [reason:<text>]",
+        },
+        {
+          name: "mod ban",
+          description: "Ban a member from the server. Optionally delete their message history.",
+          usage: "/mod ban user:<member> [reason:<text>] [delete-messages:<0-7 days>]",
+        },
+        {
+          name: "mod unban",
+          description: "Unban a previously banned user. Autocomplete shows banned users.",
+          usage: "/mod unban user-id:<id> [reason:<text>]",
+        },
+        {
+          name: "mod timeout",
+          description: "Timeout (mute) a member for a specified duration.",
+          usage: "/mod timeout user:<member> duration:<time> [reason:<text>]",
+        },
+        {
+          name: "mod untimeout",
+          description: "Remove timeout from a member.",
+          usage: "/mod untimeout user:<member> [reason:<text>]",
+        },
+        {
+          name: "mod purge",
+          description: "Bulk delete messages. Optionally filter by user.",
+          usage: "/mod purge amount:<1-100> [user:<member>]",
+        },
+        {
+          name: "mod slowmode",
+          description: "Set channel slowmode (rate limit).",
+          usage: "/mod slowmode seconds:<0-21600>",
+        },
+        {
+          name: "mod lock",
+          description: "Lock a channel to prevent members from sending messages.",
+          usage: "/mod lock [reason:<text>]",
+        },
+        {
+          name: "mod unlock",
+          description: "Unlock a previously locked channel.",
+          usage: "/mod unlock [reason:<text>]",
+        },
+        {
+          name: "mod warn",
+          description: "Send a warning to a user via DM.",
+          usage: "/mod warn user:<member> reason:<text>",
+        },
+        {
+          name: "embed",
+          description: "Send a custom embedded message to any channel. Opens a modal for title/description input.",
+          usage: "/embed channel:<channel> [color:<preset>] [image:<url>] [thumbnail:<url>] [timestamp:<true|false>]",
+        },
+      ],
+      notes: [
+        {
+          name: "Moderation Permissions",
+          value: [
+            "- All `/mod` commands require **Moderate Members** permission.",
+            "- `/embed` requires **Manage Messages** permission.",
+            "- Bot must have higher role than target users for kick/ban/timeout.",
+            "- Purge can only delete messages from the last 14 days (Discord limitation).",
+          ].join("\n"),
+        },
+        {
+          name: "Custom Embeds",
+          value: [
+            "- Use `/embed` to send announcements, rules, or formatted messages.",
+            "- Supports title, description, footer, author, images, and timestamps.",
+            "- 8 preset colors available (Blurple, Green, Red, Yellow, etc.).",
+            "- Description supports full Discord markdown formatting.",
+          ].join("\n"),
+        },
+      ],
+    },
+    tickets: {
+      label: "Tickets & Feedback",
+      description: "Bug reports, feature requests, and feedback system.",
+      emoji: "🎫",
+      commands: [
+        {
+          name: "ticket create",
+          description: "Create a new ticket: bug report, feature request, feedback, question, or other.",
+          usage: "/ticket create type:<bug|feature|feedback|question|other>",
+        },
+        {
+          name: "ticket list",
+          description: "View all your submitted tickets in this server.",
+          usage: "/ticket list",
+        },
+        {
+          name: "ticket view",
+          description: "View details of a specific ticket. Autocomplete shows your tickets.",
+          usage: "/ticket view id:<ticket-id>",
+        },
+        {
+          name: "ticket admin setup",
+          description: "Configure the ticket system: set notification channel and optional ping role.",
+          usage: "/ticket admin setup channel:<channel> [role:<role>]",
+        },
+        {
+          name: "ticket admin disable",
+          description: "Disable the ticket system for this server.",
+          usage: "/ticket admin disable",
+        },
+        {
+          name: "ticket admin pending",
+          description: "View all tickets for this server. Filter by status.",
+          usage: "/ticket admin pending [status:<open|in-progress|closed|all>]",
+        },
+        {
+          name: "ticket admin respond",
+          description: "Send a response to a ticket. User will be notified via DM.",
+          usage: "/ticket admin respond id:<ticket-id>",
+        },
+        {
+          name: "ticket admin close",
+          description: "Close a ticket with an optional reason.",
+          usage: "/ticket admin close id:<ticket-id> [reason:<text>]",
+        },
+      ],
+      notes: [
+        {
+          name: "For Users",
+          value: [
+            "- Use `/ticket create` to report bugs, request features, or provide feedback.",
+            "- You'll receive DM notifications when staff responds to or closes your ticket.",
+            "- Track your tickets with `/ticket list` and `/ticket view`.",
+            "- Each ticket gets a unique 6-character ID for easy reference.",
+          ].join("\n"),
+        },
+        {
+          name: "For Admins",
+          value: [
+            "- Set up with `/ticket admin setup` to receive notifications in a channel.",
+            "- Optionally set a role to ping when new tickets arrive.",
+            "- Use quick-action buttons on notifications: Mark In Progress, Respond, Close.",
+            "- Admin commands require **Manage Server** permission.",
+          ].join("\n"),
+        },
+        {
+          name: "Ticket Types",
+          value: [
+            "🐛 **Bug Report** - Something isn't working correctly",
+            "💡 **Feature Request** - Suggest new functionality",
+            "💬 **General Feedback** - Share thoughts and experiences",
+            "❓ **Question** - Ask about bot features or usage",
+            "📝 **Other** - Anything else",
           ].join("\n"),
         },
       ],

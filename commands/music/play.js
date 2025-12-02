@@ -9,6 +9,7 @@ const { lavalinkPlay, lavalinkResolveTracks } = require("../../helpers/lavalink/
 const { getPoru } = require("../../helpers/lavalink/players");
 const Log = require("../../helpers/logs/log");
 const statsStore = require("../../helpers/stats/store");
+const userPrefs = require("../../helpers/users/preferences");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -65,14 +66,16 @@ module.exports = {
       const selectedSource = interaction.options.getString("source");
 
       // Determine which source to use for autocomplete
+      // Priority: explicit selection > user preference > server default
       let searchSource;
       if (selectedSource && selectedSource !== "auto") {
         // User explicitly chose a source - use it
         searchSource = selectedSource;
       } else {
-        // No explicit choice - use server default
+        // Check user preference first, then fall back to server default
+        const userSource = userPrefs.getUserDefaultSource(interaction.user.id);
         const guildSettings = getGuildState(interaction.guildId);
-        searchSource = guildSettings?.defaultSource || "deezer";
+        searchSource = userSource || guildSettings?.defaultSource || "deezer";
       }
 
       // Use direct Lavalink API to search based on determined source
@@ -243,13 +246,15 @@ module.exports = {
     const prepend = interaction.options.getBoolean("prepend") ?? false;
 
     // Get source preference
+    // Priority: explicit selection > user preference > server default
     const selectedSource = interaction.options.getString("source");
     let source;
     if (selectedSource && selectedSource !== "auto") {
       source = selectedSource;
     } else {
+      const userSource = userPrefs.getUserDefaultSource(interaction.user.id);
       const guildSettings = getGuildState(interaction.guildId);
-      source = guildSettings?.defaultSource || "deezer";
+      source = userSource || guildSettings?.defaultSource || "deezer";
     }
 
     const requester = {
