@@ -1,7 +1,9 @@
 const { getGuildState } = require("../guildState");
 const Log = require("../logs/log");
 const { scoreCandidates, getTimeOfDayFactor } = require("./candidateScoring");
+const { getLastFmSimilarTracks } = require("./lastfmClient");
 const { getPoru } = require("./players");
+const { rankSearchResults } = require("./searchRanking");
 const { buildSessionProfile, genreCache } = require("./sessionProfile");
 const { getSkipPatterns } = require("./skipLearning");
 const {
@@ -10,8 +12,62 @@ const {
 } = require("./spotifyRecommendations");
 const { filterValidSongs } = require("./trackValidation");
 
-// Minimum candidates needed before falling back to next source
-const MIN_CANDIDATES_THRESHOLD = 5;
+function getLavalinkNode() {
+  return getPoru()?.leastUsedNodes?.[0] || null;
+}
+
+function getLavalinkBaseUrl() {
+  const node = getLavalinkNode();
+  const host = node?.options?.host || process.env.LAVALINK_HOST || "127.0.0.1";
+  const port = node?.options?.port || Number(process.env.LAVALINK_PORT || 2333);
+  const protocol = node?.options?.secure ? "https" : "http";
+  return `${protocol}://${host}:${port}`;
+}
+
+async function loadLavalinkTracks(query) {
+  const node = getLavalinkNode();
+  const response = await fetch(`${getLavalinkBaseUrl()}/v4/loadtracks?identifier=${encodeURIComponent(query)}`, {
+    headers: { Authorization: node?.options?.password || process.env.LAVALINK_PASSWORD || "youshallnotpass" },
+  });
+
+  if (!response.ok) throw new Error(`Lavalink search failed with status ${response.status}`);
+
+  const data = await response.json();
+  if (data?.loadType === "playlist") return data.data?.tracks || [];
+  if (data?.loadType === "search" || data?.loadType === "track") return data.data || [];
+  return [];
+}
+
+function candidateKey(candidate) {
+  const identifier = candidate?.identifier || candidate?.track?.info?.identifier;
+  if (identifier) return `id:${identifier}`;
+
+  const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return `text:${normalize(candidate?.artist)}:${normalize(candidate?.title)}`;
+}
+
+function mergeCandidates(candidates) {
+  const merged = new Map();
+
+  for (const candidate of candidates) {
+    if (!candidate?.title || !candidate?.artist) continue;
+
+    const key = candidateKey(candidate);
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, { ...candidate, genres: [...(candidate.genres || [])] });
+      continue;
+    }
+
+    existing.genres = [...new Set([...(existing.genres || []), ...(candidate.genres || [])])];
+    existing.features ||= candidate.features;
+    existing.popularity = Math.max(existing.popularity || 0, candidate.popularity || 0);
+    existing.releaseYear ||= candidate.releaseYear;
+    existing.track ||= candidate.track;
+  }
+
+  return [...merged.values()];
+}
 
 /**
  * Cleans up title for better search results
@@ -58,22 +114,10 @@ async function fetchDeezerCandidates(guildId, cleanTitle, searchArtist) {
     const deezerSearchQuery = `dzsearch:${searchArtist} ${cleanTitle}`;
     Log.info("🎵 Searching Deezer", "", `guild=${guildId}`, `query=${deezerSearchQuery}`);
 
-    const encodedQuery = encodeURIComponent(deezerSearchQuery);
-    const lavalinkUrl = `http://localhost:2333/v4/loadtracks?identifier=${encodedQuery}`;
-    const response = await fetch(lavalinkUrl, {
-      headers: {
-        Authorization: process.env.LAVALINK_PASSWORD || "youshallnotpass",
-      },
-    });
-    const deezerSearch = await response.json();
+    const deezerSearchTracks = await loadLavalinkTracks(deezerSearchQuery);
 
-    // Convert Lavalink v4 response to Poru format
-    if (deezerSearch.loadType === "search" || deezerSearch.loadType === "track") {
-      deezerSearch.tracks = deezerSearch.data || [];
-    }
-
-    if (deezerSearch?.tracks?.length > 0) {
-      const deezerTrack = deezerSearch.tracks[0];
+    if (deezerSearchTracks.length > 0) {
+      const deezerTrack = deezerSearchTracks[0];
       let deezerTrackId = deezerTrack.info?.identifier;
 
       // Check if we got a Deezer track or YouTube fallback
@@ -92,24 +136,10 @@ async function fetchDeezerCandidates(guildId, cleanTitle, searchArtist) {
       if (deezerTrackId && /^\d+$/.test(deezerTrackId)) {
         // Get recommendations from Deezer using dzrec: prefix
         const deezerRecQuery = `dzrec:${deezerTrackId}`;
-        const encodedRecQuery = encodeURIComponent(deezerRecQuery);
-        const lavalinkRecUrl = `http://localhost:2333/v4/loadtracks?identifier=${encodedRecQuery}`;
-        const recResponse = await fetch(lavalinkRecUrl, {
-          headers: {
-            Authorization: process.env.LAVALINK_PASSWORD || "youshallnotpass",
-          },
-        });
-        const deezerRecs = await recResponse.json();
+        const deezerRecTracks = await loadLavalinkTracks(deezerRecQuery);
 
-        // Convert Lavalink v4 response to Poru format
-        if (deezerRecs.loadType === "search" || deezerRecs.loadType === "track") {
-          deezerRecs.tracks = deezerRecs.data || [];
-        } else if (deezerRecs.loadType === "playlist") {
-          deezerRecs.tracks = deezerRecs.data?.tracks || [];
-        }
-
-        if (deezerRecs?.tracks?.length > 0) {
-          const validTracks = filterValidSongs(deezerRecs.tracks).slice(0, 25);
+        if (deezerRecTracks.length > 0) {
+          const validTracks = filterValidSongs(deezerRecTracks).slice(0, 25);
 
           for (const track of validTracks) {
             candidates.push({
@@ -164,22 +194,10 @@ async function fetchSpotifyCandidates(referenceTrack, guildId, profile) {
         try {
           // Use Spotify search via Lavalink (spsearch:)
           const spotifyQuery = `spsearch:${rec.artist} ${rec.title}`;
-          const encodedQuery = encodeURIComponent(spotifyQuery);
-          const lavalinkUrl = `http://localhost:2333/v4/loadtracks?identifier=${encodedQuery}`;
-          const response = await fetch(lavalinkUrl, {
-            headers: {
-              Authorization: process.env.LAVALINK_PASSWORD || "youshallnotpass",
-            },
-          });
-          const searchResult = await response.json();
+          const searchTracks = await loadLavalinkTracks(spotifyQuery);
 
-          // Convert Lavalink v4 response
-          if (searchResult.loadType === "search" || searchResult.loadType === "track") {
-            searchResult.tracks = searchResult.data || [];
-          }
-
-          if (searchResult?.tracks?.length > 0) {
-            const track = searchResult.tracks[0];
+          if (searchTracks.length > 0) {
+            const track = rankSearchResults(searchTracks, `${rec.artist} ${rec.title}`)[0];
             candidates.push({
               artist: rec.artist,
               title: rec.title,
@@ -209,6 +227,51 @@ async function fetchSpotifyCandidates(referenceTrack, guildId, profile) {
     }
   } catch (err) {
     Log.warning("❌ Failed to get Spotify recommendations", err.message, `guild=${guildId}`);
+  }
+
+  return candidates;
+}
+
+async function fetchLastFmCandidates(referenceTrack, guildId) {
+  const candidates = [];
+
+  try {
+    const similarTracks = await getLastFmSimilarTracks({
+      artist: referenceTrack.info?.author,
+      title: referenceTrack.info?.title,
+      limit: 12,
+    });
+
+    const resolved = await Promise.all(
+      similarTracks.map(async (similar) => {
+        try {
+          const tracks = await loadLavalinkTracks(`ytsearch:${similar.artist} ${similar.title}`);
+          const track = rankSearchResults(tracks, `${similar.artist} ${similar.title}`)[0];
+          if (!track) return null;
+
+          return {
+            artist: similar.artist,
+            title: similar.title,
+            identifier: track.info?.identifier,
+            duration: track.info?.length,
+            source: "lastfm_similar",
+            track,
+            genres: [],
+            popularity: similar.match * 100,
+            releaseYear: null,
+            features: null,
+            score: 0,
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    candidates.push(...resolved.filter(Boolean));
+    Log.info("Last.fm similar candidates collected", "", `guild=${guildId}`, `count=${candidates.length}`);
+  } catch (error) {
+    Log.debug("Last.fm autoplay candidates failed", error.message);
   }
 
   return candidates;
@@ -301,6 +364,37 @@ async function fetchYouTubeSearchCandidates(cleanTitle, searchArtist, guildId) {
   return candidates;
 }
 
+async function fetchSoundCloudCandidates(searchArtist, guildId) {
+  const candidates = [];
+
+  try {
+    const tracks = await loadLavalinkTracks(`scsearch:${searchArtist}`);
+    const validTracks = filterValidSongs(tracks).slice(0, 15);
+
+    validTracks.forEach((track) => {
+      candidates.push({
+        artist: track.info?.author,
+        title: track.info?.title,
+        identifier: track.info?.identifier,
+        duration: track.info?.length,
+        source: "soundcloud_search",
+        track,
+        genres: [],
+        popularity: 0,
+        releaseYear: null,
+        features: null,
+        score: 0,
+      });
+    });
+
+    Log.info("✅ SoundCloud candidates collected", "", `guild=${guildId}`, `count=${validTracks.length}`);
+  } catch (err) {
+    Log.warning("❌ Failed SoundCloud search", err.message, `guild=${guildId}`);
+  }
+
+  return candidates;
+}
+
 /**
  * Fetches top artist search candidates as absolute last resort
  * @param {Object} profile - Session profile
@@ -345,9 +439,9 @@ async function fetchTopArtistCandidates(profile, guildId) {
 }
 
 /**
- * Collects candidate tracks from multiple sources with prioritization
- * Priority order: Deezer → Spotify → YouTube Mix → YouTube Search → Top Artist
- * Only falls back to next source if current source provides insufficient candidates
+ * Collects candidate tracks from every available free source in parallel.
+ * The final scorer decides between candidates using vibe, continuity,
+ * popularity, diversity and skip history instead of hard-prioritizing a provider.
  *
  * @param {Object} referenceTrack - Reference track to base candidates on
  * @param {string} guildId - Guild identifier
@@ -358,92 +452,50 @@ async function collectCandidates(referenceTrack, guildId, profile) {
   const { title, author, identifier } = referenceTrack.info;
   const { cleanTitle, searchArtist } = cleanTrackInfo(title, author);
 
-  let allCandidates = [];
+  const [deezerResult, spotifyResult, lastFmResult, youtubeMixResult, youtubeSearchResult, soundCloudResult] = await Promise.allSettled([
+    fetchDeezerCandidates(guildId, cleanTitle, searchArtist),
+    fetchSpotifyCandidates(referenceTrack, guildId, profile),
+    fetchLastFmCandidates(referenceTrack, guildId),
+    fetchYouTubeMixCandidates(identifier, guildId),
+    fetchYouTubeSearchCandidates(cleanTitle, searchArtist, guildId),
+    fetchSoundCloudCandidates(searchArtist, guildId),
+  ]);
 
-  // Priority 1: Deezer recommendations (best quality, platform-native)
-  const deezerCandidates = await fetchDeezerCandidates(guildId, cleanTitle, searchArtist);
-  allCandidates.push(...deezerCandidates);
+  const allCandidates = [
+    deezerResult,
+    spotifyResult,
+    lastFmResult,
+    youtubeMixResult,
+    youtubeSearchResult,
+    soundCloudResult,
+  ].flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+  const deduplicatedCandidates = mergeCandidates(allCandidates);
 
   Log.info(
-    "📊 After Deezer",
+    "📊 Candidate collection complete",
     "",
     `guild=${guildId}`,
-    `deezerCount=${deezerCandidates.length}`,
-    `total=${allCandidates.length}`
+    `raw=${allCandidates.length}`,
+    `unique=${deduplicatedCandidates.length}`,
+    `sources=${[...new Set(allCandidates.map((candidate) => candidate.source))].join(",") || "none"}`
   );
 
-  // Priority 2: Spotify recommendations (has rich metadata like genres, popularity)
-  // Always fetch Spotify for metadata even if Deezer has enough candidates
-  const spotifyCandidates = await fetchSpotifyCandidates(referenceTrack, guildId, profile);
-  allCandidates.push(...spotifyCandidates);
-
-  Log.info(
-    "📊 After Spotify",
-    "",
-    `guild=${guildId}`,
-    `spotifyCount=${spotifyCandidates.length}`,
-    `total=${allCandidates.length}`
-  );
-
-  // Priority 3: YouTube Mix (only if we don't have enough candidates yet)
-  if (allCandidates.length < MIN_CANDIDATES_THRESHOLD) {
-    const youtubeMixCandidates = await fetchYouTubeMixCandidates(identifier, guildId);
-    allCandidates.push(...youtubeMixCandidates);
-
-    Log.info(
-      "📊 After YouTube Mix",
-      "",
-      `guild=${guildId}`,
-      `mixCount=${youtubeMixCandidates.length}`,
-      `total=${allCandidates.length}`
-    );
-  }
-
-  // Priority 4: YouTube search (only if still not enough)
-  if (allCandidates.length < MIN_CANDIDATES_THRESHOLD) {
-    const youtubeSearchCandidates = await fetchYouTubeSearchCandidates(cleanTitle, searchArtist, guildId);
-    allCandidates.push(...youtubeSearchCandidates);
-
-    Log.info(
-      "📊 After YouTube Search",
-      "",
-      `guild=${guildId}`,
-      `searchCount=${youtubeSearchCandidates.length}`,
-      `total=${allCandidates.length}`
-    );
-  }
-
-  // Priority 5: Top artist search (absolute last resort)
-  if (allCandidates.length === 0 && profile.topArtists.length > 0) {
+  // Top artist search remains a last-resort escape hatch if every provider
+  // failed, but normal autoplay now compares all free providers together.
+  if (deduplicatedCandidates.length === 0 && profile.topArtists.length > 0) {
     const topArtistCandidates = await fetchTopArtistCandidates(profile, guildId);
-    allCandidates.push(...topArtistCandidates);
+    deduplicatedCandidates.push(...topArtistCandidates);
 
     Log.info(
       "📊 After Top Artist",
       "",
       `guild=${guildId}`,
       `topArtistCount=${topArtistCandidates.length}`,
-      `total=${allCandidates.length}`
+      `total=${deduplicatedCandidates.length}`
     );
   }
 
-  // Log source distribution
-  const sourceBreakdown = {};
-  allCandidates.forEach((c) => {
-    sourceBreakdown[c.source] = (sourceBreakdown[c.source] || 0) + 1;
-  });
-
-  Log.info(
-    "📊 Candidate collection complete",
-    "",
-    `guild=${guildId}`,
-    `total=${allCandidates.length}`,
-    `breakdown=${Object.entries(sourceBreakdown)
-      .map(([k, v]) => `${k}:${v}`)
-      .join(", ")}`
-  );
-
-  return allCandidates;
+  return deduplicatedCandidates;
 }
 
 /**
@@ -475,7 +527,7 @@ async function resolveToPlayable(candidate, guildId) {
     const validTracks = filterValidSongs(searchRes.tracks || []);
 
     if (validTracks.length > 0) {
-      const track = validTracks[0];
+      const track = rankSearchResults(validTracks, searchQuery)[0];
 
       track.userData = track.userData || {};
       if (candidate.genres && candidate.genres.length > 0) {
@@ -520,6 +572,31 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
   if (!guildSettings?.autoplay) return null;
 
   Log.info("Starting smart autoplay", "", `guild=${guildId}`, `reference=${referenceTrack.info.title}`);
+
+  // Spotify metadata is optional, but when available it gives the first
+  // session transition real audio features instead of making the first choice
+  // genre-blind. The metadata helper is cached and never blocks playback if
+  // credentials or the API are unavailable.
+  const referenceMetadata = {
+    artist: referenceTrack.info.author,
+    title: referenceTrack.info.title,
+    genres: referenceTrack.userData?.genres || [],
+    features: referenceTrack.userData?.features || null,
+  };
+  await enrichCandidatesWithSpotifyMetadata([referenceMetadata], 1);
+  if (referenceMetadata.genres?.length || referenceMetadata.features) {
+    referenceTrack.userData = {
+      ...(referenceTrack.userData || {}),
+      genres: referenceMetadata.genres,
+      features: referenceMetadata.features,
+      releaseYear: referenceMetadata.releaseYear,
+    };
+    genreCache.set(referenceTrack.info.identifier, {
+      genres: referenceMetadata.genres,
+      features: referenceMetadata.features,
+      releaseYear: referenceMetadata.releaseYear,
+    });
+  }
 
   const profile = buildSessionProfile(guildId, referenceTrack);
   profile.guildId = guildId;
@@ -572,23 +649,21 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
     `#3=${rankedCandidates[2]?.artist} - ${rankedCandidates[2]?.title} (${rankedCandidates[2]?.score})`
   );
 
-  for (let i = 0; i < Math.min(5, rankedCandidates.length); i++) {
-    const candidate = rankedCandidates[i];
+  for (const candidate of rankedCandidates) {
 
     if (candidate.hardRejected) {
       Log.debug(
-        "Skipping candidate with incompatible vibe",
+        "Skipping hard-rejected autoplay candidate",
         "",
         `guild=${guildId}`,
         `track=${candidate.artist} - ${candidate.title}`,
-        `reason=${candidate.rejectionReason || "genre drift"}`
+        `reason=${candidate.rejectionReason || "incompatible vibe"}`
       );
       continue;
     }
 
     if (candidate.score < 10) {
-      Log.warning("Top candidate score too low, giving up", "", `guild=${guildId}`, `score=${candidate.score}`);
-      break;
+      continue;
     }
 
     const playableTrack = await resolveToPlayable(candidate, guildId);

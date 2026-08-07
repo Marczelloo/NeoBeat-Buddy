@@ -5,6 +5,7 @@ module.exports = {
   ...require("./filters"),
   ...require("./position"),
   ...require("./volume"),
+  ...require("./loudness"),
   ...require("./fallbacks"),
   ...require("./state"),
   ...require("./timers"),

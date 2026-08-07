@@ -1,6 +1,7 @@
 const Log = require("../logs/log");
 const { areGenreFamiliesCompatible, findGenreOverlap, getGenreFamilies } = require("./genreUtils");
 const { sessionStartTime } = require("./sessionProfile");
+const { hasTrackIdentity } = require("./trackIdentity");
 
 /**
  * Gets time-of-day factor for energy preferences
@@ -109,26 +110,33 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       }
     }
 
-    // Factor 3: Source quality - prioritize Deezer and Spotify over YouTube
+    // Factor 3: Source quality is only a small tie-breaker. The source must
+    // never overpower a strong vibe, genre, or transition match.
     if (candidate.source === "deezer_recommendations") {
-      score += 40;
-      scoringDetails.push("source:+40(deezer)");
+      score += 8;
+      scoringDetails.push("source:+8(deezer)");
     } else if (candidate.source === "spotify_recommendations") {
-      score += 35;
-      scoringDetails.push("source:+35(spotify)");
+      score += 6;
+      scoringDetails.push("source:+6(spotify)");
     } else if (candidate.source === "spotify") {
       // Legacy support
-      score += 35;
-      scoringDetails.push("source:+35(spotify)");
+      score += 6;
+      scoringDetails.push("source:+6(spotify)");
     } else if (candidate.source === "youtube_mix") {
-      score += 15;
-      scoringDetails.push("source:+15(yt-mix)");
+      score += 3;
+      scoringDetails.push("source:+3(yt-mix)");
     } else if (candidate.source === "youtube_search") {
-      score += 10;
-      scoringDetails.push("source:+10(yt-search)");
+      score += 2;
+      scoringDetails.push("source:+2(yt-search)");
     } else if (candidate.source === "top_artist_search") {
-      score += 8;
-      scoringDetails.push("source:+8(top-artist)");
+      score += 1;
+      scoringDetails.push("source:+1(top-artist)");
+    } else if (candidate.source === "lastfm_similar") {
+      score += 4;
+      scoringDetails.push("source:+4(lastfm)");
+    } else if (candidate.source === "soundcloud_search") {
+      score += 2;
+      scoringDetails.push("source:+2(soundcloud)");
     }
 
     // Factor 4: Genre matching
@@ -427,53 +435,22 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     const isDuplicateById = candidate.identifier && profile.recentIdentifiers.includes(candidate.identifier);
     if (isDuplicateById) {
       score -= 1000;
+      candidate.hardRejected = true;
+      candidate.rejectionReason = "recent-duplicate";
       scoringDetails.push("duplicate:-1000(id)");
     }
 
-    // Additional title-based duplicate check for stronger prevention
-    if (!isDuplicateById && candidate.title && candidate.artist) {
-      // Normalize function: remove common YouTube suffixes, special chars, extra spaces
-      const normalize = (str) => {
-        return str
-          .toLowerCase()
-          .replace(/\(official\s*(video|audio|music\s*video|mv|lyric video)?\)/gi, "")
-          .replace(/\[official\s*(video|audio|music\s*video|mv|lyric video)?\]/gi, "")
-          .replace(/\s*-?\s*(official|lyric|lyrics|video|audio|hq|hd|4k|8k|visualizer|music video|mv)\s*$/gi, "")
-          .replace(/\s*\(feat\..*?\)/gi, "") // Remove featuring artists
-          .replace(/\s*\[feat\..*?\]/gi, "")
-          .replace(/[^\w\s]/g, "") // Remove special characters
-          .replace(/\s+/g, " ") // Normalize whitespace
-          .trim();
-      };
+    // Provider identifiers differ for the same recording. Compare a normalized
+    // artist/title identity as well, including tracks reserved by an in-flight
+    // or already queued autoplay recommendation.
+    const recentTracks = [...(profile.recentTracks || []), ...(profile.recentAutoplayTracks || [])];
+    const isDuplicateByTitle = !isDuplicateById && hasTrackIdentity(recentTracks, candidate, { includeIdentifier: false });
 
-      const normalizedTitle = normalize(candidate.title);
-      const normalizedArtist = normalize(candidate.artist);
-
-      const isDuplicateByTitle = profile.recentTracks?.some((recentTrack) => {
-        const recentTitle = normalize(recentTrack?.info?.title || "");
-        const recentArtist = normalize(recentTrack?.info?.author || "");
-
-        // Check if normalized titles match (fuzzy matching)
-        const titleMatch = recentTitle === normalizedTitle;
-
-        // Also check if one title contains the other (catches partial matches)
-        const titleContains =
-          (recentTitle.length > 5 && normalizedTitle.includes(recentTitle)) ||
-          (normalizedTitle.length > 5 && recentTitle.includes(normalizedTitle));
-
-        // Artist match (exact or partial)
-        const artistMatch = recentArtist === normalizedArtist;
-        const artistContains =
-          (recentArtist.length > 3 && normalizedArtist.includes(recentArtist)) ||
-          (normalizedArtist.length > 3 && recentArtist.includes(normalizedArtist));
-
-        return (titleMatch || titleContains) && (artistMatch || artistContains);
-      });
-
-      if (isDuplicateByTitle) {
+    if (isDuplicateByTitle) {
         score -= 1000;
+        candidate.hardRejected = true;
+        candidate.rejectionReason = "recent-duplicate";
         scoringDetails.push("duplicate:-1000(title)");
-      }
     }
 
     candidate.score = Math.max(0, score);

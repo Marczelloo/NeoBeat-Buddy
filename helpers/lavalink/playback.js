@@ -1,3 +1,4 @@
+const { restoreVoiceChannelStatus } = require("../discord/voiceChannelStatus");
 const djProposals = require("../dj/proposals");
 const skipVotes = require("../dj/skipVotes");
 const { deletePanelState } = require("../equalizer/panel");
@@ -6,16 +7,18 @@ const Log = require("../logs/log");
 const statsStore = require("../stats/store");
 const { getEqualizerState } = require("./equalizerStore");
 const { toLavalinkFilters } = require("./filters");
-const { getPlayer, getPoru } = require("./players");
-const { addManualTracksToQueue } = require("./queueOrdering");
-const { rankSearchResults } = require("./searchRanking");
-const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
+const { applyNormalizedVolume } = require("./loudness");
 const {
   getInterpolatedPosition,
   pauseLyricsSession,
   resumeLyricsSession,
   stopLyricsSession,
 } = require("./lyricsFormatter");
+const { getPlayer, getPoru } = require("./players");
+const { addManualTracksToQueue } = require("./queueOrdering");
+const { rankSearchResults } = require("./searchRanking");
+const { getFallbackSources, getSearchPrefix } = require("./searchSources");
+const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
 const {
   clearInactivityTimer,
   clearProgressInterval,
@@ -41,8 +44,8 @@ async function ensurePlayer(guildId, voiceId, textId) {
   const defaultVolume = Number(process.env.DEFAULT_VOLUME ?? 50);
   const target = Number.isFinite(defaultVolume) ? Math.max(0, Math.min(defaultVolume, 1000)) : 50;
 
-  await player.setVolume(target);
-  player.volume = target;
+  player.userVolume = target;
+  await applyNormalizedVolume(player);
 
   const savedEq = getEqualizerState(guildId);
 
@@ -68,7 +71,7 @@ async function lavalinkResolveTracks(query, source = "deezer") {
   // For URLs (Spotify/YouTube links), let Lavalink handle via providers chain
   // For search queries, use the specified source
   let res = null;
-  const hasSourcePrefix = q.match(/^(dzsearch:|ytsearch:|spsearch:|ytmsearch:)/i);
+  const hasSourcePrefix = q.match(/^(dzsearch:|ytsearch:|spsearch:|scsearch:|ytmsearch:)/i);
 
   if (!isUrl && !hasSourcePrefix) {
     // Remove any existing search prefix
@@ -79,8 +82,16 @@ async function lavalinkResolveTracks(query, source = "deezer") {
 
     // Try specified source first
     try {
-      const sourcePrefix = source === "youtube" ? "ytsearch" : source === "spotify" ? "spsearch" : "dzsearch";
-      const sourceName = source === "youtube" ? "YouTube" : source === "spotify" ? "Spotify" : "Deezer";
+      const primarySource = source === "auto" ? "deezer" : source;
+      const sourcePrefix = getSearchPrefix(primarySource);
+      const sourceName =
+        primarySource === "youtube"
+          ? "YouTube"
+          : primarySource === "spotify"
+            ? "Spotify"
+            : primarySource === "soundcloud"
+              ? "SoundCloud"
+              : "Deezer";
 
       Log.info(`🔍 ${sourceName} search`, `query=${searchQuery}`);
       const node = poru.leastUsedNodes[0];
@@ -112,29 +123,35 @@ async function lavalinkResolveTracks(query, source = "deezer") {
             `query=${searchQuery}`
           );
 
-          // Fallback to YouTube if primary source failed
-          if (source !== "youtube") {
-            const ytUrl = `http://${node.options.host}:${
+          for (const fallbackSource of getFallbackSources(source).filter((candidate) => candidate !== primarySource)) {
+            const fallbackPrefix = getSearchPrefix(fallbackSource);
+            const fallbackUrl = `http://${node.options.host}:${
               node.options.port
-            }/v4/loadtracks?identifier=${encodeURIComponent(`ytsearch:${searchQuery}`)}`;
-            const ytResponse = await fetch(ytUrl, {
+            }/v4/loadtracks?identifier=${encodeURIComponent(`${fallbackPrefix}:${searchQuery}`)}`;
+            const fallbackResponse = await fetch(fallbackUrl, {
               headers: { Authorization: node.options.password },
             });
-            const ytData = await ytResponse.json();
+            const fallbackData = await fallbackResponse.json();
 
-            if (ytData?.loadType === "search" && Array.isArray(ytData?.data) && ytData.data.length > 0) {
-              Log.info("✅ YouTube fallback found tracks", `count=${ytData.data.length}`, `query=${searchQuery}`);
+            if (fallbackData?.loadType === "search" && Array.isArray(fallbackData?.data) && fallbackData.data.length > 0) {
+              Log.info(
+                "✅ Alternate source found tracks",
+                `source=${fallbackSource}`,
+                `count=${fallbackData.data.length}`,
+                `query=${searchQuery}`
+              );
               res = {
-                loadType: ytData.loadType,
-                tracks: ytData.data,
-                playlistInfo: ytData.playlistInfo,
+                loadType: fallbackData.loadType,
+                tracks: fallbackData.data,
+                playlistInfo: fallbackData.playlistInfo,
               };
+              break;
             }
           }
         }
       }
     } catch (err) {
-      Log.warn(`${source} search failed, falling back to YouTube`, err, `query=${searchQuery}`);
+      Log.warn(`${source} search failed, trying alternate sources`, err, `query=${searchQuery}`);
     }
   }
 
@@ -289,6 +306,7 @@ async function lavalinkStop(guildId) {
   Log.info("⏹️ Player stopped", `currentTrack=${currentTrack}`, `clearedQueue=${queueSize}`, `guild=${guildId}`);
 
   player.queue.clear();
+  await restoreVoiceChannelStatus(player.poru?.client, player.voiceChannel).catch(() => null);
   await player.destroy();
   clearInactivityTimer(guildId, "stopCommand");
   clearProgressInterval(guildId);

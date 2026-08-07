@@ -9,8 +9,8 @@
         {
           name: "play",
           description:
-            "Queue a track from a URL or search query with autocomplete suggestions. Choose search source (Auto/Deezer/YouTube/Spotify). In DJ mode, non-DJs submit suggestions for approval.",
-          usage: "/play query:<song or url> [source:<Auto|Deezer|YouTube|Spotify>] [prepend:true]",
+            "Queue a track from a URL or search query with autocomplete suggestions. Choose search source (Auto/Deezer/YouTube/Spotify/SoundCloud). In DJ mode, non-DJs submit suggestions for approval.",
+          usage: "/play query:<song or url> [source:<Auto|Deezer|YouTube|Spotify|SoundCloud>] [prepend:true]",
         },
         {
           name: "pause",
@@ -80,14 +80,14 @@
         {
           name: "Music Source Selection",
           value: [
-            "- Choose your preferred music source in `/play` command: Auto, Deezer, YouTube, or Spotify.",
+            "- Choose your preferred music source in `/play` command: Auto, Deezer, YouTube, Spotify, or SoundCloud.",
             "- **Auto Mode** (default): Combines Deezer and YouTube results for maximum variety and quality.",
             "- **Deezer**: FLAC lossless quality audio - best for high-fidelity listening.",
             "- **YouTube**: Largest music catalog with remixes, covers, and rare tracks.",
             "- **Spotify**: Curated playlists and albums (requires Spotify link or exact name).",
             "- Set server-wide default with `/setup source default` - users can still override per-query.",
             "- **Position-independent**: Select source before or after typing your query - autocomplete adapts automatically.",
-            "- **Smart fallback**: If primary source fails, bot automatically tries YouTube as backup.",
+            "- **Smart fallback**: If primary source fails, bot tries SoundCloud, YouTube, Deezer, and Spotify in order.",
           ].join("\n"),
         },
       ],
@@ -454,7 +454,7 @@
           description:
             "Configure default music search source: server-wide default, personal preference, or view settings.",
           usage:
-            "/setup source server source:<deezer|youtube|spotify>\n/setup source me source:<server|deezer|youtube|spotify>\n/setup source status",
+            "/setup source server source:<deezer|youtube|spotify|soundcloud>\n/setup source me source:<server|deezer|youtube|spotify|soundcloud>\n/setup source status",
         },
         {
           name: "logs setup",
@@ -525,7 +525,7 @@
         {
           name: "Music Source Configuration",
           value: [
-            "- `/setup source server` sets the server-wide default search source (Deezer, YouTube, or Spotify).",
+            "- `/setup source server` sets the server-wide default search source (Deezer, YouTube, Spotify, or SoundCloud).",
             "- `/setup source me` sets your personal default source that overrides server default.",
             "- Use 'Use Server Default' option to clear your personal preference.",
             "- **Priority**: Per-query selection > Personal preference > Server default.",

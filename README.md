@@ -58,9 +58,9 @@ A neon cyberpunk Discord music bot powered by Lavalink and Poru, with DJ mode, a
 ## Features
 
 - **Slash-only interface** for queueing, playback, and moderation safeguards.
-- **Music source selection** — choose your preferred search source (Deezer, YouTube, or Spotify) per-server or per-query with position-independent autocomplete.
+- **Music source selection** — choose your preferred search source (Deezer, YouTube, Spotify, or SoundCloud) per-server or per-query with position-independent autocomplete.
 - **Deezer FLAC quality playback** — high-fidelity lossless audio as default source with automatic quality display.
-- **Live autocomplete search** — get instant song suggestions as you type in `/play` command with source-aware results and Auto mode combining multiple sources.
+- **Live autocomplete search** — get instant song suggestions as you type in `/play` command with Auto mode combining Deezer, YouTube, Spotify, and SoundCloud.
 - **Search history tracking** — automatic history of all your searches with replay, search, export to playlist, and clear functions.
 - **Session queue export** — save entire listening sessions (history + queue) as playlists for easy replay.
 - **Music Wrapped & Insights** — personal and server-wide listening statistics with top tracks, artists, listening patterns, streaks, and achievements.
@@ -74,7 +74,8 @@ A neon cyberpunk Discord music bot powered by Lavalink and Poru, with DJ mode, a
 - **Lyrics lookup** for the current track with `/lyrics` — live synced lyrics from Deezer with real-time updates and highlighted current line, fallback to LRC Library and Genius API.
 - **Interactive queue management** with pagination, track removal by position or keyword, and shuffle.
 - **Persistent state** — now playing messages, EQ configurations, DJ settings, guild stats, and autoplay preferences survive restarts.
-- **Enhanced stability** — automatic voice region reconnection when Discord changes servers, improved duplicate prevention (tracks last 100 songs), and fixed fallback source playback.
+- **Enhanced stability** — automatic voice region reconnection when Discord changes servers, provider-aware volume compensation, improved duplicate prevention, and SoundCloud-aware fallback playback.
+- **MewBit presence rotation** — a large rotating pool of anime, catgirl, cyberpunk, game, movie, meme, cringe, and developer-themed descriptions, plus safe personalized variants based on cached server nicknames.
 - **Version announcements** — automatic patch notes delivered to servers when new versions are released, with `/changelog` to view any version and `/setup announcements` to configure channel and toggle notifications.
 - **Age-restricted content handling** with automatic fallback to alternate sources.
 - **Track history** with `/previous` command to replay or rewind.
@@ -987,6 +988,9 @@ docker load -i neo-bot.tar
 | `SPOTIFY_CLIENT_ID`           | -        | Spotify client ID (optional, for metadata enrichment) |
 | `SPOTIFY_CLIENT_SECRET`       | -        | Spotify client secret                                 |
 | `DEFAULT_VOLUME`              | `50`     | Default playback volume (0-100)                       |
+| `LOUDNESS_NORMALIZATION`      | `true`   | Apply conservative provider volume compensation      |
+| `LOUDNESS_<SOURCE>_DB`        | varies   | Optional per-source gain override in dB               |
+| `AUTOPLAY_HISTORY_LIMIT`      | `20`     | Recently played/reserved autoplay tracks kept out of recommendations |
 | `INACTIVITY_TIMEOUT_MS`       | `300000` | Inactivity timeout in ms (5 minutes)                  |
 | `PROGRESS_UPDATE_INTERVAL_MS` | `10000`  | Player progress update interval (10 seconds)          |
 | `TRACK_HISTORY_LIMIT`         | `20`     | Max tracks to keep in history                         |

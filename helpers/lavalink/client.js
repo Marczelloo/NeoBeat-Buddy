@@ -1,11 +1,16 @@
 const { inspect } = require("util");
 const { Poru } = require("poru");
+const {
+  restoreVoiceChannelStatus,
+  updateTrackVoiceChannelStatus,
+} = require("../discord/voiceChannelStatus");
 const { errorEmbed } = require("../embeds");
 const { getGuildState } = require("../guildState.js");
 const Log = require("../logs/log");
 const statsStore = require("../stats/store.js");
 const { formatDuration } = require("../utils");
 const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
+const { applyNormalizedVolume } = require("./loudness");
 const { fetchLyrics } = require("./lyricsClient");
 const {
   ensurePlaybackState,
@@ -21,6 +26,7 @@ const {
   clearProgressInterval,
   scheduleProgressUpdates,
 } = require("./timers");
+
 const stopLyricsSession = (...args) => require("./lyricsFormatter").stopLyricsSession(...args);
 
 const buildPlaybackErrorMessage = (err, fallback = "Unable to play this track") => {
@@ -140,6 +146,18 @@ function createPoru(client) {
     void stopLyricsSession(player.guildId);
     scheduleProgressUpdates(player);
 
+    try {
+      await applyNormalizedVolume(player, track);
+    } catch (err) {
+      Log.warning("Failed to normalize provider volume", err?.message || String(err), `guild=${player.guildId}`);
+    }
+
+    try {
+      await updateTrackVoiceChannelStatus(poru.client, player, track);
+    } catch (err) {
+      Log.warning("Failed to update voice channel status", err?.message || String(err), `guild=${player.guildId}`);
+    }
+
     const state = ensurePlaybackState(player.guildId);
     state.currentTrack = cloneTrack(track);
     state.lastPosition = 0;
@@ -257,6 +275,12 @@ function createPoru(client) {
     state.paused = false;
     playbackState.set(player.guildId, state);
     clearLyricsState(player.guildId);
+
+    if (player.queue.length === 0) {
+      void restoreVoiceChannelStatus(poru.client, player.voiceChannel).catch((err) =>
+        Log.warning("Failed to restore voice channel status", err?.message || String(err), `guild=${player.guildId}`)
+      );
+    }
 
     if (player.queue.length === 0) {
       player.currentTrack = null;

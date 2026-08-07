@@ -10,6 +10,7 @@ const djStore = require("./helpers/dj/store.js");
 const guildState = require("./helpers/guildState.js");
 const equalizerStore = require("./helpers/lavalink/equalizerStore.js");
 const { createPoru } = require("./helpers/lavalink/index.js");
+const { applyNormalizedVolume } = require("./helpers/lavalink/loudness.js");
 const Log = require("./helpers/logs/log.js");
 const health = require("./helpers/monitoring/health.js");
 const statsStore = require("./helpers/stats/store.js");
@@ -148,8 +149,8 @@ client.on("channelUpdate", async (oldChannel, newChannel) => {
       Log.info("🔌 Player created", `guild=${newChannel.guild.id}`);
 
       // Restore volume and loop mode
-      await newPlayer.setVolume(volume);
-      newPlayer.volume = volume;
+      newPlayer.userVolume = player.userVolume ?? volume;
+      await applyNormalizedVolume(newPlayer, currentTrack);
       newPlayer.loop = loopMode;
 
       // Restore queue
@@ -299,8 +300,8 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
           });
 
           // Restore volume and loop mode
-          await newPlayer.setVolume(volume);
-          newPlayer.volume = volume;
+          newPlayer.userVolume = player.userVolume ?? volume;
+          await applyNormalizedVolume(newPlayer, currentTrack);
           newPlayer.loop = loopMode;
 
           // Restore queue

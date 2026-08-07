@@ -2,7 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const PACKAGE_VERSION = require("../../package.json").version;
-const { BRAND } = require("../brand");
+const { BRAND, getPresenceLines } = require("../brand");
 const { getGuildState, updateGuildState } = require("../guildState");
 const Log = require("../logs/log");
 
@@ -377,10 +377,11 @@ function updateBotStatus(client) {
     if (presenceTimer) clearInterval(presenceTimer);
 
     const rotatePresence = () => {
-      const tagline = BRAND.presence[presenceIndex % BRAND.presence.length];
+      const presenceLines = getPresenceLines(client, presenceIndex);
+      const tagline = presenceLines[presenceIndex % presenceLines.length];
       presenceIndex += 1;
 
-      client.user.setActivity(`${BRAND.name} • v${getCurrentVersion()} • ${tagline}`, {
+      client.user.setActivity(`${BRAND.name} • v${getCurrentVersion()} • ${tagline}`.slice(0, 128), {
         type: 2, // LISTENING
       });
     };
@@ -394,7 +395,7 @@ function updateBotStatus(client) {
       "",
       `version=${getCurrentVersion()}`,
       `interval=${PRESENCE_INTERVAL_MS}ms`,
-      `variants=${BRAND.presence.length}`
+      `variants=${BRAND.presence.length}+personalized`
     );
   } catch (err) {
     Log.error("Failed to update bot status", err);

@@ -26,6 +26,7 @@ function getTrackMetadata(track) {
 function buildSessionProfile(guildId, referenceTrack) {
   const state = playbackState.get(guildId);
   const history = state?.history || [];
+  const recentAutoplayTracks = (state?.autoplayHistory || []).map((entry) => entry.track).filter(Boolean).slice(-20);
 
   Log.debug(
     "Building session profile",
@@ -59,6 +60,8 @@ function buildSessionProfile(guildId, referenceTrack) {
       referenceGenreFamilies: [],
       referenceFeatures: null,
       recentGenreFamilies: [],
+      recentTracks: [],
+      recentAutoplayTracks: [],
     };
   }
 
@@ -189,12 +192,14 @@ function buildSessionProfile(guildId, referenceTrack) {
     .map((t) => t.info?.author)
     .filter(Boolean);
 
+  const autoplayIdentifiers = recentAutoplayTracks.map((track) => track.info?.identifier).filter(Boolean);
+
   return {
     topArtists,
     artistCounts,
     avgDuration,
     totalTracks: recentTracks.length,
-    recentIdentifiers: identifiers.slice(-20),
+    recentIdentifiers: [...identifiers, ...autoplayIdentifiers].slice(-20),
     lastThreeArtists,
     topGenres,
     genreCounts,
@@ -207,6 +212,8 @@ function buildSessionProfile(guildId, referenceTrack) {
     referenceGenreFamilies: getGenreFamilies(referenceMetadata.genres),
     referenceFeatures: referenceMetadata.features,
     recentGenreFamilies,
+    recentTracks,
+    recentAutoplayTracks,
   };
 }
 

@@ -58,6 +58,8 @@ module.exports = {
       sourceLabel = "Spotify • ~320kbps";
     } else if (source === "youtube") {
       sourceLabel = "YouTube • ~128kbps";
+    } else if (source === "soundcloud") {
+      sourceLabel = "SoundCloud • variable quality";
     } else if (source) {
       sourceLabel = source.charAt(0).toUpperCase() + source.slice(1);
     }

@@ -1,9 +1,9 @@
 const assert = require("node:assert");
-const { describe, it, beforeEach, mock } = require("node:test");
+const { describe, it, beforeEach } = require("node:test");
 
 /**
  * Comprehensive Autoplay System Tests
- * Tests the redesigned priority-based recommendation system
+ * Tests the multi-source recommendation and continuity system
  */
 describe("Autoplay System - Priority-Based Recommendations", () => {
   const GUILD_ID = "test-guild-123";
@@ -54,55 +54,55 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
     });
 
     describe("Source Quality Scoring", () => {
-      it("should give Deezer recommendations +40 points", () => {
+      it("should give Deezer recommendations a small quality tie-break", () => {
         const candidates = [createMockCandidate("Song", "Artist", "id1", "deezer_recommendations")];
         const profile = createMinimalProfile();
         const skipPatterns = { skippedArtists: {}, skippedGenres: {} };
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+40(deezer)"));
-        assert.ok(scored[0].score >= 90); // Base 50 + source 40
+        assert.ok(scored[0].scoringDetails.includes("source:+8(deezer)"));
+        assert.ok(scored[0].score >= 58); // Base 50 + source 8
       });
 
-      it("should give Spotify recommendations +35 points", () => {
+      it("should give Spotify recommendations a small quality tie-break", () => {
         const candidates = [createMockCandidate("Song", "Artist", "id1", "spotify_recommendations")];
         const profile = createMinimalProfile();
         const skipPatterns = { skippedArtists: {}, skippedGenres: {} };
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+35(spotify)"));
+        assert.ok(scored[0].scoringDetails.includes("source:+6(spotify)"));
       });
 
-      it("should give YouTube Mix +15 points", () => {
+      it("should give YouTube Mix a small discovery tie-break", () => {
         const candidates = [createMockCandidate("Song", "Artist", "id1", "youtube_mix")];
         const profile = createMinimalProfile();
         const skipPatterns = { skippedArtists: {}, skippedGenres: {} };
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+15(yt-mix)"));
+        assert.ok(scored[0].scoringDetails.includes("source:+3(yt-mix)"));
       });
 
-      it("should give YouTube Search +10 points", () => {
+      it("should give YouTube Search a small +2 tie-break", () => {
         const candidates = [createMockCandidate("Song", "Artist", "id1", "youtube_search")];
         const profile = createMinimalProfile();
         const skipPatterns = { skippedArtists: {}, skippedGenres: {} };
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+10(yt-search)"));
+        assert.ok(scored[0].scoringDetails.includes("source:+2(yt-search)"));
       });
 
-      it("should give Top Artist Search +8 points", () => {
+      it("should give Top Artist Search a small +1 tie-break", () => {
         const candidates = [createMockCandidate("Song", "Artist", "id1", "top_artist_search")];
         const profile = createMinimalProfile();
         const skipPatterns = { skippedArtists: {}, skippedGenres: {} };
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+8(top-artist)"));
+        assert.ok(scored[0].scoringDetails.includes("source:+1(top-artist)"));
       });
 
       it("should rank Deezer > Spotify > YouTube Mix > YouTube Search", () => {
@@ -352,6 +352,27 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         assert.ok(scored[0].scoringDetails.includes("duplicate:-1000(title)"));
       });
+
+      it("should reject the same recording across providers and autoplay reservations", () => {
+        const candidates = [
+          createMockCandidate("Hit 'Em Up (Official Audio)", "2Pac", "soundcloud-version", "soundcloud_search"),
+          createMockCandidate("Fresh Track", "New Artist", "fresh-id", "youtube_search"),
+        ];
+        const profile = createMinimalProfile({
+          recentIdentifiers: ["old-youtube-id"],
+          recentAutoplayTracks: [createMockTrack("Hit Em Up", "2Pac - Topic", "old-youtube-id")],
+        });
+        const skipPatterns = { skippedArtists: {}, skippedGenres: {} };
+
+        const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
+
+        const duplicate = scored.find((candidate) => candidate.identifier === "soundcloud-version");
+        const fresh = scored.find((candidate) => candidate.identifier === "fresh-id");
+        assert.strictEqual(duplicate.score, 0);
+        assert.strictEqual(duplicate.hardRejected, true);
+        assert.ok(duplicate.scoringDetails.includes("duplicate:-1000(title)"));
+        assert.strictEqual(fresh.hardRejected, false);
+      });
     });
 
     describe("Time of Day Awareness", () => {
@@ -560,6 +581,7 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
       topGenres: overrides.topGenres || [],
       recentIdentifiers: overrides.recentIdentifiers || [],
       recentTracks: overrides.recentTracks || [],
+      recentAutoplayTracks: overrides.recentAutoplayTracks || [],
       lastThreeArtists: overrides.lastThreeArtists || [],
       avgDuration: overrides.avgDuration || 180000,
       avgTempo: overrides.avgTempo || null,

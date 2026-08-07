@@ -16,27 +16,39 @@ const GENERIC_SEARCH_WORDS = new Set([
 
 const VERSION_WORDS = new Set([
   "acoustic",
+  "album",
   "cover",
+  "clean",
+  "dirty",
+  "edit",
+  "explicit",
   "live",
   "mix",
   "nightcore",
+  "original",
+  "radio",
+  "remaster",
   "remix",
+  "single",
   "spedup",
   "slowed",
   "karaoke",
   "instrumental",
+  "version",
   "8d",
 ]);
 
 function normalizeText(value) {
   return String(value || "")
-    .normalize("NFD")
+    .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/^(?:dzsearch|ytsearch|spsearch|ytmsearch):\s*/i, "")
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, " ")
+    // Preserve non-Latin artist names so a title-only query is not mistaken
+    // for an exact artist/title match when the artist is written in Cyrillic.
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -61,17 +73,31 @@ function getCoverage(needleTokens, candidateTokens) {
 }
 
 function getPopularity(track) {
-  const candidates = [
-    track?.popularity,
-    track?.info?.popularity,
-    track?.pluginInfo?.popularity,
-    track?.userData?.popularity,
+  const popularityCandidates = [
+    [track?.popularity, false],
+    [track?.info?.popularity, false],
+    [track?.pluginInfo?.popularity, false],
+    [track?.userData?.popularity, false],
+    [track?.info?.viewCount, true],
+    [track?.info?.views, true],
+    [track?.pluginInfo?.viewCount, true],
+    [track?.pluginInfo?.views, true],
+    [track?.userData?.viewCount, true],
+    [track?.userData?.views, true],
   ];
 
-  const popularity = candidates.find((value) => Number.isFinite(Number(value)));
-  if (popularity === undefined) return 0;
+  const candidate = popularityCandidates.find(([value]) => Number.isFinite(Number(value)));
+  if (!candidate) return 0;
 
-  const numeric = Number(popularity);
+  const [value, isViewCount] = candidate;
+  const numeric = Number(value);
+  if (isViewCount) {
+    // YouTube/Lavalink often exposes views instead of a 0-100 popularity.
+    // Logarithmic scaling prevents a viral track from overpowering exact
+    // artist/title matches while still making popularity useful as a tie-break.
+    return Math.max(0, Math.min(100, Math.log10(Math.max(1, numeric)) * 10));
+  }
+
   return Math.max(0, Math.min(numeric <= 1 ? numeric * 100 : numeric, 100));
 }
 
@@ -92,11 +118,18 @@ function getVersionTokens(title) {
   return getUniqueTokens(title, { keepGeneric: true }).filter((token) => VERSION_WORDS.has(token));
 }
 
+function getCanonicalTitle(title) {
+  return getUniqueTokens(title, { keepGeneric: true })
+    .filter((token) => !VERSION_WORDS.has(token))
+    .join(" ");
+}
+
 function scoreSearchResult(track, query, index = 0) {
   const title = track?.info?.title || "";
   const author = track?.info?.author || "";
   const normalizedQuery = normalizeText(query);
   const normalizedTitle = normalizeText(title);
+  const canonicalTitle = getCanonicalTitle(title);
   const normalizedAuthor = normalizeText(author);
   const candidateText = `${normalizedAuthor} ${normalizedTitle}`.trim();
   const queryTokens = getUniqueTokens(query);
@@ -111,6 +144,13 @@ function scoreSearchResult(track, query, index = 0) {
   if (normalizedTitle === normalizedQuery || normalizedAuthor === normalizedQuery) {
     score += 180;
     reasons.push("exact field");
+  }
+
+  if (canonicalTitle && canonicalTitle === normalizedQuery && normalizedTitle !== normalizedQuery) {
+    // Prefer the official single/radio/remaster variant of a well-known song
+    // over an unrelated cover with the same bare title.
+    score += 185;
+    reasons.push("canonical title");
   }
 
   if (candidateText === normalizedQuery || `${normalizedTitle} ${normalizedAuthor}` === normalizedQuery) {
@@ -148,7 +188,7 @@ function scoreSearchResult(track, query, index = 0) {
   const unwantedVersions = getVersionTokens(title).filter(
     (token) => !getTokens(query, { keepGeneric: true }).includes(token)
   );
-  if (unwantedVersions.length) {
+  if (unwantedVersions.length && canonicalTitle !== normalizedQuery) {
     score -= unwantedVersions.length * 18;
     reasons.push(`version penalty:${unwantedVersions.join(",")}`);
   }
@@ -181,6 +221,7 @@ function rankSearchResults(tracks, query, { limit, withScores = false } = {}) {
 }
 
 module.exports = {
+  getCanonicalTitle,
   getPopularity,
   normalizeText,
   rankSearchResults,

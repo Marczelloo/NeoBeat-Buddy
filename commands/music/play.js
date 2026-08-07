@@ -8,8 +8,9 @@ const { recordSearch } = require("../../helpers/history/searchHistory");
 const { beginAutocompleteRequest, isLatestAutocompleteRequest } = require("../../helpers/interactions/autocompleteGuard");
 const { lavalinkPlay, lavalinkResolveTracks } = require("../../helpers/lavalink/index");
 const { getPoru } = require("../../helpers/lavalink/players");
+const { searchAcrossSources } = require("../../helpers/lavalink/searchAggregator");
 const { rankSearchResults } = require("../../helpers/lavalink/searchRanking");
-const { getFallbackSource, getSearchPrefix, resolveSearchSource } = require("../../helpers/lavalink/searchSources");
+const { resolveSearchSource } = require("../../helpers/lavalink/searchSources");
 const Log = require("../../helpers/logs/log");
 const statsStore = require("../../helpers/stats/store");
 const userPrefs = require("../../helpers/users/preferences");
@@ -34,7 +35,8 @@ module.exports = {
           { name: "🎵 Auto (Smart Selection)", value: "auto" },
           { name: "🎼 Deezer (FLAC Quality)", value: "deezer" },
           { name: "▶️ YouTube", value: "youtube" },
-          { name: "🎧 Spotify", value: "spotify" }
+          { name: "🎧 Spotify", value: "spotify" },
+          { name: "☁️ SoundCloud", value: "soundcloud" }
         )
     )
     .addBooleanOption((option) =>
@@ -76,64 +78,16 @@ module.exports = {
       const userSource = userPrefs.getUserDefaultSource(interaction.user.id);
       const guildSettings = getGuildState(interaction.guildId);
       const searchSource = resolveSearchSource(selectedSource, userSource, guildSettings?.defaultSource);
-      const primarySource = searchSource === "auto" ? "deezer" : searchSource;
-
-      // Use direct Lavalink API to search based on determined source
       const poru = getPoru();
-      const node = poru.leastUsedNodes[0];
-      let results = null;
+      const preferredSource = searchSource === "auto" ? "deezer" : searchSource;
+      const results = await searchAcrossSources(poru, focusedValue, { preferredSource });
 
-      if (node) {
-        try {
-          let searchQuery;
-
-          searchQuery = `${getSearchPrefix(primarySource)}:${focusedValue}`;
-
-          const searchUrl = `http://${node.options.host}:${
-            node.options.port
-          }/v4/loadtracks?identifier=${encodeURIComponent(searchQuery)}`;
-          const response = await fetch(searchUrl, {
-            headers: { Authorization: node.options.password },
-          });
-          const data = await response.json();
-
-          if (data?.loadType === "search" && Array.isArray(data?.data) && data.data.length > 0) {
-            // For auto mode with Deezer, combine with YouTube if results are few
-            if (searchSource === "auto" && data.data.length < 3) {
-              const ytResults = await poru.resolve({ query: focusedValue, source: getSearchPrefix("youtube") });
-              const ytTracks = ytResults?.tracks || [];
-
-              results = {
-                loadType: "search",
-                tracks: [...data.data, ...ytTracks],
-              };
-            } else {
-              results = {
-                loadType: data.loadType,
-                tracks: data.data,
-              };
-            }
-          } else if (searchSource === "auto") {
-            // Deezer had no results in auto mode, try YouTube
-            results = await poru.resolve({ query: focusedValue, source: getSearchPrefix("youtube") });
-          }
-        } catch {
-          // Source search failed, fallback to default
-        }
-      }
-
-      // Fallback to default search if source-specific search didn't work
-      if (!results) {
-        const fallbackSource = getFallbackSource(searchSource);
-        results = await poru.resolve({ query: focusedValue, source: getSearchPrefix(fallbackSource) });
-      }
-
-      if (!results?.tracks || results.tracks.length === 0) {
+      if (!results.length) {
         return respond([]);
       }
 
       // Filter out non-music content (tutorials, compilations, etc.)
-      const musicTracks = results.tracks.filter((track) => {
+      const musicTracks = results.filter((track) => {
         const title = (track.info?.title || "").toLowerCase();
         const author = (track.info?.author || "").toLowerCase();
 

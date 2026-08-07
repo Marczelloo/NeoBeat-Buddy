@@ -10,6 +10,10 @@ function createTrack(title, author, popularity = 0) {
   };
 }
 
+function createViewRankedTrack(title, author, views) {
+  return { info: { title, author, viewCount: views } };
+}
+
 describe("Search result ranking", () => {
   it("prefers an exact artist/title match over a more popular wrong song", () => {
     const tracks = [
@@ -53,5 +57,27 @@ describe("Search result ranking", () => {
 
     assert.strictEqual(ranked[0].index, 0);
     assert.ok(scoreSearchResult(tracks[0], "Artist - Unknown").score > 0);
+  });
+
+  it("normalizes curly apostrophes and uses view count for title ties", () => {
+    const tracks = [
+      createViewRankedTrack("Hit Em Up", "мэйби бэйби", 12000),
+      createViewRankedTrack("Hit 'Em Up", "2Pac", 250000000),
+    ];
+
+    const ranked = rankSearchResults(tracks, "hit em up");
+
+    assert.strictEqual(ranked[0].info.author, "2Pac");
+  });
+
+  it("prefers a canonical official version over an exact-title cover", () => {
+    const tracks = [
+      createTrack("Hit 'Em Up", "Bedoes 2115"),
+      createTrack("Hit 'Em Up (Single Version)", "2Pac"),
+    ];
+
+    const ranked = rankSearchResults(tracks, "hit em up");
+
+    assert.strictEqual(ranked[0].info.author, "2Pac");
   });
 });

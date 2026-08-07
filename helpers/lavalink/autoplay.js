@@ -1,6 +1,6 @@
 const Log = require("../logs/log");
 const { fetchSmartAutoplayTrack } = require("./smartAutoplay");
-const { cloneTrack } = require("./state");
+const { cloneTrack, rememberAutoplayTrack } = require("./state");
 
 const AUTOPLAY_PREFETCH_QUEUE_THRESHOLD = 1;
 const autoplayInFlight = new Set();
@@ -55,6 +55,7 @@ async function queueAutoplayTrack(player, lastTrack, textChannelId) {
     };
 
     await player.queue.add(cloned);
+    rememberAutoplayTrack(player.guildId, cloned);
 
     Log.info(
       "➕ Autoplay queued",

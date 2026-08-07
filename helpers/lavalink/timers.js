@@ -28,7 +28,8 @@ const scheduleInactivityDisconnect = (player, reason = "queueEnd") => {
   if (!INACTIVITY_TIMEOUT_MS || INACTIVITY_TIMEOUT_MS <= 0) return;
 
   // Check for 24/7 mode - don't schedule disconnect if enabled
-  const { getGuildState } = require("../guildState");
+const { getGuildState } = require("../guildState");
+const { restoreVoiceChannelStatus } = require("../discord/voiceChannelStatus");
   const state = getGuildState(player.guildId);
   if (state?.radio247) {
     Log.info("Skipped inactivity disconnect (24/7 mode active)", "", `guild=${player.guildId}`);
@@ -48,6 +49,7 @@ const scheduleInactivityDisconnect = (player, reason = "queueEnd") => {
       }
 
       Log.info("Disconnecting due to inactivity", "", `guild=${player.guildId}`, `reason=${reason}`);
+      await restoreVoiceChannelStatus(poru.client, current.voiceChannel).catch(() => null);
       const channel = await poru.client.channels.fetch(current.textChannel).catch(() => null);
 
       if (channel) {

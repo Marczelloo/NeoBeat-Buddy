@@ -48,7 +48,8 @@ module.exports = {
                 .addChoices(
                   { name: "🎼 Deezer (FLAC Quality)", value: "deezer" },
                   { name: "▶️ YouTube", value: "youtube" },
-                  { name: "🎧 Spotify", value: "spotify" }
+                  { name: "🎧 Spotify", value: "spotify" },
+                  { name: "☁️ SoundCloud", value: "soundcloud" }
                 )
             )
         )
@@ -65,7 +66,8 @@ module.exports = {
                   { name: "🌐 Use Server Default", value: "server" },
                   { name: "🎼 Deezer (FLAC Quality)", value: "deezer" },
                   { name: "▶️ YouTube", value: "youtube" },
-                  { name: "🎧 Spotify", value: "spotify" }
+                  { name: "🎧 Spotify", value: "spotify" },
+                  { name: "☁️ SoundCloud", value: "soundcloud" }
                 )
             )
         )
@@ -224,6 +226,7 @@ async function handleSource(interaction, subcommand) {
     deezer: "🎼 Deezer (FLAC Quality)",
     youtube: "▶️ YouTube",
     spotify: "🎧 Spotify",
+    soundcloud: "☁️ SoundCloud",
     server: "🌐 Server Default",
   };
 
@@ -270,6 +273,7 @@ async function handleSource(interaction, subcommand) {
         deezer: "🎼 **Deezer** - FLAC quality audio",
         youtube: "▶️ **YouTube** - Wide variety of content",
         spotify: "🎧 **Spotify** - High quality streaming",
+        soundcloud: "☁️ **SoundCloud** - Independent uploads and rare tracks",
       };
 
       const embed = new EmbedBuilder()
