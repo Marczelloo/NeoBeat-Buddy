@@ -5,8 +5,11 @@ const { buildProposalAnnouncement, buildProposalComponents, buildProposalEmbed }
 const { errorEmbed, successEmbed, playlistEmbed, songEmbed } = require("../../helpers/embeds");
 const { getGuildState, updateGuildState } = require("../../helpers/guildState.js");
 const { recordSearch } = require("../../helpers/history/searchHistory");
+const { beginAutocompleteRequest, isLatestAutocompleteRequest } = require("../../helpers/interactions/autocompleteGuard");
 const { lavalinkPlay, lavalinkResolveTracks } = require("../../helpers/lavalink/index");
 const { getPoru } = require("../../helpers/lavalink/players");
+const { rankSearchResults } = require("../../helpers/lavalink/searchRanking");
+const { getFallbackSource, getSearchPrefix, resolveSearchSource } = require("../../helpers/lavalink/searchSources");
 const Log = require("../../helpers/logs/log");
 const statsStore = require("../../helpers/stats/store");
 const userPrefs = require("../../helpers/users/preferences");
@@ -43,10 +46,16 @@ module.exports = {
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
+    const autocompleteKey = `${interaction.user.id}:${interaction.guildId || "dm"}:play`;
+    const requestId = beginAutocompleteRequest(autocompleteKey);
+    const respond = async (choices) => {
+      if (!isLatestAutocompleteRequest(autocompleteKey, requestId)) return;
+      await interaction.respond(choices);
+    };
 
     // Don't autocomplete if the query is too short
     if (!focusedValue || focusedValue.length < 2) {
-      return interaction.respond([]);
+      return respond([]);
     }
 
     // Skip autocomplete for URLs (YouTube, Spotify, SoundCloud links)
@@ -58,25 +67,16 @@ module.exports = {
       focusedValue.includes("spotify.com") ||
       focusedValue.includes("soundcloud.com")
     ) {
-      return interaction.respond([]);
+      return respond([]);
     }
 
     try {
       // Check if user has selected a source
       const selectedSource = interaction.options.getString("source");
-
-      // Determine which source to use for autocomplete
-      // Priority: explicit selection > user preference > server default
-      let searchSource;
-      if (selectedSource && selectedSource !== "auto") {
-        // User explicitly chose a source - use it
-        searchSource = selectedSource;
-      } else {
-        // Check user preference first, then fall back to server default
-        const userSource = userPrefs.getUserDefaultSource(interaction.user.id);
-        const guildSettings = getGuildState(interaction.guildId);
-        searchSource = userSource || guildSettings?.defaultSource || "deezer";
-      }
+      const userSource = userPrefs.getUserDefaultSource(interaction.user.id);
+      const guildSettings = getGuildState(interaction.guildId);
+      const searchSource = resolveSearchSource(selectedSource, userSource, guildSettings?.defaultSource);
+      const primarySource = searchSource === "auto" ? "deezer" : searchSource;
 
       // Use direct Lavalink API to search based on determined source
       const poru = getPoru();
@@ -87,23 +87,7 @@ module.exports = {
         try {
           let searchQuery;
 
-          // Build search query based on source
-          switch (searchSource) {
-            case "deezer":
-              searchQuery = `dzsearch:${focusedValue}`;
-              break;
-            case "youtube":
-              searchQuery = `ytsearch:${focusedValue}`;
-              break;
-            case "spotify":
-              searchQuery = `spsearch:${focusedValue}`;
-              break;
-            case "auto":
-            default:
-              // Auto mode: Try Deezer first, fallback to YouTube
-              searchQuery = `dzsearch:${focusedValue}`;
-              break;
-          }
+          searchQuery = `${getSearchPrefix(primarySource)}:${focusedValue}`;
 
           const searchUrl = `http://${node.options.host}:${
             node.options.port
@@ -116,7 +100,7 @@ module.exports = {
           if (data?.loadType === "search" && Array.isArray(data?.data) && data.data.length > 0) {
             // For auto mode with Deezer, combine with YouTube if results are few
             if (searchSource === "auto" && data.data.length < 3) {
-              const ytResults = await poru.resolve({ query: focusedValue });
+              const ytResults = await poru.resolve({ query: focusedValue, source: getSearchPrefix("youtube") });
               const ytTracks = ytResults?.tracks || [];
 
               results = {
@@ -131,7 +115,7 @@ module.exports = {
             }
           } else if (searchSource === "auto") {
             // Deezer had no results in auto mode, try YouTube
-            results = await poru.resolve({ query: focusedValue });
+            results = await poru.resolve({ query: focusedValue, source: getSearchPrefix("youtube") });
           }
         } catch {
           // Source search failed, fallback to default
@@ -140,18 +124,16 @@ module.exports = {
 
       // Fallback to default search if source-specific search didn't work
       if (!results) {
-        results = await poru.resolve({ query: focusedValue });
+        const fallbackSource = getFallbackSource(searchSource);
+        results = await poru.resolve({ query: focusedValue, source: getSearchPrefix(fallbackSource) });
       }
 
       if (!results?.tracks || results.tracks.length === 0) {
-        return interaction.respond([]);
+        return respond([]);
       }
 
-      // Take only first 15 tracks for faster processing
-      const limitedTracks = results.tracks.slice(0, 15);
-
       // Filter out non-music content (tutorials, compilations, etc.)
-      const musicTracks = limitedTracks.filter((track) => {
+      const musicTracks = results.tracks.filter((track) => {
         const title = (track.info?.title || "").toLowerCase();
         const author = (track.info?.author || "").toLowerCase();
 
@@ -169,11 +151,14 @@ module.exports = {
         return true;
       });
 
+      // Match the user's artist/title intent before using provider order as a popularity tie-breaker.
+      const rankedTracks = rankSearchResults(musicTracks, focusedValue, { limit: 15 });
+
       // Deduplicate by artist + title
       const seen = new Set();
       const uniqueTracks = [];
 
-      for (const track of musicTracks) {
+      for (const track of rankedTracks) {
         const author = (track.info?.author || "Unknown Artist").trim();
         const title = (track.info?.title || "Unknown").trim();
 
@@ -214,11 +199,11 @@ module.exports = {
         };
       });
 
-      await interaction.respond(choices);
+      await respond(choices);
     } catch (error) {
       Log.error("Autocomplete error in /play", error);
       // Return empty array on error to avoid blocking the user
-      await interaction.respond([]);
+      await respond([]);
     }
   },
 
@@ -248,14 +233,9 @@ module.exports = {
     // Get source preference
     // Priority: explicit selection > user preference > server default
     const selectedSource = interaction.options.getString("source");
-    let source;
-    if (selectedSource && selectedSource !== "auto") {
-      source = selectedSource;
-    } else {
-      const userSource = userPrefs.getUserDefaultSource(interaction.user.id);
-      const guildSettings = getGuildState(interaction.guildId);
-      source = userSource || guildSettings?.defaultSource || "deezer";
-    }
+    const userSource = userPrefs.getUserDefaultSource(interaction.user.id);
+    const guildSettings = getGuildState(interaction.guildId);
+    const source = resolveSearchSource(selectedSource, userSource, guildSettings?.defaultSource);
 
     const requester = {
       id: interaction.user.id,

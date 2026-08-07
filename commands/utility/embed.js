@@ -8,6 +8,7 @@ const {
   TextInputStyle,
   ActionRowBuilder,
 } = require("discord.js");
+const { BRAND } = require("../../helpers/brand");
 const Log = require("../../helpers/logs/log");
 
 // Temporary storage for embed options (cleared after modal submission)
@@ -28,7 +29,7 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName("color")
-        .setDescription("Embed color (hex code like #5865F2 or name)")
+        .setDescription("Embed color (hex code like #19e6ff or name)")
         .setRequired(false)
         .addChoices(
           { name: "🔵 Blurple (Discord)", value: "#5865F2" },
@@ -38,7 +39,8 @@ module.exports = {
           { name: "🟣 Fuchsia", value: "#EB459E" },
           { name: "⚪ White", value: "#FFFFFF" },
           { name: "⚫ Dark", value: "#2C2F33" },
-          { name: "🎵 Neo Beat Purple", value: "#9B59B6" }
+          { name: "🎵 Mewbit Neon Cyan", value: BRAND.colors.primary },
+          { name: "💜 Mewbit Neon Purple", value: BRAND.colors.secondary }
         )
     )
     .addStringOption((option) =>
@@ -70,7 +72,7 @@ module.exports = {
     // Store options for the modal handler using interaction ID
     const embedOptions = {
       channelId: channel.id,
-      color: interaction.options.getString("color") || "#5865F2",
+      color: interaction.options.getString("color") || BRAND.colors.primary,
       image: interaction.options.getString("image") || null,
       thumbnail: interaction.options.getString("thumbnail") || null,
       timestamp: interaction.options.getBoolean("timestamp") || false,

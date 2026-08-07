@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { BRAND } = require("../../helpers/brand");
 const { getUserPresetNames, loadUserPreset, deleteUserPreset } = require("../../helpers/equalizer/customPresets");
 const PRESET_CHOICES = require("../../helpers/equalizer/presets");
 const { requireDj } = require("../../helpers/interactions/djGuards");
@@ -92,7 +93,7 @@ module.exports = {
 
     if (subcommand === "list") {
       const embed = new EmbedBuilder()
-        .setColor("#5865F2")
+        .setColor(BRAND.colors.primary)
         .setTitle("🎚️ Built-in EQ Presets")
         .setDescription(
           "Use `/eq preset name:<preset>` to apply any of these presets.\n" +
@@ -138,7 +139,7 @@ module.exports = {
       }
 
       const embed = new EmbedBuilder()
-        .setColor("#5865F2")
+        .setColor(BRAND.colors.primary)
         .setTitle("📁 Your Custom EQ Presets")
         .setDescription(userPresets.map((name, i) => `${i + 1}. \`${name}\``).join("\n"))
         .addFields([

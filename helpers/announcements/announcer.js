@@ -1,6 +1,8 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const PACKAGE_VERSION = require("../../package.json").version;
+const { BRAND } = require("../brand");
 const { getGuildState, updateGuildState } = require("../guildState");
 const Log = require("../logs/log");
 
@@ -8,7 +10,10 @@ const PATCH_NOTES_FILE = path.join(__dirname, "..", "data", "patchNotes.json");
 const GITHUB_REPO = "https://github.com/Marczelloo/NeoBeat-Buddy";
 
 let patchNotesCache = null;
-let currentVersion = null;
+let currentVersion = PACKAGE_VERSION;
+let presenceTimer = null;
+let presenceIndex = 0;
+const PRESENCE_INTERVAL_MS = 60 * 1000;
 
 /**
  * Initialize announcer system and load patch notes
@@ -35,7 +40,7 @@ async function init() {
  * @returns {string} Current version
  */
 function getCurrentVersion() {
-  return currentVersion || "1.0.0";
+  return currentVersion || PACKAGE_VERSION;
 }
 
 /**
@@ -87,8 +92,8 @@ function buildPatchNotesEmbed(version, pageIndex = 0, totalPages = 1) {
   }
 
   const embed = new EmbedBuilder()
-    .setColor("#5865F2")
-    .setTitle(`📢 NeoBeat Buddy ${notes.version} - ${notes.title}`)
+    .setColor(BRAND.colors.primary)
+    .setTitle(`📢 ${BRAND.name} ${notes.version} - ${notes.title}`)
     .setDescription(`Released on ${notes.date}`)
     .setTimestamp();
 
@@ -369,11 +374,28 @@ async function sendAnnouncement(client, guildId, fallbackChannelId = null) {
  */
 function updateBotStatus(client) {
   try {
-    client.user.setActivity({
-      name: `/help • v${getCurrentVersion()} • /changelog`,
-      type: 2, // LISTENING
-    });
-    Log.info("Bot status updated with version info", "", `version=${getCurrentVersion()}`);
+    if (presenceTimer) clearInterval(presenceTimer);
+
+    const rotatePresence = () => {
+      const tagline = BRAND.presence[presenceIndex % BRAND.presence.length];
+      presenceIndex += 1;
+
+      client.user.setActivity(`${BRAND.name} • v${getCurrentVersion()} • ${tagline}`, {
+        type: 2, // LISTENING
+      });
+    };
+
+    rotatePresence();
+    presenceTimer = setInterval(rotatePresence, PRESENCE_INTERVAL_MS);
+    presenceTimer.unref?.();
+
+    Log.info(
+      "Bot status rotation started",
+      "",
+      `version=${getCurrentVersion()}`,
+      `interval=${PRESENCE_INTERVAL_MS}ms`,
+      `variants=${BRAND.presence.length}`
+    );
   } catch (err) {
     Log.error("Failed to update bot status", err);
   }

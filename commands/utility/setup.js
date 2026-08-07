@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
 const announcer = require("../../helpers/announcements/announcer");
+const { BRAND } = require("../../helpers/brand");
 const { updateGuildState, getGuildState } = require("../../helpers/guildState");
 const userPrefs = require("../../helpers/users/preferences");
 
@@ -155,7 +156,7 @@ async function handleAnnouncements(interaction, subcommand) {
       const currentVersion = announcer.getCurrentVersion();
 
       const embed = new EmbedBuilder()
-        .setColor(enabled ? 0x5865f2 : 0x99aab5)
+        .setColor(enabled ? BRAND.colors.primary : 0x99aab5)
         .setTitle("📢 Update Announcements Configuration")
         .addFields(
           {
@@ -272,7 +273,7 @@ async function handleSource(interaction, subcommand) {
       };
 
       const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
+        .setColor(BRAND.colors.primary)
         .setTitle("🎵 Music Search Source Configuration")
         .addFields(
           {

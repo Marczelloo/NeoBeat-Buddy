@@ -2,9 +2,9 @@ const { inspect } = require("util");
 const { Poru } = require("poru");
 const { errorEmbed } = require("../embeds");
 const { getGuildState } = require("../guildState.js");
-const { formatDuration } = require("../utils");
 const Log = require("../logs/log");
 const statsStore = require("../stats/store.js");
+const { formatDuration } = require("../utils");
 const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
 const { fetchLyrics } = require("./lyricsClient");
 const {
@@ -164,6 +164,14 @@ function createPoru(client) {
       `guild=${player.guildId}`
     );
 
+    // Start fetching the next autoplay track while the current one is still
+    // playing. Waiting for queueEnd makes every recommendation fetch audible.
+    const guildSettings = getGuildState(player.guildId);
+    if (guildSettings?.autoplay && player.queue.length <= 1) {
+      const { prefetchAutoplayTrack } = require("./autoplay");
+      void prefetchAutoplayTrack(player, track, player.textChannel);
+    }
+
     try {
       const voiceChannel = player.poru.client.guilds.cache.get(player.guildId)?.channels.cache.get(player.voiceChannel);
 
@@ -182,7 +190,6 @@ function createPoru(client) {
   });
 
   poru.on("trackEnd", (player, track, reason) => {
-    const reasonSummary = typeof reason === "string" ? reason : inspect(reason, { depth: 1 });
     const nextTrack = player.currentTrack ? describeTrack(player.currentTrack) : "none";
 
     clearProgressInterval(player.guildId);
@@ -335,10 +342,11 @@ function createPoru(client) {
       const lastTitle = lastTrack?.info?.title || "Unknown";
       Log.info("🔁 Autoplay fetching", `basedOn=${lastTitle}`, `guild=${player.guildId}`);
 
-      const { queueAutoplayTrack } = require("./autoplay");
+      const { queueAutoplayTrack, isAutoplayInFlight } = require("./autoplay");
+      const prefetchWasInFlight = isAutoplayInFlight(player.guildId);
       const added = await queueAutoplayTrack(player, lastTrack, player.textChannel);
 
-      if (added) {
+      if (added || prefetchWasInFlight || isAutoplayInFlight(player.guildId)) {
         return;
       }
     }

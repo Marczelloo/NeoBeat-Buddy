@@ -4,8 +4,11 @@ const { scoreCandidates, getTimeOfDayFactor } = require("./candidateScoring");
 const { getPoru } = require("./players");
 const { buildSessionProfile, genreCache } = require("./sessionProfile");
 const { getSkipPatterns } = require("./skipLearning");
+const {
+  getSpotifyBasedSuggestions,
+  enrichCandidatesWithSpotifyMetadata,
+} = require("./spotifyRecommendations");
 const { filterValidSongs } = require("./trackValidation");
-const { getSpotifyBasedSuggestions } = require("./spotifyRecommendations");
 
 // Minimum candidates needed before falling back to next source
 const MIN_CANDIDATES_THRESHOLD = 5;
@@ -147,13 +150,13 @@ async function fetchDeezerCandidates(guildId, cleanTitle, searchArtist) {
  * @param {string} guildId - Guild identifier
  * @returns {Promise<Array>} Array of candidate tracks from Spotify
  */
-async function fetchSpotifyCandidates(referenceTrack, guildId) {
+async function fetchSpotifyCandidates(referenceTrack, guildId, profile) {
   const candidates = [];
 
   try {
     Log.info("🎵 Fetching Spotify recommendations", "", `guild=${guildId}`);
 
-    const spotifyRecs = await getSpotifyBasedSuggestions(referenceTrack);
+    const spotifyRecs = await getSpotifyBasedSuggestions(referenceTrack, profile);
 
     if (spotifyRecs && spotifyRecs.length > 0) {
       // Convert Spotify recommendations to playable tracks via Lavalink
@@ -371,7 +374,7 @@ async function collectCandidates(referenceTrack, guildId, profile) {
 
   // Priority 2: Spotify recommendations (has rich metadata like genres, popularity)
   // Always fetch Spotify for metadata even if Deezer has enough candidates
-  const spotifyCandidates = await fetchSpotifyCandidates(referenceTrack, guildId);
+  const spotifyCandidates = await fetchSpotifyCandidates(referenceTrack, guildId, profile);
   allCandidates.push(...spotifyCandidates);
 
   Log.info(
@@ -550,6 +553,8 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
 
   Log.info("Candidates collected", "", `guild=${guildId}`, `total=${candidates.length}`);
 
+  await enrichCandidatesWithSpotifyMetadata(candidates);
+
   const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
 
   Log.info(
@@ -569,6 +574,17 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
 
   for (let i = 0; i < Math.min(5, rankedCandidates.length); i++) {
     const candidate = rankedCandidates[i];
+
+    if (candidate.hardRejected) {
+      Log.debug(
+        "Skipping candidate with incompatible vibe",
+        "",
+        `guild=${guildId}`,
+        `track=${candidate.artist} - ${candidate.title}`,
+        `reason=${candidate.rejectionReason || "genre drift"}`
+      );
+      continue;
+    }
 
     if (candidate.score < 10) {
       Log.warning("Top candidate score too low, giving up", "", `guild=${guildId}`, `score=${candidate.score}`);

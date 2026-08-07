@@ -15,11 +15,6 @@ const UPDATE_INTERVAL = 250; // Check every 250ms for responsive updates
  */
 function getInterpolatedPosition(player) {
   if (!player) return 0;
-<<<<<<< HEAD
-
-=======
-  
->>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
   // If paused, return the stored position
   if (player.paused) {
     return player.position || 0;
@@ -29,21 +24,11 @@ function getInterpolatedPosition(player) {
   const lastKnownPosition = state?.lastPosition ?? player.position ?? 0;
   const lastUpdateTime = state?.lastTimestamp ?? Date.now();
   const elapsed = Date.now() - lastUpdateTime;
-<<<<<<< HEAD
-
-=======
-  
->>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
   // Interpolate: current position = last known + time elapsed since update
   // Add a small lookahead offset (300ms) so lyrics appear slightly before the audio
   // This compensates for Discord message edit latency
   const LOOKAHEAD_MS = 300;
   const interpolated = lastKnownPosition + elapsed + LOOKAHEAD_MS;
-<<<<<<< HEAD
-
-=======
-  
->>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
   // Clamp to track duration
   const maxDuration = player.currentTrack?.info?.length || Infinity;
   return Math.min(interpolated, maxDuration);
@@ -206,11 +191,6 @@ async function buildSyncedLyricsDisplay({ interaction, player, payload, trackTit
   let lastIndex = currentIndex;
   let lastUpdateTime = Date.now();
   const MIN_UPDATE_DELAY = 800; // Minimum 800ms between Discord API calls
-<<<<<<< HEAD
-
-=======
-  
->>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
   const updateInterval = setInterval(async () => {
     try {
       const currentPlayer = getPlayer(guildId);
@@ -228,11 +208,7 @@ async function buildSyncedLyricsDisplay({ interaction, player, payload, trackTit
 
       // Only update Discord if line changed and enough time has passed
       const now = Date.now();
-<<<<<<< HEAD
-      if (newIndex !== lastIndex && now - lastUpdateTime >= MIN_UPDATE_DELAY) {
-=======
       if (newIndex !== lastIndex && (now - lastUpdateTime) >= MIN_UPDATE_DELAY) {
->>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
         lastIndex = newIndex;
         lastUpdateTime = now;
 

@@ -7,7 +7,7 @@ const Log = require("../../helpers/logs/log");
 const initialCategory = CATEGORIES[DEFAULT_CATEGORY];
 
 module.exports = {
-  data: new SlashCommandBuilder().setName("help").setDescription("Browse all Neo Beat Buddy commands by category."),
+  data: new SlashCommandBuilder().setName("help").setDescription("Browse all mewbit commands by category."),
   async execute(interaction) {
     Log.info(`/help command used by ${interaction.user.tag} in guild ${interaction.guild?.name ?? "DMs"}`);
 

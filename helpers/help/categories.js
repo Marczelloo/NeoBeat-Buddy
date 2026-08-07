@@ -61,7 +61,7 @@
         {
           name: "autoplay",
           description:
-            "Toggle smart autoplay mode that automatically queues similar tracks when the queue ends (DJ only).",
+            "Toggle smart autoplay with a one-track buffer that keeps compatible music ready before the queue ends (DJ only).",
           usage: "/autoplay enable:<true|false>",
         },
         {
@@ -326,7 +326,7 @@
     },
     filters: {
       label: "Equalizer & Effects",
-      description: "Tune the audio output with presets or per-band adjustments.",
+      description: "Tune the audio output with EQ, meme effects, and per-band adjustments.",
       emoji: "🎚️",
       commands: [
         {
@@ -359,6 +359,21 @@
           description: "Reset the equalizer back to a flat response.",
           usage: "/eq reset",
         },
+        {
+          name: "filter preset",
+          description: "Apply a fun Lavalink effect such as 8D, nightcore, vaporwave, or meme.",
+          usage: "/filter preset name:<effect>",
+        },
+        {
+          name: "filter list",
+          description: "View available audio effects.",
+          usage: "/filter list",
+        },
+        {
+          name: "filter reset",
+          description: "Turn off effects while keeping your current EQ.",
+          usage: "/filter reset",
+        },
       ],
       notes: [
         {
@@ -373,6 +388,7 @@
             "- **Save Custom Presets**: Use 📁 to save your current EQ as a custom preset (up to 10 per user).",
             "- **Visual Feedback**: Horizontal bars show gain levels (-12dB to +6dB) with selected band marked by ►.",
             "- **Throttled Updates**: Changes are batched (200ms) to prevent Lavalink spam.",
+            "- **Audio Effects**: The second selector applies effects without replacing your EQ. Use Off to clear them.",
           ].join("\n"),
         },
         {

@@ -1,7 +1,7 @@
 {
-  "name": "neo-beat-buddy",
-  "version": "1.0.12",
-  "description": "Educational music bot example (NOT for production use) | A feature-rich Discord music bot with DJ mode, advanced statistics, and persistent EQ settings",
+  "name": "mewbit",
+  "version": "1.1.4",
+  "description": "mewbit — a neon cyberpunk Discord music bot with smart autoplay, DJ mode, statistics, and persistent EQ settings",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "main": "index.js",
@@ -49,21 +49,21 @@
     "pnpm": ">=10.0.0"
   },
   "dependencies": {
-    "@discordjs/voice": "^0.19.0",
-    "cheerio": "^1.1.2",
-    "discord.js": "^14.22.1",
-    "dotenv": "^17.2.2",
-    "node-fetch": "^2.7.0",
-    "poru": "^5.2.0",
-    "shoukaku": "^4.1.1"
+    "@discordjs/voice": "^0.19.2",
+    "cheerio": "^1.2.0",
+    "discord.js": "^14.27.0",
+    "dotenv": "^17.4.2",
+    "node-fetch": "^3.3.2",
+    "poru": "^5.3.0",
+    "shoukaku": "^4.3.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.36.0",
-    "dotenv-cli": "^10.0.0",
-    "eslint": "^9.36.0",
+    "@eslint/js": "^9.39.5",
+    "dotenv-cli": "^11.0.0",
+    "eslint": "^9.39.5",
     "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-n": "^17.23.1",
-    "eslint-plugin-unused-imports": "^4.2.0",
-    "globals": "^16.4.0"
+    "eslint-plugin-n": "^18.2.2",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.9.0"
   }
 }

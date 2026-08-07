@@ -2,11 +2,21 @@ const Log = require("../logs/log");
 const { fetchSmartAutoplayTrack } = require("./smartAutoplay");
 const { cloneTrack } = require("./state");
 
+const AUTOPLAY_PREFETCH_QUEUE_THRESHOLD = 1;
+const autoplayInFlight = new Set();
+
 async function queueAutoplayTrack(player, lastTrack, textChannelId) {
   if (!player || !lastTrack) {
     Log.warning("Autoplay called without player or lastTrack");
     return false;
   }
+
+  if (autoplayInFlight.has(player.guildId)) {
+    Log.debug("Autoplay fetch already in progress", "", `guild=${player.guildId}`);
+    return false;
+  }
+
+  autoplayInFlight.add(player.guildId);
 
   try {
     const relatedTrack = await fetchSmartAutoplayTrack(lastTrack, player.guildId);
@@ -63,9 +73,36 @@ async function queueAutoplayTrack(player, lastTrack, textChannelId) {
   } catch (err) {
     Log.error("❌ Autoplay failed", err, `guild=${player.guildId}`);
     return false;
+  } finally {
+    autoplayInFlight.delete(player.guildId);
   }
+}
+
+/**
+ * Starts autoplay before the queue is empty so Lavalink has a next track ready
+ * when the current one finishes. The queue-end handler remains as a fallback.
+ */
+async function prefetchAutoplayTrack(player, currentTrack, textChannelId) {
+  if (!player || !currentTrack || player.queue.length > AUTOPLAY_PREFETCH_QUEUE_THRESHOLD) return false;
+
+  Log.debug(
+    "⏩ Starting autoplay prefetch",
+    "",
+    `guild=${player.guildId}`,
+    `queue=${player.queue.length}`,
+    `current=${currentTrack.info?.title || "unknown"}`
+  );
+
+  return queueAutoplayTrack(player, currentTrack, textChannelId);
+}
+
+function isAutoplayInFlight(guildId) {
+  return autoplayInFlight.has(guildId);
 }
 
 module.exports = {
   queueAutoplayTrack,
+  prefetchAutoplayTrack,
+  isAutoplayInFlight,
+  AUTOPLAY_PREFETCH_QUEUE_THRESHOLD,
 };

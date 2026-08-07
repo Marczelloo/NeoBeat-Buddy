@@ -1,8 +1,21 @@
 const Log = require("../logs/log");
+const { getGenreFamilies } = require("./genreUtils");
 const { playbackState } = require("./state");
 
 const sessionStartTime = new Map();
 const genreCache = new Map();
+
+function getTrackMetadata(track) {
+  const identifier = track?.info?.identifier;
+  const direct = track?.userData || {};
+  const cached = genreCache.get(identifier) || {};
+
+  return {
+    genres: Array.isArray(direct.genres) && direct.genres.length > 0 ? direct.genres : cached.genres || [],
+    features: direct.features || cached.features || null,
+    releaseYear: direct.releaseYear || cached.releaseYear || null,
+  };
+}
 
 /**
  * Builds a comprehensive profile of the listening session
@@ -42,6 +55,10 @@ function buildSessionProfile(guildId, referenceTrack) {
       avgYear: null,
       energyTrend: null,
       valenceTrend: null,
+      referenceGenres: [],
+      referenceGenreFamilies: [],
+      referenceFeatures: null,
+      recentGenreFamilies: [],
     };
   }
 
@@ -54,8 +71,10 @@ function buildSessionProfile(guildId, referenceTrack) {
   const years = [];
   const energyValues = [];
   const valenceValues = [];
+  const recentGenreFamilies = [];
+  let referenceMetadata = { genres: [], features: null, releaseYear: null };
 
-  recentTracks.forEach((track) => {
+  recentTracks.forEach((track, index) => {
     const artist = track.info?.author || "Unknown";
     const duration = track.info?.length || 0;
     const id = track.info?.identifier;
@@ -64,20 +83,25 @@ function buildSessionProfile(guildId, referenceTrack) {
     totalDuration += duration;
     if (id) identifiers.push(id);
 
-    const cachedData = track.userData?.genres ? track.userData : genreCache.get(id);
-    const cachedGenres = cachedData?.genres || [];
-    const cachedFeatures = cachedData?.features;
-    const cachedYear = cachedData?.releaseYear;
+    const metadata = getTrackMetadata(track);
+    const cachedGenres = metadata.genres;
+    const cachedFeatures = metadata.features;
+    const cachedYear = metadata.releaseYear;
+
+    if (index === recentTracks.length - 1) {
+      referenceMetadata = metadata;
+    }
 
     cachedGenres.forEach((genre) => {
       genreCounts[genre] = (genreCounts[genre] || 0) + 1;
     });
+    recentGenreFamilies.push(...getGenreFamilies(cachedGenres));
 
     if (cachedFeatures) {
       featuresList.push(cachedFeatures);
-      energyValues.push(cachedFeatures.energy);
-      valenceValues.push(cachedFeatures.valence);
-      if (cachedFeatures.tempo) {
+      if (Number.isFinite(cachedFeatures.energy)) energyValues.push(cachedFeatures.energy);
+      if (Number.isFinite(cachedFeatures.valence)) valenceValues.push(cachedFeatures.valence);
+      if (Number.isFinite(cachedFeatures.tempo)) {
         tempos.push(cachedFeatures.tempo);
       }
     }
@@ -101,12 +125,17 @@ function buildSessionProfile(guildId, referenceTrack) {
 
   let avgFeatures = null;
   if (featuresList.length > 0) {
+    const averageFeature = (name) => {
+      const values = featuresList.map((features) => features[name]).filter(Number.isFinite);
+      return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+    };
+
     avgFeatures = {
-      energy: featuresList.reduce((sum, f) => sum + (f.energy || 0), 0) / featuresList.length,
-      danceability: featuresList.reduce((sum, f) => sum + (f.danceability || 0), 0) / featuresList.length,
-      valence: featuresList.reduce((sum, f) => sum + (f.valence || 0), 0) / featuresList.length,
-      acousticness: featuresList.reduce((sum, f) => sum + (f.acousticness || 0), 0) / featuresList.length,
-      tempo: tempos.length > 0 ? tempos.reduce((sum, t) => sum + t, 0) / tempos.length : null,
+      energy: averageFeature("energy"),
+      danceability: averageFeature("danceability"),
+      valence: averageFeature("valence"),
+      acousticness: averageFeature("acousticness"),
+      tempo: averageFeature("tempo"),
     };
   }
 
@@ -174,11 +203,16 @@ function buildSessionProfile(guildId, referenceTrack) {
     avgYear,
     energyTrend,
     valenceTrend,
+    referenceGenres: referenceMetadata.genres,
+    referenceGenreFamilies: getGenreFamilies(referenceMetadata.genres),
+    referenceFeatures: referenceMetadata.features,
+    recentGenreFamilies,
   };
 }
 
 module.exports = {
   buildSessionProfile,
+  getTrackMetadata,
   sessionStartTime,
   genreCache,
 };

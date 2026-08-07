@@ -5,8 +5,10 @@ const { clearPendingUpdates } = require("../equalizer/throttle");
 const Log = require("../logs/log");
 const statsStore = require("../stats/store");
 const { getEqualizerState } = require("./equalizerStore");
-const { describeTrack } = require("./fallbacks");
+const { toLavalinkFilters } = require("./filters");
 const { getPlayer, getPoru } = require("./players");
+const { addManualTracksToQueue } = require("./queueOrdering");
+const { rankSearchResults } = require("./searchRanking");
 const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
 const {
   clearInactivityTimer,
@@ -38,11 +40,11 @@ async function ensurePlayer(guildId, voiceId, textId) {
 
   const savedEq = getEqualizerState(guildId);
 
-  if (savedEq?.equalizer?.length) {
+  if (savedEq && Object.keys(savedEq).length > 0) {
     try {
       await player.node.rest.updatePlayer({
         guildId,
-        data: { filters: savedEq },
+        data: { filters: toLavalinkFilters(savedEq) },
       });
       player.filters = savedEq;
     } catch (err) {
@@ -162,6 +164,24 @@ async function lavalinkResolveTracks(query, source = "deezer") {
     const selectedIndex = res.playlistInfo?.selectedTrack ?? 0;
     nowPlaying = tracksToAdd[selectedIndex] ?? nowPlaying;
   } else {
+    if (!isUrl && (res.loadType === "search" || !res.loadType)) {
+      const ranked = rankSearchResults(validTracks, q, { withScores: true });
+      const bestMatch = ranked[0];
+
+      if (bestMatch) {
+        nowPlaying = bestMatch.track;
+        Log.info(
+          "🎯 Search result selected",
+          `title=${nowPlaying.info?.title || "Unknown"}`,
+          `artist=${nowPlaying.info?.author || "Unknown"}`,
+          `score=${bestMatch.score.toFixed(1)}`,
+          `popularity=${bestMatch.popularity || 0}`,
+          `reasons=${bestMatch.reasons.join(",") || "provider order"}`,
+          `candidates=${validTracks.length}`
+        );
+      }
+    }
+
     tracksToAdd = [nowPlaying];
   }
 
@@ -219,8 +239,9 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
     };
 
     if (shouldPrepend) await player.queue.unshift(track);
-    else await player.queue.add(track);
   }
+
+  if (!shouldPrepend) addManualTracksToQueue(player, queueTargets);
 
   const currentTitle = player.currentTrack?.info?.title || "none";
   Log.info(

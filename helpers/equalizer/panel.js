@@ -1,5 +1,8 @@
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { BRAND } = require("../brand");
 const { getEqualizerState } = require("../lavalink/equalizerStore");
+const { FILTER_PRESET_NAMES, getFilterPreset } = require("../lavalink/filterPresets");
+const { getCurrentFilterName } = require("../lavalink/filters");
 const PRESET_CHOICES = require("./presets");
 
 const panelState = new Map();
@@ -132,6 +135,7 @@ function buildPanelEmbed(guildId, bandsOverride = null) {
   }
 
   const presetName = getCurrentPresetName(guildId);
+  const filterName = getCurrentFilterName(guildId);
   const state = ensurePanelState(guildId);
   const selectedBandIndex = state.selectedBandIndex || 0;
 
@@ -149,10 +153,12 @@ function buildPanelEmbed(guildId, bandsOverride = null) {
   }
 
   const embed = new EmbedBuilder()
-    .setColor("#5865F2")
+    .setColor(BRAND.colors.primary)
     .setTitle(`🎚️ Mixer Panel – ${presetName}`)
     .setDescription(bandDisplay || "No data")
-    .setFooter({ text: `Band ${selectedBandIndex + 1}/${TOTAL_BANDS} selected • Use ▲/▼ to navigate` })
+    .setFooter({
+      text: `Band ${selectedBandIndex + 1}/${TOTAL_BANDS} selected • Effect: ${filterName} • Use ▲/▼ to navigate`,
+    })
     .setTimestamp();
 
   return embed;
@@ -170,6 +176,22 @@ function buildPresetSelectMenu() {
           description: `Apply ${preset} preset`,
         }))
       )
+  );
+}
+
+function buildFilterSelectMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("eq:filter:select")
+      .setPlaceholder("Choose an audio effect")
+      .addOptions([
+        { label: "Off", value: "off", description: "Turn off effects and keep EQ" },
+        ...FILTER_PRESET_NAMES.map((name) => ({
+          label: name,
+          value: name,
+          description: getFilterPreset(name).description.substring(0, 100),
+        })),
+      ])
   );
 }
 
@@ -213,6 +235,7 @@ function buildPanelComponents(guildId) {
 
   return [
     buildPresetSelectMenu(),
+    buildFilterSelectMenu(),
     buildBandSelectorRow(),
     buildGainControlRow(),
     buildUtilityRow(state.savedSnapshot !== null),

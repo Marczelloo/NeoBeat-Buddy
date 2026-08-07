@@ -1,7 +1,45 @@
 const { EQUALIZER_PRESETS } = require("./constants");
 const { equalizerState, setEqualizerState } = require("./equalizerStore");
+const { getFilterPreset } = require("./filterPresets");
 const { getPlayer } = require("./players");
 const { clearInactivityTimer } = require("./timers");
+
+const EFFECT_FILTER_KEYS = [
+  "karaoke",
+  "timescale",
+  "tremolo",
+  "vibrato",
+  "rotation",
+  "distortion",
+  "channelMix",
+  "lowPass",
+];
+
+function toLavalinkFilters(filters) {
+  const payload = { ...(filters || {}) };
+  delete payload.preset;
+  delete payload.filterPreset;
+  return payload;
+}
+
+function getStoredFilters(guildId, player) {
+  return { ...(equalizerState.get(String(guildId)) ?? player.filters ?? {}) };
+}
+
+async function applyFilters(guildId, player, nextFilters, reason) {
+  const payload = toLavalinkFilters(nextFilters);
+
+  await player.node.rest.updatePlayer({
+    guildId,
+    data: { filters: payload },
+  });
+
+  setEqualizerState(guildId, nextFilters);
+  player.filters = nextFilters;
+  clearInactivityTimer(guildId, reason);
+
+  return { status: "ok", filters: nextFilters };
+}
 
 async function lavalinkSetEqualizer(guildId, presetOrBands) {
   const player = getPlayer(guildId);
@@ -24,22 +62,14 @@ async function lavalinkSetEqualizer(guildId, presetOrBands) {
   if (!bands.length && presetOrBands && !EQUALIZER_PRESETS[presetOrBands?.toLowerCase()])
     return { status: "invalid_preset" };
 
-  const current = equalizerState.get(guildId) ?? {};
+  const current = getStoredFilters(guildId, player);
   const nextFilters = {
     ...current,
     equalizer: bands,
+    preset: Array.isArray(presetOrBands) ? "custom" : String(presetOrBands || "flat").toLowerCase(),
   };
 
-  await player.node.rest.updatePlayer({
-    guildId,
-    data: { filters: nextFilters },
-  });
-
-  setEqualizerState(guildId, nextFilters);
-  player.filters = nextFilters;
-  clearInactivityTimer(guildId, "setEqualizer");
-
-  return { status: "ok", filters: nextFilters };
+  return applyFilters(guildId, player, nextFilters, "setEqualizer");
 }
 
 async function lavalinkResetFilters(guildId) {
@@ -47,23 +77,51 @@ async function lavalinkResetFilters(guildId) {
 
   if (!player) return { status: "no_player" };
 
-  const baseline = { ...(player.filters ?? {}) };
+  const baseline = getStoredFilters(guildId, player);
   delete baseline.equalizer;
 
-  await player.node.rest.updatePlayer({
-    guildId,
-    data: { filters: { ...baseline, equalizer: [] } },
-  });
-
   const resetFilters = { ...baseline, equalizer: [] };
-  setEqualizerState(guildId, resetFilters);
-  player.filters = resetFilters;
-  clearInactivityTimer(guildId, "resetFilters");
+  resetFilters.preset = "flat";
+  return applyFilters(guildId, player, resetFilters, "resetFilters");
+}
 
-  return { status: "ok" };
+async function lavalinkSetFilterPreset(guildId, presetName) {
+  const player = getPlayer(guildId);
+
+  if (!player) return { status: "no_player" };
+
+  const preset = getFilterPreset(presetName);
+  if (!preset) return { status: "invalid_preset" };
+
+  const nextFilters = getStoredFilters(guildId, player);
+  EFFECT_FILTER_KEYS.forEach((key) => delete nextFilters[key]);
+  Object.assign(nextFilters, preset.filters, { filterPreset: preset.name });
+
+  return applyFilters(guildId, player, nextFilters, "setFilterPreset");
+}
+
+async function lavalinkResetEffects(guildId) {
+  const player = getPlayer(guildId);
+
+  if (!player) return { status: "no_player" };
+
+  const nextFilters = getStoredFilters(guildId, player);
+  EFFECT_FILTER_KEYS.forEach((key) => delete nextFilters[key]);
+  delete nextFilters.filterPreset;
+
+  return applyFilters(guildId, player, nextFilters, "resetEffects");
+}
+
+function getCurrentFilterName(guildId) {
+  return equalizerState.get(String(guildId))?.filterPreset || "off";
 }
 
 module.exports = {
+  EFFECT_FILTER_KEYS,
+  getCurrentFilterName,
   lavalinkSetEqualizer,
+  lavalinkSetFilterPreset,
+  lavalinkResetEffects,
   lavalinkResetFilters,
+  toLavalinkFilters,
 };

@@ -3,6 +3,8 @@ const djStore = require("../../helpers/dj/store");
 const { errorEmbed, successEmbed } = require("../../helpers/embeds");
 const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { createPoru, getPlayer } = require("../../helpers/lavalink");
+const { addManualTracksToQueue } = require("../../helpers/lavalink/queueOrdering");
+const { rankSearchResults } = require("../../helpers/lavalink/searchRanking");
 const { generateShareCode, importFromCode, shareWithUser } = require("../../helpers/playlists/sharing");
 const {
   createPlaylist,
@@ -285,7 +287,8 @@ module.exports = {
           return interaction.respond([]);
         }
 
-        const options = resolved.tracks.slice(0, 25).map((track) => ({
+        const rankedTracks = rankSearchResults(resolved.tracks, query, { limit: 25 });
+        const options = rankedTracks.map((track) => ({
           name: `${track.info.title} - ${track.info.author}`.substring(0, 100),
           value: track.info.uri || track.info.title,
         }));
@@ -595,7 +598,7 @@ async function handlePlay(interaction, userId, guildId) {
   if (prepend) {
     player.queue.unshift(...tracks);
   } else {
-    player.queue.push(...tracks);
+    addManualTracksToQueue(player, tracks);
   }
 
   // Start playing if not already
@@ -628,7 +631,8 @@ async function handleAdd(interaction, userId, guildId) {
       return interaction.editReply({ embeds: [errorEmbed("No tracks found for that query.")] });
     }
 
-    track = resolved.tracks[0];
+    const isUrl = /^https?:\/\//i.test(trackQuery.trim());
+    track = isUrl ? resolved.tracks[0] : rankSearchResults(resolved.tracks, trackQuery)[0];
   } else {
     // Use current track
     const player = getPlayer(guildId);

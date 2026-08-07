@@ -1,9 +1,10 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { BRAND } = require("../../helpers/brand");
 const statsStore = require("../../helpers/stats/store");
 
 const COLORS = {
-  wrapped: 0x1db954, // Spotify green
-  insights: 0xff006e,
+  wrapped: BRAND.colors.primary,
+  insights: BRAND.colors.secondary,
 };
 
 const ICONS = {
@@ -16,15 +17,6 @@ const ICONS = {
   artist: "👤",
   source: "📻",
   calendar: "📅",
-};
-
-const formatDuration = (ms) => {
-  const hours = Math.floor(ms / 3_600_000);
-  const minutes = Math.floor((ms % 3_600_000) / 60_000);
-
-  if (hours === 0) return `${minutes}m`;
-  if (minutes === 0) return `${hours}h`;
-  return `${hours}h ${minutes}m`;
 };
 
 const formatTimeAgo = (isoString) => {

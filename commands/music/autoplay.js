@@ -9,7 +9,7 @@ const { getPlayer } = require("../../helpers/lavalink");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("autoplay")
-    .setDescription("Toggle autoplay mode (automatically queues related tracks)")
+    .setDescription("Toggle mewbit smart autoplay (keeps genre, mood, tempo, and energy flowing)")
     .addBooleanOption((option) =>
       option.setName("enable").setDescription("Enable or disable autoplay mode").setRequired(true)
     ),
@@ -37,7 +37,9 @@ module.exports = {
       embeds: [
         successEmbed(
           `Autoplay ${status}`,
-          enable ? "I'll automatically queue related tracks when the queue ends." : "Autoplay has been turned off."
+          enable
+            ? "I’ll queue compatible tracks while keeping the current genre, mood, tempo, and energy flowing."
+            : "Smart autoplay has been turned off."
         ),
       ],
     });

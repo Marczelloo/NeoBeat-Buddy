@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
+const { BRAND, brandFooter } = require("./brand");
 const { formatDuration } = require("./utils");
 
 const ICONS = {
@@ -18,14 +19,14 @@ const ICONS = {
 };
 
 const COLORS = {
-  player: "#1DB954",
-  success: "#00d26a",
-  error: "#ff4757",
-  song: "#7289da",
-  lyrics: "#5865F2",
-  playlist: "#e91e63",
-  stats: "#f39c12",
-  queue: "#5865F2",
+  player: BRAND.colors.primary,
+  success: BRAND.colors.success,
+  error: BRAND.colors.error,
+  song: BRAND.colors.secondary,
+  lyrics: BRAND.colors.primary,
+  playlist: BRAND.colors.secondary,
+  stats: "#a978ff",
+  queue: BRAND.colors.deep,
 };
 
 const bold = (label, value) => `**${label}** ${value ?? "—"}`;
@@ -99,7 +100,7 @@ module.exports = {
       .setTitle(title)
       .setDescription(description || null)
       .setFooter({
-        text: "Neo Beat Buddy • Success",
+        text: brandFooter("Success"),
       });
   },
   errorEmbed: function (title, description) {
@@ -112,7 +113,7 @@ module.exports = {
       .setTitle(title)
       .setDescription(description || null)
       .setFooter({
-        text: "Neo Beat Buddy • Error",
+        text: brandFooter("Error"),
       })
       .setTimestamp();
   },
@@ -145,7 +146,7 @@ module.exports = {
       .setDescription(trackInfo.author ? `*${trackInfo.author}*` : null)
       .setThumbnail(trackInfo.artworkUrl ?? trackInfo.image ?? "https://i.imgur.com/3g7nmJC.png")
       .addFields({ name: "\u200b", value: details })
-      .setFooter({ text: "Neo Beat Buddy • Queue system" })
+      .setFooter({ text: brandFooter("Queue system") })
       .setTimestamp();
   },
   lyricsEmbed: function (title, description, footerNote) {
@@ -157,7 +158,7 @@ module.exports = {
       })
       .setTitle(title)
       .setDescription(description || null)
-      .setFooter({ text: footerNote || "Neo Beat Buddy • Lyrics" });
+      .setFooter({ text: footerNote || brandFooter("Lyrics") });
   },
   playlistEmbed({ title, url, trackCount, totalDurationMs, requesterTag, requesterAvatar, source }) {
     const durationLabel = Number.isFinite(totalDurationMs) ? formatDuration(totalDurationMs) : "Unknown";
@@ -176,7 +177,7 @@ module.exports = {
         { name: "Total duration", value: `**${durationLabel}**`, inline: true }
       )
       .setFooter({
-        text: requesterTag ? `Requested by ${requesterTag}` : "Neo Beat Buddy • Queue",
+        text: requesterTag ? `Requested by ${requesterTag}` : brandFooter("Queue"),
         iconURL: requesterAvatar ?? undefined,
       })
       .setTimestamp();
@@ -305,7 +306,7 @@ module.exports = {
   },
   helpCategoryEmbed(category, user) {
     const embed = new EmbedBuilder()
-      .setColor(0xff4f8b)
+      .setColor(BRAND.colors.secondary)
       .setTitle(`Help - ${category.label}`)
       .setDescription(category.description);
 

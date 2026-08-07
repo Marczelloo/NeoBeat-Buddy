@@ -3,9 +3,10 @@ services:
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: lavalink
     env_file:
-      - ../../.env
+      - ../../.env.dev
     environment:
       - SERVER_PORT=2333
+      - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
       - ./plugins:/opt/Lavalink/plugins

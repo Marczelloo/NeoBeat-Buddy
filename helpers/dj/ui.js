@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { BRAND } = require("../brand");
 
-const PROPOSAL_COLOR = 0x5865f2;
+const PROPOSAL_COLOR = BRAND.colors.deep;
 const MAX_SUMMARY_LINES = 5;
 const MAX_FIELD_LENGTH = 1024;
 

@@ -1,4 +1,99 @@
 {
+  "1.1.4": {
+    "version": "1.1.4",
+    "date": "2026-08-07",
+    "title": "Source-Aware Autocomplete",
+    "features": [
+      "Autocomplete now follows the currently selected Deezer, YouTube, Spotify, or Auto source",
+      "Explicit Auto selection now consistently uses smart Deezer-first fallback behavior"
+    ],
+    "fixes": [
+      "Fixed autocomplete fallback silently switching to the default YouTube source",
+      "Prevented slower autocomplete requests from overwriting newer results after changing source",
+      "Fixed /play treating an explicit Auto selection as if no source had been selected"
+    ],
+    "changes": [
+      "Added source-resolution and stale-request regression tests"
+    ]
+  },
+  "1.1.3": {
+    "version": "1.1.3",
+    "date": "2026-08-07",
+    "title": "Queue-Aware Effects",
+    "features": [
+      "Manual tracks now jump ahead of the autoplay buffer without reordering the manual queue",
+      "Added /filter presets for nightcore, vaporwave, 8D, karaoke, wobble, meme, and more",
+      "The EQ panel now includes a second selector for live audio effects"
+    ],
+    "fixes": [
+      "Prevented manually queued songs from being hidden behind prefetched autoplay tracks",
+      "Filter presets preserve the current EQ and restore correctly after reconnecting a player"
+    ],
+    "changes": [
+      "Added /filter list and /filter reset commands",
+      "Added queue-ordering and filter-preset test coverage"
+    ]
+  },
+  "1.1.2": {
+    "version": "1.1.2",
+    "date": "2026-08-07",
+    "title": "Precision Search Ranking",
+    "features": [
+      "Search now ranks artist and title matches before provider result order",
+      "Popularity metadata is used to choose the strongest result when matches are otherwise equal",
+      "Autocomplete and playlist track searches use the same ranking logic as playback"
+    ],
+    "fixes": [
+      "Fixed /play selecting an unrelated popular result simply because it appeared first",
+      "Reduced accidental selection of live, remix, cover, and acoustic variants when the query did not request them"
+    ],
+    "changes": [
+      "Added search selection diagnostics to Lavalink playback logs",
+      "Added automated coverage for exact matching, token matching, popularity tie-breaks, and stable provider ordering"
+    ]
+  },
+  "1.1.1": {
+    "version": "1.1.1",
+    "date": "2026-08-07",
+    "title": "Gapless Autoplay Prefetch",
+    "features": [
+      "Autoplay now keeps a one-track buffer ready while the current song is playing",
+      "Smart recommendations begin loading before the queue is empty for smoother transitions"
+    ],
+    "fixes": [
+      "Removed the audible pause caused by waiting for queueEnd before fetching autoplay recommendations",
+      "Prevented duplicate recommendation fetches when prefetch and queueEnd happen close together",
+      "Kept the queueEnd fetch as a safe fallback when prefetch cannot complete in time"
+    ],
+    "changes": [
+      "Updated autoplay documentation and help text to describe the buffered flow"
+    ]
+  },
+  "1.1.0": {
+    "version": "1.1.0",
+    "date": "2026-08-07",
+    "title": "Mewbit Neon Rebrand & Vibe-Locked Autoplay",
+    "features": [
+      "Full Mewbit visual rebrand with a neon cyan, magenta, and midnight palette",
+      "Rotating branded bot activities with music-themed status lines every minute",
+      "Vibe-locked autoplay keeps genre families, BPM, energy, and mood transitions coherent",
+      "Smart genre-family guard prevents hard jumps such as rap to metal",
+      "Autoplay learns from recent genre repetition and adds variety without breaking the session mood",
+      "Deezer and YouTube candidates can be enriched with cached Spotify genre and audio metadata"
+    ],
+    "fixes": [
+      "Fixed Spotify recommendation genre mapping so one artist's genres are not copied to every track",
+      "Fixed session metadata cache priority when tracks contain empty userData arrays",
+      "Fixed autoplay feature averages and trend calculations when audio values are missing or equal to zero",
+      "Removed random autoplay tie-breaking in favor of stable, reproducible selection"
+    ],
+    "changes": [
+      "Updated player, queue, lyrics, playlist, statistics, equalizer, DJ, setup, help, and changelog surfaces",
+      "Autoplay now scores direct continuity against the currently playing track before long-term history",
+      "Package identity and documentation now use the mewbit brand",
+      "Added automated genre-continuity coverage for incompatible and compatible transitions"
+    ]
+  },
   "1.0.12": {
     "version": "1.0.12",
     "date": "2025-12-01",

@@ -1,4 +1,5 @@
 const Log = require("../logs/log");
+const { areGenreFamiliesCompatible, findGenreOverlap, getGenreFamilies } = require("./genreUtils");
 const { sessionStartTime } = require("./sessionProfile");
 
 /**
@@ -13,6 +14,8 @@ function getTimeOfDayFactor() {
   if (hour >= 18 && hour < 22) return { period: "evening", energyPreference: "moderate", factor: 0.65 };
   return { period: "night", energyPreference: "low", factor: 0.4 };
 }
+
+const hasNumber = (value) => Number.isFinite(value);
 
 /**
  * Scores candidate tracks using 12-factor algorithm
@@ -32,6 +35,56 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
   candidates.forEach((candidate) => {
     let score = 50;
     const scoringDetails = [];
+    candidate.hardRejected = false;
+
+    const candidateFamilies = getGenreFamilies(candidate.genres || []);
+    const referenceFamilies = profile.referenceGenreFamilies || [];
+    const referenceGenres = profile.referenceGenres || [];
+    candidate.genreFamilies = candidateFamilies;
+
+    // The last track is the strongest signal. Do not allow a known genre-family
+    // jump such as rap -> metal just because the source has a high quality bonus.
+    const transitionCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
+    if (transitionCompatibility === false) {
+      score -= 90;
+      candidate.hardRejected = true;
+      candidate.rejectionReason = "incompatible-genre-family";
+      scoringDetails.push("transition:-90(genre-drift)");
+    } else if (transitionCompatibility === true) {
+      score += 12;
+      scoringDetails.push("transition:+12(compatible-vibe)");
+    }
+
+    const exactReferenceOverlap = findGenreOverlap(referenceGenres, candidate.genres || []);
+    if (exactReferenceOverlap.length > 0) {
+      score += 8;
+      scoringDetails.push("transition:+8(shared-subgenre)");
+    }
+
+    // Softly discourage leaving the dominant session family while still
+    // allowing a compatible bridge between related styles.
+    const dominantFamilies = getGenreFamilies((profile.topGenres || []).slice(0, 4).map((item) => item.genre));
+    if (!candidate.hardRejected && candidateFamilies.length > 0 && dominantFamilies.length > 0) {
+      const sessionCompatibility = areGenreFamiliesCompatible(dominantFamilies, candidateFamilies);
+      if (sessionCompatibility === false && profile.totalTracks >= 3) {
+        score -= 35;
+        scoringDetails.push("sessionVibe:-35(drift)");
+      }
+    }
+
+    // Keep the session varied without forcing a genre change when the vibe is
+    // working: repeating one family three or more times gets a soft penalty.
+    if (candidateFamilies.length > 0 && profile.recentGenreFamilies?.length > 0) {
+      const recentFamilyCounts = profile.recentGenreFamilies.reduce((counts, family) => {
+        counts[family] = (counts[family] || 0) + 1;
+        return counts;
+      }, {});
+      const repeatedFamilies = candidateFamilies.filter((family) => (recentFamilyCounts[family] || 0) >= 3);
+      if (repeatedFamilies.length === candidateFamilies.length) {
+        score -= 10;
+        scoringDetails.push("genreVariety:-10(repeated-family)");
+      }
+    }
 
     // Factor 1: Artist familiarity
     const artistWeight = profile.artistCounts[candidate.artist] || 0;
@@ -111,7 +164,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     }
 
     // Factor 5: Tempo/BPM consistency
-    if (candidate.features?.tempo && profile.avgTempo) {
+    if (hasNumber(candidate.features?.tempo) && hasNumber(profile.avgTempo)) {
       const tempoDiff = Math.abs(candidate.features.tempo - profile.avgTempo);
 
       if (tempoDiff < 15) {
@@ -123,6 +176,50 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       } else if (tempoDiff > 60) {
         score -= 5;
         scoringDetails.push("tempo:-5");
+      }
+    }
+
+    // Direct transition continuity is more important than a long-term average;
+    // it prevents an otherwise good recommendation from feeling like a hard cut.
+    const referenceFeatures = profile.referenceFeatures;
+    if (candidate.features && referenceFeatures) {
+      if (hasNumber(candidate.features.tempo) && hasNumber(referenceFeatures.tempo)) {
+        const tempoDiff = Math.abs(candidate.features.tempo - referenceFeatures.tempo);
+        if (tempoDiff < 10) {
+          score += 18;
+          scoringDetails.push("continuity:+18(tempo)");
+        } else if (tempoDiff < 22) {
+          score += 10;
+          scoringDetails.push("continuity:+10(tempo)");
+        } else if (tempoDiff > 55) {
+          score -= 20;
+          scoringDetails.push("continuity:-20(tempo)");
+        }
+      }
+
+      if (hasNumber(candidate.features.energy) && hasNumber(referenceFeatures.energy)) {
+        const energyDiff = Math.abs(candidate.features.energy - referenceFeatures.energy);
+        if (energyDiff < 0.12) {
+          score += 18;
+          scoringDetails.push("continuity:+18(energy)");
+        } else if (energyDiff < 0.25) {
+          score += 10;
+          scoringDetails.push("continuity:+10(energy)");
+        } else if (energyDiff > 0.4) {
+          score -= 20;
+          scoringDetails.push("continuity:-20(energy)");
+        }
+      }
+
+      if (hasNumber(candidate.features.valence) && hasNumber(referenceFeatures.valence)) {
+        const valenceDiff = Math.abs(candidate.features.valence - referenceFeatures.valence);
+        if (valenceDiff < 0.15) {
+          score += 12;
+          scoringDetails.push("continuity:+12(mood)");
+        } else if (valenceDiff > 0.45) {
+          score -= 12;
+          scoringDetails.push("continuity:-12(mood)");
+        }
       }
     }
 
@@ -154,7 +251,12 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     }
 
     // Factor 8: Mood progression
-    if (candidate.features?.valence !== undefined && profile.valenceTrend && profile.avgFeatures?.valence) {
+    if (
+      candidate.features?.valence !== undefined &&
+      profile.valenceTrend &&
+      profile.avgFeatures?.valence !== undefined &&
+      profile.avgFeatures?.valence !== null
+    ) {
       if (profile.valenceTrend === "increasing" && candidate.features.valence > profile.avgFeatures.valence) {
         score += 12;
         scoringDetails.push("mood:+12(rising)");
@@ -171,7 +273,12 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     }
 
     // Factor 9: Energy arc management
-    if (candidate.features?.energy !== undefined && profile.energyTrend && profile.avgFeatures?.energy) {
+    if (
+      candidate.features?.energy !== undefined &&
+      profile.energyTrend &&
+      profile.avgFeatures?.energy !== undefined &&
+      profile.avgFeatures?.energy !== null
+    ) {
       if (profile.energyTrend === "increasing" && candidate.features.energy > profile.avgFeatures.energy) {
         score += 15;
         scoringDetails.push("energyArc:+15(building)");
@@ -381,7 +488,9 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
 
   if (topCandidates.length > 1) {
     topCandidates.forEach((c) => {
-      c.score += Math.random() * 5;
+      // Stable tie-breaker keeps autoplay varied without making decisions
+      // change randomly on every invocation.
+      c.score += (((c.artist?.length || 0) + (c.title?.length || 0)) % 5) / 100;
     });
 
     candidates.sort((a, b) => b.score - a.score);

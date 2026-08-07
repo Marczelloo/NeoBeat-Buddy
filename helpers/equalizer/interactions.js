@@ -1,6 +1,11 @@
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require("discord.js");
 const { getEqualizerState } = require("../lavalink/equalizerStore");
-const { lavalinkSetEqualizer, lavalinkResetFilters } = require("../lavalink/filters");
+const {
+  lavalinkResetEffects,
+  lavalinkResetFilters,
+  lavalinkSetEqualizer,
+  lavalinkSetFilterPreset,
+} = require("../lavalink/filters");
 const Log = require("../logs/log");
 const { saveUserPreset } = require("./customPresets");
 const {
@@ -24,6 +29,12 @@ async function handlePanelInteraction(interaction) {
   if (customId === "eq:preset:select") {
     const preset = interaction.values[0];
     await handlePresetSelect(interaction, guildId, preset);
+    return;
+  }
+
+  if (customId === "eq:filter:select") {
+    const preset = interaction.values[0];
+    await handleFilterPresetSelect(interaction, guildId, preset);
     return;
   }
 
@@ -92,6 +103,14 @@ async function refreshPanel(interaction, guildId) {
 
 async function handlePresetSelect(interaction, guildId, preset) {
   await lavalinkSetEqualizer(guildId, preset);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await refreshPanel(interaction, guildId);
+}
+
+async function handleFilterPresetSelect(interaction, guildId, preset) {
+  if (preset === "off") await lavalinkResetEffects(guildId);
+  else await lavalinkSetFilterPreset(guildId, preset);
+
   await new Promise((resolve) => setTimeout(resolve, 50));
   await refreshPanel(interaction, guildId);
 }

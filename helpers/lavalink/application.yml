@@ -36,10 +36,10 @@ lavalink:
       channelMix: true
       lowPass: true
   plugins:
-    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.1"
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.15.0"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
     - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
@@ -57,17 +57,10 @@ logging:
 
 plugins:
   lavalyrics:
-<<<<<<< HEAD
     sources: # Priority order for lyrics sources (tries in this order)
       - deezer # Try Deezer's native lyrics first
       - spotify # Then Spotify lyrics
       - youtube # Then YouTube lyrics
-=======
-    sources:  # Priority order for lyrics sources (tries in this order)
-      - deezer     # Try Deezer's native lyrics first
-      - spotify    # Then Spotify lyrics
-      - youtube    # Then YouTube lyrics
->>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       # LRCLIB is automatic fallback when above sources don't have lyrics
   youtube:
     enabled: true
@@ -80,7 +73,6 @@ plugins:
       - WEB
       - WEBEMBEDDED
       - TV
-      - TVHTML5EMBEDDED
     cookies:
       file: /opt/Lavalink/youtube-cookies.txt
     pot:
@@ -102,11 +94,7 @@ plugins:
       ytmsearch: true
     lyrics-sources:
       deezer: true
-<<<<<<< HEAD
       spotify: false # Disabled - LavaSrc can't extract Spotify secret from current web player
-=======
-      spotify: false  # Disabled - LavaSrc can't extract Spotify secret from current web player
->>>>>>> b1adc1d599ff252d5b2c968ebb9ffa2ae4241601
       youtube: true
       yandexmusic: false
       vkmusic: false

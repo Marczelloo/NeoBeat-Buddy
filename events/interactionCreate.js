@@ -94,7 +94,7 @@ async function logBotCommand(interaction, success, error = null) {
     embed.setFooter({ text: `User ID: ${interaction.user.id}` });
 
     await channel.send({ embeds: [embed] });
-  } catch (err) {
+  } catch {
     // Silently fail - don't break command execution for logging
   }
 }

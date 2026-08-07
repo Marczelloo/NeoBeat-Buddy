@@ -51,9 +51,9 @@ If you choose to deploy this bot:
 
 **Use at your own risk. The author is not liable for your deployment choices.**
 
-# Neo Beat Buddy
+# mewbit
 
-A feature-rich Discord music bot powered by Lavalink and Poru, with DJ mode, adaptive genre-aware smart autoplay, advanced statistics, interactive EQ mixer, and seamless playlist support.
+A neon cyberpunk Discord music bot powered by Lavalink and Poru, with DJ mode, adaptive genre-aware smart autoplay, rotating Mewbit presence lines, advanced statistics, interactive EQ mixer, and seamless playlist support.
 
 ## Features
 
@@ -168,7 +168,7 @@ pnpm deploy:dev
 
 ### 🤖 Smart Autoplay (Genre-Aware + Adaptive)
 
-**Autoplay automatically discovers and queues music when your queue is empty, maintaining genre consistency, tempo flow, and natural energy progression throughout your listening session.**
+**Autoplay discovers compatible music before your queue is empty and keeps a one-track buffer ready, maintaining genre consistency, tempo flow, and natural energy progression throughout your listening session.**
 
 #### How It Works
 
@@ -190,8 +190,10 @@ pnpm deploy:dev
    - **-25 point penalty** for tracks with no genre overlap when you have a strong genre profile
    - **-15 points** per genre you've skipped recently
    - Learns from your skips to avoid unwanted genres
+   - Groups related genres into compatible families, so rap can bridge into R&B/pop but does not jump straight into metal
+   - Hard-rejects known incompatible transitions from the currently playing track
 
-4. **Advanced scoring system** — Ranks candidates using **12 intelligent factors**:
+4. **Vibe continuity scoring** — Ranks candidates using session history plus the currently playing track:
 
    - **Genre consistency** — Strongly favors tracks matching your recent genres (+30 per match)
    - **Tempo/BPM matching** — Maintains natural flow (+15 within 15 BPM, +8 within 30 BPM)
@@ -203,6 +205,9 @@ pnpm deploy:dev
    - **Duration similarity** — Matches average song length (+10 within 20%, +5 within 40%)
    - **Source quality** — Deezer > YouTube Mix > Search (+35/+15/+10)
    - **Smart artist diversity** — Context-aware penalties that prioritize sonic cohesion over strict rotation
+   - **Direct vibe continuity** — Compares the next track with the current track's BPM, energy, and mood
+   - **Genre-family guard** — Rejects incompatible genre jumps before source quality can override the vibe
+   - **Genre variety** — Softly penalizes repeating one family too many times while keeping compatible transitions
    - **Skip learning** — Downweights artists and genres you skip (-20/-15 per skip)
    - **Duplicate prevention** — Never plays the same song twice (-1000 penalty)
 
@@ -292,7 +297,7 @@ If you're listening to rock music:
 
 #### Audio Feature Targeting
 
-The algorithm uses Deezer recommendations to maintain consistency, with optional Spotify metadata enrichment for tempo and energy analysis when credentials are configured.
+The algorithm uses Deezer and Spotify recommendations to maintain consistency. When Spotify credentials are configured, Deezer/YouTube fallback candidates are enriched with cached Spotify genres and audio features so source fallbacks remain vibe-aware instead of becoming genre-blind.
 
 #### Smart Artist Diversity (Context-Aware)
 
@@ -350,7 +355,7 @@ If you're listening to rock:
 # Autoplay status shows in the now-playing message
 ```
 
-**When enabled**, autoplay triggers automatically when the queue ends, seamlessly continuing your listening session with curated recommendations that match your genre preferences, tempo flow, mood, and energy levels.
+**When enabled**, autoplay starts preparing the next track when one or fewer tracks remain in the queue, then uses the queue-end handler only as a fallback. This keeps the listening session moving with curated recommendations that match your genre preferences, tempo flow, mood, and energy levels.
 
 **Note:** Deezer credentials are required for the best autoplay experience with genre consistency. Without Deezer, the bot falls back to YouTube Mix recommendations (no genre awareness). Spotify credentials are optional but recommended — they provide rich metadata (genres, audio features, popularity) for better scoring, but playback will still work without them.
 

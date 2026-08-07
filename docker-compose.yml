@@ -1,7 +1,7 @@
 services:
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4
-    container_name: neo-lavalink
+    container_name: mewbit-lavalink
     env_file:
       - .env
     environment:
