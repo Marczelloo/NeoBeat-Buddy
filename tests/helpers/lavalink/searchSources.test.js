@@ -65,7 +65,9 @@ describe("Search source selection", () => {
 
     const tracks = await searchAcrossSources(poru, "hit em up", { preferredSource: "deezer" });
 
-    assert.strictEqual(calls.length, 4);
+    assert.strictEqual(calls.length, 5);
+    assert.ok(calls.includes("ytmsearch:hit em up"));
+    assert.ok(calls.includes("ytsearch:hit em up"));
     assert.ok(tracks.some((track) => track.info.author === "2Pac"));
   });
 });

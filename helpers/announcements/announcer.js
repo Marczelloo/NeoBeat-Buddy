@@ -363,6 +363,15 @@ async function sendAnnouncement(client, guildId, fallbackChannelId = null) {
     Log.success("Announcement sent", "", `guild=${guildId}`, `version=${getCurrentVersion()}`, `channel=${channelId}`);
     return true;
   } catch (err) {
+    // A stale channel ID or revoked permission should not create a red
+    // Recent Errors entry every time the bot starts. Treat it as a skipped
+    // announcement for this version; the next release will retry normally.
+    if (err?.code === 50001 || err?.code === 50013) {
+      markAsAnnounced(guildId);
+      Log.warning("Announcement skipped: bot has no access to the configured channel", "", `guild=${guildId}`);
+      return false;
+    }
+
     Log.error("Failed to send announcement", err, `guild=${guildId}`);
     return false;
   }
@@ -381,7 +390,9 @@ function updateBotStatus(client) {
       const tagline = presenceLines[presenceIndex % presenceLines.length];
       presenceIndex += 1;
 
-      client.user.setActivity(`${BRAND.name} • v${getCurrentVersion()} • ${tagline}`.slice(0, 128), {
+      // Keep the Discord presence compact: the rotating line itself carries
+      // the branding, while command hints and version text make it noisy.
+      client.user.setActivity(tagline.slice(0, 128), {
         type: 2, // LISTENING
       });
     };

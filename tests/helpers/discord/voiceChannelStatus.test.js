@@ -54,4 +54,27 @@ describe("Voice channel track status", () => {
 
     assert.deepStrictEqual(calls, [{ status: "Track title" }, { status: null }]);
   });
+
+  it("does not treat a stale bot track title as the original channel status", async () => {
+    const calls = [];
+    const client = {
+      rest: { put: async (_route, payload) => calls.push(payload.body) },
+      channels: { cache: new Map() },
+    };
+    const player = { guildId: "guild-2", voiceChannel: "voice-3" };
+
+    clearVoiceChannelStatusCache("voice-3");
+    await updateTrackVoiceChannelStatus(client, player, { info: { title: "Old track title" } });
+    calls.length = 0;
+    clearVoiceChannelStatusCache("voice-3");
+    handleRawGatewayPacket({
+      t: "CHANNEL_INFO",
+      d: { channels: [{ id: "voice-3", status: "Old track title" }] },
+    });
+
+    await updateTrackVoiceChannelStatus(client, player, { info: { title: "New track title" } });
+    await restoreVoiceChannelStatus(client, "voice-3");
+
+    assert.deepStrictEqual(calls, [{ status: "New track title" }, { status: null }]);
+  });
 });

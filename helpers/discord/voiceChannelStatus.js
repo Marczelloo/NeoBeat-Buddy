@@ -1,5 +1,29 @@
 const statusByChannel = new Map();
 const boundClients = new WeakSet();
+const knownBotTrackTitles = new Set();
+
+function statusKey(value) {
+  return normalizeStatus(value).normalize("NFKC").toLowerCase();
+}
+
+function rememberBotTrackTitle(track) {
+  const title = normalizeStatus(track?.info?.title);
+  if (!title) return;
+
+  knownBotTrackTitles.delete(statusKey(title));
+  knownBotTrackTitles.add(statusKey(title));
+  if (knownBotTrackTitles.size > 100) {
+    knownBotTrackTitles.delete(knownBotTrackTitles.values().next().value);
+  }
+}
+
+function isBotTrackTitle(value, track = null) {
+  const key = statusKey(value);
+  if (!key) return false;
+
+  const currentTitle = statusKey(track?.info?.title);
+  return (currentTitle && key === currentTitle) || knownBotTrackTitles.has(key);
+}
 
 function normalizeStatus(value) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
@@ -73,11 +97,24 @@ async function setVoiceChannelStatus(client, channelId, status) {
   return true;
 }
 
-function getBaseStatus(channelId, channel) {
+function getBaseStatus(channelId, channel, track = null) {
   const cached = statusByChannel.get(channelId);
-  if (cached) return cached.baseStatus;
+  if (cached) {
+    // Older versions could leave a track title in baseStatus after a restart.
+    // Do not carry that title into the next track or restore it at queue end.
+    if (isBotTrackTitle(cached.baseStatus, track)) {
+      cached.baseStatus = "";
+      statusByChannel.set(channelId, cached);
+    }
+    return cached.baseStatus;
+  }
 
   const channelStatus = normalizeStatus(channel?.status);
+  if (isBotTrackTitle(channelStatus, track)) {
+    rememberStatus(channelId, "");
+    return "";
+  }
+
   rememberStatus(channelId, channelStatus);
   return channelStatus;
 }
@@ -95,12 +132,14 @@ async function updateTrackVoiceChannelStatus(client, player, track) {
   const channelId = player?.voiceChannel;
   if (!channelId) return false;
 
+  rememberBotTrackTitle(track);
+
   const channel = client?.channels?.cache?.get(channelId);
   if (!hasStatusCache(channelId)) {
     requestGuildChannelStatuses(client, player.guildId);
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  const baseStatus = getBaseStatus(channelId, channel);
+  const baseStatus = getBaseStatus(channelId, channel, track);
   return setVoiceChannelStatus(client, channelId, buildTrackStatus(baseStatus, track));
 }
 
@@ -110,7 +149,9 @@ async function restoreVoiceChannelStatus(client, channelId) {
   const entry = statusByChannel.get(channelId);
   if (!entry) return false;
 
-  const restored = await setVoiceChannelStatus(client, channelId, entry.baseStatus);
+  const baseStatus = isBotTrackTitle(entry.baseStatus) ? "" : entry.baseStatus;
+  const restored = await setVoiceChannelStatus(client, channelId, baseStatus);
+  entry.baseStatus = baseStatus;
   entry.botStatus = null;
   statusByChannel.set(channelId, entry);
   return restored;

@@ -1,7 +1,12 @@
 const assert = require("node:assert");
 const { describe, it } = require("node:test");
 
-const { getPopularity, rankSearchResults, scoreSearchResult } = require("../../../helpers/lavalink/searchRanking");
+const {
+  filterRelevantSearchResults,
+  getPopularity,
+  rankSearchResults,
+  scoreSearchResult,
+} = require("../../../helpers/lavalink/searchRanking");
 
 function createTrack(title, author, popularity = 0) {
   return {
@@ -79,5 +84,40 @@ describe("Search result ranking", () => {
     const ranked = rankSearchResults(tracks, "hit em up");
 
     assert.strictEqual(ranked[0].info.author, "2Pac");
+  });
+
+  it("filters unrelated provider results from a multi-word query", () => {
+    const tracks = [
+      createTrack("Why does YouTube Search Suck So Much", "Paul Yu"),
+      createTrack("Hit 'Em Up (Single Version)", "2Pac"),
+      createTrack("Hit Em Up Tutorial", "Random Channel"),
+    ];
+
+    const filtered = filterRelevantSearchResults(tracks, "hit em up");
+
+    assert.deepStrictEqual(filtered.map((track) => track.info.author), ["2Pac"]);
+  });
+
+  it("keeps one-word autocomplete queries relevant", () => {
+    const tracks = [
+      createTrack("Ciepłe Dranie", "Kuki"),
+      createTrack("Unrelated Song", "Another Artist"),
+    ];
+
+    const filtered = filterRelevantSearchResults(tracks, "kuki");
+
+    assert.deepStrictEqual(filtered.map((track) => track.info.author), ["Kuki"]);
+  });
+
+  it("prefers the original Kuki recording over a remix", () => {
+    const tracks = [
+      createTrack("Ciepłe Dranie", "Kuki"),
+      createTrack("Ciepłe Dranie (feat. Kuki) (Remix)", "Stock Wudeczka"),
+    ];
+
+    const ranked = rankSearchResults(tracks, "kuki cieple dranie");
+
+    assert.strictEqual(ranked[0].info.author, "Kuki");
+    assert.strictEqual(ranked[0].info.title, "Ciepłe Dranie");
   });
 });

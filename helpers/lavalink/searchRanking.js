@@ -38,10 +38,20 @@ const VERSION_WORDS = new Set([
   "8d",
 ]);
 
+const NON_MUSIC_SEARCH_PATTERNS = [
+  /\b(?:tutorial|how to|lesson|tips?|tricks?|review|reaction|reacts?|analysis|explained)\b/i,
+  /\b(?:interview|podcast|gameplay|walkthrough|speedrun|stream(?:ed)?\s+sniped|livestream)\b/i,
+  /\b(?:clip|highlights?|trailer|teaser|unboxing|school|class|contest|setup|testing)\b/i,
+  /\b(?:royalty\s+free|shopping\s+spree|teaches?|dub|prank|challenge|asmr|mukbang)\b/i,
+];
+
 function normalizeText(value) {
   return String(value || "")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
+    // NFKD does not decompose every letter used in song titles (notably
+    // Polish ł), so make keyboard-friendly queries match provider metadata.
+    .replace(/[łŁ]/g, "l")
     .toLowerCase()
     .replace(/^(?:dzsearch|ytsearch|spsearch|ytmsearch):\s*/i, "")
     .replace(/https?:\/\/\S+/g, " ")
@@ -207,6 +217,34 @@ function scoreSearchResult(track, query, index = 0) {
   };
 }
 
+function isLikelyNonMusicSearchResult(track) {
+  const haystack = normalizeText(`${track?.info?.title || ""} ${track?.info?.author || ""}`);
+  return NON_MUSIC_SEARCH_PATTERNS.some((pattern) => pattern.test(haystack));
+}
+
+function isRelevantSearchResult(track, query) {
+  if (!track?.info || isLikelyNonMusicSearchResult(track)) return false;
+
+  const queryTokens = getUniqueTokens(query);
+  // Queries made entirely from generic words (for example just "the") do
+  // not have enough signal to filter safely. A real one-word query still
+  // needs to occur in the candidate metadata.
+  if (!queryTokens.length) return true;
+
+  const candidateTokens = getUniqueTokens(`${track.info.author || ""} ${track.info.title || ""}`);
+  const coverage = getCoverage(queryTokens, candidateTokens);
+
+  if (queryTokens.length === 1) return coverage === 1;
+
+  // A multi-word music query should be represented by all meaningful words.
+  // This removes YouTube clips that merely contain one word such as "hit".
+  return coverage >= (queryTokens.length >= 3 ? 1 : 0.75);
+}
+
+function filterRelevantSearchResults(tracks, query) {
+  return (Array.isArray(tracks) ? tracks : []).filter((track) => isRelevantSearchResult(track, query));
+}
+
 function rankSearchResults(tracks, query, { limit, withScores = false } = {}) {
   const ranked = (Array.isArray(tracks) ? tracks : [])
     .map((track, index) => scoreSearchResult(track, query, index))
@@ -222,7 +260,10 @@ function rankSearchResults(tracks, query, { limit, withScores = false } = {}) {
 
 module.exports = {
   getCanonicalTitle,
+  filterRelevantSearchResults,
   getPopularity,
+  isLikelyNonMusicSearchResult,
+  isRelevantSearchResult,
   normalizeText,
   rankSearchResults,
   scoreSearchResult,

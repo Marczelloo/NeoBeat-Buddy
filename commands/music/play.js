@@ -9,7 +9,7 @@ const { beginAutocompleteRequest, isLatestAutocompleteRequest } = require("../..
 const { lavalinkPlay, lavalinkResolveTracks } = require("../../helpers/lavalink/index");
 const { getPoru } = require("../../helpers/lavalink/players");
 const { searchAcrossSources } = require("../../helpers/lavalink/searchAggregator");
-const { rankSearchResults } = require("../../helpers/lavalink/searchRanking");
+const { filterRelevantSearchResults, rankSearchResults } = require("../../helpers/lavalink/searchRanking");
 const { resolveSearchSource } = require("../../helpers/lavalink/searchSources");
 const Log = require("../../helpers/logs/log");
 const statsStore = require("../../helpers/stats/store");
@@ -86,24 +86,9 @@ module.exports = {
         return respond([]);
       }
 
-      // Filter out non-music content (tutorials, compilations, etc.)
-      const musicTracks = results.filter((track) => {
-        const title = (track.info?.title || "").toLowerCase();
-        const author = (track.info?.author || "").toLowerCase();
-
-        // Skip non-music content
-        if (
-          title.includes("tutorial") ||
-          title.includes("how to") ||
-          title.includes("lesson") ||
-          title.includes("compilation") ||
-          (author.includes("topic") && title.includes("provided to youtube"))
-        ) {
-          return false;
-        }
-
-        return true;
-      });
+      // Require the candidate to represent the query before ranking by
+      // artist/title accuracy and popularity. Provider order alone is noisy.
+      const musicTracks = filterRelevantSearchResults(results, focusedValue);
 
       // Match the user's artist/title intent before using provider order as a popularity tie-breaker.
       const rankedTracks = rankSearchResults(musicTracks, focusedValue, { limit: 15 });

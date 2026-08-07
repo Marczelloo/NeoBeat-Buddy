@@ -33,6 +33,7 @@ describe("MewBit presence rotation", () => {
     assert.ok(lines.length > BRAND.presence.length);
     assert.ok(lines.some((line) => line.includes("Ala")));
     assert.ok(!lines.some((line) => line.includes("@everyone")));
+    assert.ok(!lines.some((line) => /\/play|\/autoplay|\/lyrics|\/queue|\/help/i.test(line)));
     assert.strictEqual(sanitizePresenceName("`@everyone` _Ala_"), "Ala");
   });
 });

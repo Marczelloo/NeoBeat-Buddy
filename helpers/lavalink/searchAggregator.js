@@ -1,9 +1,19 @@
 const { getSearchPrefix } = require("./searchSources");
 
 const CACHE_TTL_MS = 15_000;
-const MAX_RESULTS_PER_SOURCE = 10;
+const MAX_RESULTS_PER_SOURCE = 20;
 const SOURCE_TIMEOUT_MS = 1_500;
 const searchCache = new Map();
+
+// YouTube Music is usually better for songs, while regular YouTube has a
+// wider catalogue. Query both so a missing/blocked YTM result cannot hide a
+// valid regular YouTube result.
+const SEARCH_VARIANTS = Object.freeze({
+  deezer: ["dzsearch"],
+  youtube: ["ytmsearch", "ytsearch"],
+  spotify: ["spsearch"],
+  soundcloud: ["scsearch"],
+});
 
 function normalizeCacheQuery(query) {
   return String(query || "")
@@ -14,9 +24,14 @@ function normalizeCacheQuery(query) {
 }
 
 async function searchSource(poru, query, source) {
-  const prefix = getSearchPrefix(source);
-  const result = await poru.resolve({ query: `${prefix}:${query}` });
-  return Array.isArray(result?.tracks) ? result.tracks.slice(0, MAX_RESULTS_PER_SOURCE) : [];
+  const prefixes = SEARCH_VARIANTS[source] || [getSearchPrefix(source)];
+  const settled = await Promise.allSettled(
+    prefixes.map((prefix) => poru.resolve({ query: `${prefix}:${query}` }))
+  );
+
+  return settled
+    .flatMap((result) => (result.status === "fulfilled" && Array.isArray(result.value?.tracks) ? result.value.tracks : []))
+    .slice(0, MAX_RESULTS_PER_SOURCE);
 }
 
 function searchSourceWithTimeout(poru, query, source) {
@@ -58,6 +73,7 @@ function clearSearchCache() {
 module.exports = {
   CACHE_TTL_MS,
   MAX_RESULTS_PER_SOURCE,
+  SEARCH_VARIANTS,
   clearSearchCache,
   searchAcrossSources,
 };

@@ -312,11 +312,17 @@ function getCachedMembers(client) {
 
 function getPresenceLines(client, offset = 0) {
   const names = getCachedMembers(client);
-  if (names.length === 0) return [...BRAND.presence];
+  const cleanLine = (line) =>
+    String(line || "")
+      .replace(/\s*[•|]?\s*\/[a-z][\w-]*/gi, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
+  if (names.length === 0) return BRAND.presence.map(cleanLine).filter(Boolean);
 
   const name = names[Math.abs(offset) % names.length];
   const personalized = PERSONALIZED_PRESENCE_TEMPLATES.map((template) => template(name));
-  return [...BRAND.presence, ...personalized];
+  return [...BRAND.presence, ...personalized].map(cleanLine).filter(Boolean);
 }
 
 function brandFooter(section) {

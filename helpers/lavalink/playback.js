@@ -16,7 +16,7 @@ const {
 } = require("./lyricsFormatter");
 const { getPlayer, getPoru } = require("./players");
 const { addManualTracksToQueue } = require("./queueOrdering");
-const { rankSearchResults } = require("./searchRanking");
+const { filterRelevantSearchResults, rankSearchResults } = require("./searchRanking");
 const { getFallbackSources, getSearchPrefix } = require("./searchSources");
 const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
 const {
@@ -104,16 +104,18 @@ async function lavalinkResolveTracks(query, source = "deezer") {
         });
         const searchData = await searchResponse.json();
 
-        if (searchData?.loadType === "search" && Array.isArray(searchData?.data) && searchData.data.length > 0) {
+        const relevantSearchTracks = filterRelevantSearchResults(searchData?.data, searchQuery);
+
+        if (searchData?.loadType === "search" && relevantSearchTracks.length > 0) {
           Log.info(
             `✅ ${sourceName} found tracks`,
-            `count=${searchData.data.length}`,
-            `topResult=${searchData.data[0]?.info?.title || "Unknown"}`,
+            `count=${relevantSearchTracks.length}`,
+            `topResult=${relevantSearchTracks[0]?.info?.title || "Unknown"}`,
             `query=${searchQuery}`
           );
           res = {
             loadType: searchData.loadType,
-            tracks: searchData.data,
+            tracks: relevantSearchTracks,
             playlistInfo: searchData.playlistInfo,
           };
         } else {
@@ -133,16 +135,18 @@ async function lavalinkResolveTracks(query, source = "deezer") {
             });
             const fallbackData = await fallbackResponse.json();
 
-            if (fallbackData?.loadType === "search" && Array.isArray(fallbackData?.data) && fallbackData.data.length > 0) {
+            const relevantFallbackTracks = filterRelevantSearchResults(fallbackData?.data, searchQuery);
+
+            if (fallbackData?.loadType === "search" && relevantFallbackTracks.length > 0) {
               Log.info(
                 "✅ Alternate source found tracks",
                 `source=${fallbackSource}`,
-                `count=${fallbackData.data.length}`,
+                `count=${relevantFallbackTracks.length}`,
                 `query=${searchQuery}`
               );
               res = {
                 loadType: fallbackData.loadType,
-                tracks: fallbackData.data,
+                tracks: relevantFallbackTracks,
                 playlistInfo: fallbackData.playlistInfo,
               };
               break;
