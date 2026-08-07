@@ -1,6 +1,7 @@
 const { getPlayer } = require("./players");
 const { ensurePlaybackState, playbackState } = require("./state");
 const { clearInactivityTimer } = require("./timers");
+const { resyncLyricsSession } = require("./lyricsFormatter");
 
 async function lavalinkSeekTo(guildId, positionMs) {
   const player = getPlayer(guildId);
@@ -18,6 +19,7 @@ async function lavalinkSeekTo(guildId, positionMs) {
   state.lastPosition = clamped;
   state.lastTimestamp = Date.now();
   playbackState.set(guildId, state);
+  resyncLyricsSession(guildId);
 
   clearInactivityTimer(guildId, "seekTo");
   return true;

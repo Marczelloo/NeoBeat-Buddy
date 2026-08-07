@@ -13,22 +13,28 @@ const UPDATE_INTERVAL = 250; // Check every 250ms for responsive updates
  * Lavalink only sends position updates every ~5 seconds, so we interpolate
  * based on elapsed time since last update
  */
-function getInterpolatedPosition(player) {
+function isPlayerPaused(player) {
+  return player?.isPaused === true || player?.paused === true;
+}
+
+function getInterpolatedPosition(player, now = Date.now(), lookaheadMs = 300) {
   if (!player) return 0;
-  // If paused, return the stored position
-  if (player.paused) {
-    return player.position || 0;
-  }
 
   const state = playbackState.get(player.guildId);
-  const lastKnownPosition = state?.lastPosition ?? player.position ?? 0;
-  const lastUpdateTime = state?.lastTimestamp ?? Date.now();
-  const elapsed = Date.now() - lastUpdateTime;
+  // Use the anchored position while paused. Poru exposes this as isPaused;
+  // state.paused also covers the short period between the command and the
+  // next Lavalink playerUpdate packet.
+  if (isPlayerPaused(player) || state?.paused) {
+    return Math.max(0, Number(state?.lastPosition ?? player.position ?? 0));
+  }
+
+  const lastKnownPosition = Number(state?.lastPosition ?? player.position ?? 0);
+  const lastUpdateTime = state?.lastTimestamp ?? now;
+  const elapsed = Math.max(0, now - lastUpdateTime);
   // Interpolate: current position = last known + time elapsed since update
   // Add a small lookahead offset (300ms) so lyrics appear slightly before the audio
   // This compensates for Discord message edit latency
-  const LOOKAHEAD_MS = 300;
-  const interpolated = lastKnownPosition + elapsed + LOOKAHEAD_MS;
+  const interpolated = lastKnownPosition + elapsed + lookaheadMs;
   // Clamp to track duration
   const maxDuration = player.currentTrack?.info?.length || Infinity;
   return Math.min(interpolated, maxDuration);
@@ -155,6 +161,63 @@ function buildSyncedLyricsEmbed({ lines, currentIndex, trackTitle, provider }) {
  * Active synced lyrics sessions (guildId -> interval)
  */
 const activeLyricsSessions = new Map();
+const activeLyricsMessages = new Map();
+
+function registerLyricsMessage(guildId, message) {
+  if (!guildId || !message || typeof message.delete !== "function") return message;
+
+  const messages = activeLyricsMessages.get(guildId) ?? new Set();
+  messages.add(message);
+  activeLyricsMessages.set(guildId, messages);
+  return message;
+}
+
+async function deleteLyricsMessages(guildId) {
+  const messages = activeLyricsMessages.get(guildId);
+  activeLyricsMessages.delete(guildId);
+
+  if (!messages?.size) return;
+
+  await Promise.allSettled([...messages].map((message) => message.delete().catch(() => null)));
+}
+
+async function stopLyricsSession(guildId, { deleteMessage = true } = {}) {
+  const session = activeLyricsSessions.get(guildId);
+
+  if (session) {
+    clearInterval(session.interval);
+    if (session.cleanupTimeout) clearTimeout(session.cleanupTimeout);
+    activeLyricsSessions.delete(guildId);
+  }
+
+  if (deleteMessage) await deleteLyricsMessages(guildId);
+}
+
+function pauseLyricsSession(guildId, position) {
+  const session = activeLyricsSessions.get(guildId);
+  if (!session) return;
+
+  session.paused = true;
+  session.pausedPosition = Math.max(0, Number(position) || 0);
+}
+
+function resumeLyricsSession(guildId) {
+  const session = activeLyricsSessions.get(guildId);
+  if (!session) return;
+
+  session.paused = false;
+  // Force the first post-resume tick to use the new Lavalink anchor.
+  session.lastIndex = null;
+  session.lastUpdateTime = 0;
+}
+
+function resyncLyricsSession(guildId) {
+  const session = activeLyricsSessions.get(guildId);
+  if (!session) return;
+
+  session.lastIndex = null;
+  session.lastUpdateTime = 0;
+}
 
 /**
  * Build and maintain live synced lyrics display
@@ -163,10 +226,7 @@ async function buildSyncedLyricsDisplay({ interaction, player, payload, trackTit
   const guildId = interaction.guildId;
 
   // Clear any existing session for this guild
-  if (activeLyricsSessions.has(guildId)) {
-    clearInterval(activeLyricsSessions.get(guildId));
-    activeLyricsSessions.delete(guildId);
-  }
+  await stopLyricsSession(guildId);
 
   const lines = payload.lines;
   const provider = payload.source || "unknown";
@@ -186,19 +246,29 @@ async function buildSyncedLyricsDisplay({ interaction, player, payload, trackTit
     embeds: [embed],
     content: "🎵 **Live Synced Lyrics** - Updates automatically as the song plays",
   });
+  registerLyricsMessage(guildId, message);
 
   // Update loop - fast checking, rate-limited Discord updates
-  let lastIndex = currentIndex;
-  let lastUpdateTime = Date.now();
   const MIN_UPDATE_DELAY = 800; // Minimum 800ms between Discord API calls
   const updateInterval = setInterval(async () => {
     try {
       const currentPlayer = getPlayer(guildId);
+      const session = activeLyricsSessions.get(guildId);
+
+      if (!session || session.interval !== updateInterval) {
+        clearInterval(updateInterval);
+        return;
+      }
 
       // Stop if player is gone or track changed
       if (!currentPlayer || currentPlayer.currentTrack?.info?.identifier !== player.currentTrack?.info?.identifier) {
-        clearInterval(updateInterval);
-        activeLyricsSessions.delete(guildId);
+        await stopLyricsSession(guildId);
+        return;
+      }
+
+      // Do not advance lyrics while paused. The position is anchored by the
+      // pause command and re-read after resume, preventing cumulative drift.
+      if (session.paused || isPlayerPaused(currentPlayer)) {
         return;
       }
 
@@ -208,9 +278,9 @@ async function buildSyncedLyricsDisplay({ interaction, player, payload, trackTit
 
       // Only update Discord if line changed and enough time has passed
       const now = Date.now();
-      if (newIndex !== lastIndex && (now - lastUpdateTime) >= MIN_UPDATE_DELAY) {
-        lastIndex = newIndex;
-        lastUpdateTime = now;
+      if (newIndex !== session.lastIndex && now - session.lastUpdateTime >= MIN_UPDATE_DELAY) {
+        session.lastIndex = newIndex;
+        session.lastUpdateTime = now;
 
         const updatedEmbed = buildSyncedLyricsEmbed({
           lines,
@@ -224,23 +294,31 @@ async function buildSyncedLyricsDisplay({ interaction, player, payload, trackTit
           content: "🎵 **Live Synced Lyrics** - Updates automatically as the song plays",
         });
       }
-    } catch (err) {
+    } catch {
       // Message deleted or other error - stop updating
-      clearInterval(updateInterval);
-      activeLyricsSessions.delete(guildId);
+      await stopLyricsSession(guildId);
     }
   }, UPDATE_INTERVAL);
 
-  activeLyricsSessions.set(guildId, updateInterval);
+  const session = {
+    interval: updateInterval,
+    message,
+    paused: isPlayerPaused(player),
+    pausedPosition: currentPosition,
+    lastIndex: currentIndex,
+    lastUpdateTime: Date.now(),
+    cleanupTimeout: null,
+  };
+  activeLyricsSessions.set(guildId, session);
 
   // Auto-cleanup after track duration + 10 seconds
   const trackDuration = player.currentTrack?.info?.length || 300000; // Default 5 min
-  setTimeout(() => {
-    if (activeLyricsSessions.has(guildId)) {
-      clearInterval(activeLyricsSessions.get(guildId));
-      activeLyricsSessions.delete(guildId);
+  session.cleanupTimeout = setTimeout(() => {
+    if (activeLyricsSessions.get(guildId)?.interval === updateInterval) {
+      void stopLyricsSession(guildId);
     }
   }, trackDuration + 10000);
+  session.cleanupTimeout.unref?.();
 }
 
 module.exports = {
@@ -248,6 +326,13 @@ module.exports = {
   MAX_EMBEDS,
   chunkLyrics,
   buildLyricsResponse,
+  getInterpolatedPosition,
+  isPlayerPaused,
   buildSyncedLyricsDisplay,
   findCurrentLine,
+  registerLyricsMessage,
+  stopLyricsSession,
+  pauseLyricsSession,
+  resumeLyricsSession,
+  resyncLyricsSession,
 };

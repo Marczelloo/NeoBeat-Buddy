@@ -11,6 +11,12 @@ const { addManualTracksToQueue } = require("./queueOrdering");
 const { rankSearchResults } = require("./searchRanking");
 const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
 const {
+  getInterpolatedPosition,
+  pauseLyricsSession,
+  resumeLyricsSession,
+  stopLyricsSession,
+} = require("./lyricsFormatter");
+const {
   clearInactivityTimer,
   clearProgressInterval,
   scheduleInactivityDisconnect,
@@ -287,6 +293,7 @@ async function lavalinkStop(guildId) {
   clearInactivityTimer(guildId, "stopCommand");
   clearProgressInterval(guildId);
   clearLyricsState(guildId);
+  await stopLyricsSession(guildId);
   playbackState.delete(guildId);
   skipVotes.clear(guildId);
   djProposals.clearGuild(guildId);
@@ -301,8 +308,17 @@ async function lavalinkPause(guildId) {
 
   if (player && !player.isPaused) {
     const trackTitle = player.currentTrack?.info?.title || "Unknown";
+    const pausedPosition = getInterpolatedPosition(player, Date.now(), 0);
     Log.info("⏸️ Player paused", `track=${trackTitle}`, `guild=${guildId}`);
     await player.pause(true);
+
+    const state = ensurePlaybackState(guildId);
+    state.lastPosition = pausedPosition;
+    state.lastTimestamp = Date.now();
+    state.paused = true;
+    playbackState.set(guildId, state);
+    pauseLyricsSession(guildId, pausedPosition);
+
     clearInactivityTimer(guildId, "pauseCommand");
     return true;
   }
@@ -317,6 +333,13 @@ async function lavalinkResume(guildId) {
     const trackTitle = player.currentTrack?.info?.title || "Unknown";
     Log.info("▶️ Player resumed", `track=${trackTitle}`, `guild=${guildId}`);
     await player.pause(false);
+
+    const state = ensurePlaybackState(guildId);
+    state.lastTimestamp = Date.now();
+    state.paused = false;
+    playbackState.set(guildId, state);
+    resumeLyricsSession(guildId);
+
     clearInactivityTimer(guildId, "resumeCommand");
     return true;
   }
@@ -330,6 +353,7 @@ async function lavalinkSkip(guildId) {
 
   const skippedTitle = player.currentTrack?.info?.title || "Unknown";
   const nextTitle = player.queue[0]?.info?.title || "none";
+  void stopLyricsSession(guildId);
 
   Log.info(
     "⏭️ Track skipped",
@@ -430,6 +454,7 @@ async function lavalinkPrevious(guildId) {
     `historySize=${history.length}`,
     `guild=${guildId}`
   );
+  void stopLyricsSession(guildId);
 
   if (currentClone?.track) {
     player.queue.unshift(currentClone);

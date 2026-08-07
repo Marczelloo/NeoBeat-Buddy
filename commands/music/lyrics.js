@@ -1,7 +1,11 @@
 const { SlashCommandBuilder } = require("discord.js");
 const { errorEmbed } = require("../../helpers/embeds");
 const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
-const { buildLyricsResponse, buildSyncedLyricsDisplay } = require("../../helpers/lavalink/lyricsFormatter");
+const {
+  buildLyricsResponse,
+  buildSyncedLyricsDisplay,
+  registerLyricsMessage,
+} = require("../../helpers/lavalink/lyricsFormatter");
 const { getPlayer } = require("../../helpers/lavalink/players");
 const { getLyricsState } = require("../../helpers/lavalink/state");
 
@@ -63,9 +67,11 @@ module.exports = {
         content: null,
       });
 
-    return interaction.editReply({
+    const message = await interaction.editReply({
       content,
       embeds,
     });
+    registerLyricsMessage(interaction.guildId, message);
+    return message;
   },
 };

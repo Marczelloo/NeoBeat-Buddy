@@ -21,6 +21,7 @@ const {
   clearProgressInterval,
   scheduleProgressUpdates,
 } = require("./timers");
+const stopLyricsSession = (...args) => require("./lyricsFormatter").stopLyricsSession(...args);
 
 const buildPlaybackErrorMessage = (err, fallback = "Unable to play this track") => {
   if (!err) return fallback;
@@ -136,12 +137,14 @@ function createPoru(client) {
     }
 
     clearInactivityTimer(player.guildId, "trackStart");
+    void stopLyricsSession(player.guildId);
     scheduleProgressUpdates(player);
 
     const state = ensurePlaybackState(player.guildId);
     state.currentTrack = cloneTrack(track);
     state.lastPosition = 0;
     state.lastTimestamp = Date.now();
+    state.paused = Boolean(player.isPaused);
     playbackState.set(player.guildId, state);
 
     const lyricsPayload = await fetchLyrics(player, track.info).catch(() => null);
@@ -193,6 +196,7 @@ function createPoru(client) {
     const nextTrack = player.currentTrack ? describeTrack(player.currentTrack) : "none";
 
     clearProgressInterval(player.guildId);
+    void stopLyricsSession(player.guildId);
 
     if (!player.currentTrack && player.queue.length === 0) {
       scheduleInactivityDisconnect(player, "trackEnd");
@@ -250,6 +254,7 @@ function createPoru(client) {
     );
 
     state.currentTrack = null;
+    state.paused = false;
     playbackState.set(player.guildId, state);
     clearLyricsState(player.guildId);
 
@@ -320,6 +325,7 @@ function createPoru(client) {
     }
 
     state.currentTrack = null;
+    state.paused = false;
     playbackState.set(player.guildId, state);
 
     player.currentTrack = null;
@@ -358,6 +364,7 @@ function createPoru(client) {
     const state = playbackState.get(player.guildId) ?? {};
     state.lastPosition = player.position ?? 0;
     state.lastTimestamp = Date.now();
+    state.paused = Boolean(player.isPaused);
     playbackState.set(player.guildId, state);
 
     try {

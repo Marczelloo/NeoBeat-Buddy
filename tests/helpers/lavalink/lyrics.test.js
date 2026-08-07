@@ -23,6 +23,7 @@ describe("Lyrics System", () => {
 
   describe("Lyrics Formatter", () => {
     let chunkLyrics, buildLyricsResponse, findCurrentLine;
+    let getInterpolatedPosition, isPlayerPaused, registerLyricsMessage, stopLyricsSession;
     let MAX_EMBED_DESCRIPTION, MAX_EMBEDS;
 
     beforeEach(() => {
@@ -31,6 +32,10 @@ describe("Lyrics System", () => {
       chunkLyrics = lyricsFormatter.chunkLyrics;
       buildLyricsResponse = lyricsFormatter.buildLyricsResponse;
       findCurrentLine = lyricsFormatter.findCurrentLine;
+      getInterpolatedPosition = lyricsFormatter.getInterpolatedPosition;
+      isPlayerPaused = lyricsFormatter.isPlayerPaused;
+      registerLyricsMessage = lyricsFormatter.registerLyricsMessage;
+      stopLyricsSession = lyricsFormatter.stopLyricsSession;
       MAX_EMBED_DESCRIPTION = lyricsFormatter.MAX_EMBED_DESCRIPTION;
       MAX_EMBEDS = lyricsFormatter.MAX_EMBEDS;
     });
@@ -123,6 +128,51 @@ describe("Lyrics System", () => {
         // Algorithm searches backwards, so behavior depends on actual order
         const result = findCurrentLine(lines, 7500);
         assert.ok(typeof result === "number");
+      });
+    });
+
+    describe("Playback synchronization", () => {
+      it("should recognize Poru's isPaused flag", () => {
+        assert.strictEqual(isPlayerPaused({ isPaused: true }), true);
+        assert.strictEqual(isPlayerPaused({ paused: true }), true);
+        assert.strictEqual(isPlayerPaused({ isPaused: false }), false);
+      });
+
+      it("should freeze the lyrics position while paused", () => {
+        const { playbackState } = require("../../../helpers/lavalink/state");
+        const guildId = "lyrics-pause-sync-test";
+        const now = 100000;
+        playbackState.set(guildId, {
+          lastPosition: 42000,
+          lastTimestamp: now - 5000,
+          paused: true,
+        });
+
+        const position = getInterpolatedPosition(
+          {
+            guildId,
+            isPaused: true,
+            position: 1000,
+            currentTrack: { info: { length: 180000 } },
+          },
+          now,
+          300
+        );
+
+        assert.strictEqual(position, 42000);
+        playbackState.delete(guildId);
+      });
+
+      it("should delete registered lyrics messages during cleanup", async () => {
+        const deleted = [];
+        const message = {
+          delete: async () => deleted.push(true),
+        };
+
+        registerLyricsMessage("lyrics-cleanup-test", message);
+        await stopLyricsSession("lyrics-cleanup-test");
+
+        assert.deepStrictEqual(deleted, [true]);
       });
     });
 
