@@ -54,9 +54,9 @@ describe("Search source selection", () => {
     clearSearchCache();
     const calls = [];
     const poru = {
-      resolve: async ({ query }) => {
-        calls.push(query);
-        if (query.startsWith("ytsearch:")) {
+      resolve: async ({ query, source }) => {
+        calls.push({ query, source });
+        if (source === "ytsearch") {
           return { tracks: [{ info: { title: "Hit 'Em Up", author: "2Pac" } }] };
         }
         return { tracks: [{ info: { title: "Hit Em Up", author: "Other Artist" } }] };
@@ -66,8 +66,30 @@ describe("Search source selection", () => {
     const tracks = await searchAcrossSources(poru, "hit em up", { preferredSource: "deezer" });
 
     assert.strictEqual(calls.length, 5);
-    assert.ok(calls.includes("ytmsearch:hit em up"));
-    assert.ok(calls.includes("ytsearch:hit em up"));
+    assert.ok(calls.some((call) => call.source === "ytmsearch" && call.query === "hit em up"));
+    assert.ok(calls.some((call) => call.source === "ytsearch" && call.query === "hit em up"));
     assert.ok(tracks.some((track) => track.info.author === "2Pac"));
+  });
+
+  it("passes the provider prefix through Poru's source option", async () => {
+    clearSearchCache();
+    const calls = [];
+    const poru = {
+      resolve: async (options) => {
+        calls.push(options);
+        return { tracks: [] };
+      },
+    };
+
+    await searchAcrossSources(poru, "8 kobiet", { preferredSource: "deezer" });
+
+    assert.ok(calls.every((call) => call.query === "8 kobiet"));
+    assert.deepStrictEqual(calls.map((call) => call.source).sort(), [
+      "dzsearch",
+      "scsearch",
+      "spsearch",
+      "ytmsearch",
+      "ytsearch",
+    ]);
   });
 });

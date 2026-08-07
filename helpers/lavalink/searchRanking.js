@@ -186,10 +186,29 @@ function scoreSearchResult(track, query, index = 0) {
     const titleCoverage = getCoverage(queryTokens, titleTokens);
     const authorCoverage = getCoverage(queryTokens, authorTokens);
     const combinedCoverage = getCoverage(queryTokens, [...authorTokens, ...titleTokens]);
+    const authorSet = new Set(authorTokens);
+    const titleTokensAfterArtist = queryTokens.filter((token) => !authorSet.has(token));
+    const titleAfterArtistCoverage = getCoverage(titleTokensAfterArtist, titleTokens);
 
     score += titleCoverage * 135;
     score += authorCoverage * 80;
     score += combinedCoverage * 95;
+
+    // For a query such as "kuki cieple dranie", prefer the candidate whose
+    // metadata splits into artist=Kuki and title=Ciepłe Dranie. This prevents
+    // a SoundCloud upload titled "KUKI CIEPŁE DRANIE" by another uploader from
+    // outranking the actual Deezer/Spotify recording.
+    if (authorCoverage > 0 && titleTokensAfterArtist.length > 0 && titleAfterArtistCoverage === 1) {
+      score += 180 + authorCoverage * 40;
+      reasons.push("artist/title split");
+    }
+
+    // A multi-word query represented only by the title is ambiguous. Keep it
+    // available, but let an artist/title split or trusted provider order win.
+    if (queryTokens.length >= 3 && titleCoverage === 1 && authorCoverage === 0) {
+      score -= 45;
+      reasons.push("title-only ambiguity");
+    }
 
     if (titleCoverage > 0) reasons.push("title tokens");
     if (authorCoverage > 0) reasons.push("artist tokens");

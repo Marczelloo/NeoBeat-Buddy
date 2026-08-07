@@ -113,6 +113,7 @@ describe("Search result ranking", () => {
     const tracks = [
       createTrack("Ciepłe Dranie", "Kuki"),
       createTrack("Ciepłe Dranie (feat. Kuki) (Remix)", "Stock Wudeczka"),
+      createTrack("KUKI CIEPŁE DRANIE", "Ali Baba"),
     ];
 
     const ranked = rankSearchResults(tracks, "kuki cieple dranie");

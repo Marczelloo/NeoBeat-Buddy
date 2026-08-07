@@ -15,6 +15,13 @@ const Log = require("../../helpers/logs/log");
 const statsStore = require("../../helpers/stats/store");
 const userPrefs = require("../../helpers/users/preferences");
 
+const SOURCE_LABELS = Object.freeze({
+  deezer: "Deezer",
+  soundcloud: "SoundCloud",
+  spotify: "Spotify",
+  youtube: "YouTube",
+});
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("play")
@@ -119,11 +126,14 @@ module.exports = {
       const choices = uniqueTracks.map((track) => {
         const title = track.info?.title || "Unknown";
         const author = track.info?.author || "Unknown Artist";
+        const sourceKey = String(track.info?.sourceName || track.info?.source || "").toLowerCase();
+        const sourceLabel = SOURCE_LABELS[sourceKey] || (sourceKey ? sourceKey : "Unknown source");
+        const sourceSuffix = ` [${sourceLabel}]`;
 
         // Truncate if too long (Discord has 100 char limit)
-        let displayName = `${title} - ${author}`;
+        let displayName = `${title} - ${author}${sourceSuffix}`;
         if (displayName.length > 100) {
-          displayName = displayName.substring(0, 97) + "...";
+          displayName = `${displayName.substring(0, 100 - sourceSuffix.length - 3)}...${sourceSuffix}`;
         }
 
         // Use "artist title" as the value

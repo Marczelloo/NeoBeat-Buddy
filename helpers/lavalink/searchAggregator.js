@@ -26,7 +26,10 @@ function normalizeCacheQuery(query) {
 async function searchSource(poru, query, source) {
   const prefixes = SEARCH_VARIANTS[source] || [getSearchPrefix(source)];
   const settled = await Promise.allSettled(
-    prefixes.map((prefix) => poru.resolve({ query: `${prefix}:${query}` }))
+    // Poru prepends its default platform when a source is not passed. Put
+    // the Lavalink search prefix in `source`, otherwise `dzsearch:foo` turns
+    // into a real request for `ytsearch:dzsearch:foo`.
+    prefixes.map((prefix) => poru.resolve({ query, source: prefix }))
   );
 
   return settled
