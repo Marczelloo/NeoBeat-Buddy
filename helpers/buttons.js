@@ -254,7 +254,10 @@ async function handleControlButtons(interaction, player) {
       const { buildSyncedLyricsDisplay, registerLyricsMessage } = require("./lavalink/lyricsFormatter");
       const payload = getLyricsState(guildId);
       if (!payload || (!payload.lyrics && !payload.lines)) {
-        return interaction.editReply({ embeds: [errorEmbed("No lyrics were found for this track.")] });
+        return interaction.followUp({
+          embeds: [errorEmbed("No lyrics were found for this track.")],
+          flags: MessageFlags.Ephemeral,
+        });
       }
 
       const trackTitle = payload.track?.title ?? player.currentTrack?.info?.title ?? "Unknown track";
@@ -283,7 +286,10 @@ async function handleControlButtons(interaction, player) {
         payload.lyrics || (Array.isArray(payload.lines) ? payload.lines.map((entry) => entry.line).join("\n") : null);
 
       if (!text)
-        return interaction.editReply({ embeds: [errorEmbed("The lyrics provider returned an empty result.")] });
+        return interaction.followUp({
+          embeds: [errorEmbed("The lyrics provider returned an empty result.")],
+          flags: MessageFlags.Ephemeral,
+        });
 
       const { embeds, content } = buildLyricsResponse({
         text,

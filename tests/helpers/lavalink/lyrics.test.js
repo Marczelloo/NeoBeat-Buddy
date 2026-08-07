@@ -520,6 +520,35 @@ describe("Lyrics Error Handling", () => {
 });
 
 describe("Lyrics Button Integration", () => {
+  it("should send missing-lyrics errors separately from the player message", async () => {
+    const { handleControlButtons } = require("../../../helpers/buttons");
+    let editReplyCalls = 0;
+    const followUps = [];
+
+    const interaction = {
+      guildId: "lyrics-button-no-result-test",
+      customId: "lyrics-button",
+      member: null,
+      deferUpdate: async () => {},
+      editReply: async () => {
+        editReplyCalls += 1;
+      },
+      followUp: async (payload) => {
+        followUps.push(payload);
+        return payload;
+      },
+    };
+
+    await handleControlButtons(interaction, {
+      loop: "NONE",
+      currentTrack: { info: { title: "Test track" } },
+    });
+
+    assert.strictEqual(editReplyCalls, 0);
+    assert.strictEqual(followUps.length, 1);
+    assert.strictEqual(followUps[0].flags, 64); // MessageFlags.Ephemeral
+  });
+
   describe("Button State", () => {
     it("should default to synced mode", () => {
       const defaultSynced = true;
