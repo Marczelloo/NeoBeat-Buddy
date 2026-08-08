@@ -38,6 +38,10 @@ services:
       - .env
     environment:
       NODE_ENV: production
+      ACTIVITY_HOST: ${ACTIVITY_HOST:-0.0.0.0}
+      ACTIVITY_PORT: ${ACTIVITY_PORT:-8787}
+    ports:
+      - "${ACTIVITY_PORT:-8787}:${ACTIVITY_PORT:-8787}"
     volumes:
       - ./helpers/data:/app/helpers/data # Persist data across restarts
       - ./logs:/app/logs

@@ -5,6 +5,8 @@ const path = require("path");
 const { Client, Collection, GatewayIntentBits, Partials } = require("discord.js");
 
 const token = process.env.DISCORD_TOKEN;
+const logsCommand = require("./commands/utility/logs.js");
+const { createActivityServer } = require("./helpers/activity/server.js");
 const { setClient } = require("./helpers/clientRegistry.js");
 const djStore = require("./helpers/dj/store.js");
 const guildState = require("./helpers/guildState.js");
@@ -15,7 +17,6 @@ const Log = require("./helpers/logs/log.js");
 const health = require("./helpers/monitoring/health.js");
 const statsStore = require("./helpers/stats/store.js");
 const userPrefs = require("./helpers/users/preferences.js");
-const logsCommand = require("./commands/utility/logs.js");
 
 if (!token) {
   Log.error("DISCORD_TOKEN is not set in the environment variables.");
@@ -458,6 +459,9 @@ connectClient();
 const poru = createPoru(client);
 client.on("raw", (d) => poru.packetUpdate(d));
 
+const activityServer = createActivityServer(client);
+activityServer.start();
+
 // Function to measure Lavalink node latency
 async function measureNodeLatency(node) {
   if (!node || !node.rest) return null;
@@ -468,7 +472,7 @@ async function measureNodeLatency(node) {
     await node.rest.get(`/v4/info`);
     const latency = Date.now() - start;
     return Math.round(latency);
-  } catch (err) {
+  } catch {
     return null;
   }
 }

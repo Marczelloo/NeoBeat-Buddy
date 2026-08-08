@@ -6,6 +6,9 @@ import unusedImports from "eslint-plugin-unused-imports";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig([
+  {
+    ignores: ["activity/**"],
+  },
   js.configs.recommended,
   {
     files: ["**/*.{js,mjs,cjs}"],
