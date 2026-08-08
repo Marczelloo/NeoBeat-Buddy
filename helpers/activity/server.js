@@ -297,8 +297,10 @@ function buildActivityState(client, guildId, userId) {
   const settings = guildState.getGuildState(guildId);
   const lyrics = serializeLyrics(getLyricsState(guildId));
   const position = player?.currentTrack ? getInterpolatedPosition(player, Date.now(), 0) : 0;
+  const botStatus = client?.user?.presence?.activities?.find((activity) => activity.type === 2)?.name || null;
 
   return {
+    botStatus,
     guild: {
       id: guildId,
       name: guild?.name || "Local MewBit preview",
@@ -313,6 +315,7 @@ function buildActivityState(client, guildId, userId) {
       durationMs: currentTrack?.durationMs || 0,
       volume: getUserVolume(player),
       loop: player?.loop || "NONE",
+      shuffleActive: Boolean(player?.shuffleActive),
       autoplay: Boolean(settings?.autoplay),
       currentTrack,
       queue: getSerializedQueue(player),

@@ -557,6 +557,7 @@ async function lavalinkShuffle(guildId) {
   if (!player || player.queue.length === 0) return false;
 
   player.queue.shuffle();
+  player.shuffleActive = true;
   clearInactivityTimer(guildId, "shuffle");
   return true;
 }

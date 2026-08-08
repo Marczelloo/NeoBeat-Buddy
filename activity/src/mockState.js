@@ -10,6 +10,7 @@ const tracks = [
 export function createMockState() {
   return {
     guild: { id: "demo", name: "MewBit test room", iconUrl: null, voiceChannelName: "Neon Listening Room" },
+    botStatus: "the bassline has been peer reviewed",
     player: {
       connected: true,
       paused: false,
@@ -18,6 +19,7 @@ export function createMockState() {
       durationMs: tracks[0].durationMs,
       volume: 52,
       loop: "NONE",
+      shuffleActive: false,
       autoplay: true,
       currentTrack: tracks[0],
       queue: tracks.slice(1).map((track, index) => ({ ...track, index })),

@@ -38,6 +38,13 @@ import { createMockState, mockSearchResults } from "./mockState.js";
 
 const BAND_LABELS = ["60", "120", "250", "500", "1k", "2k", "4k", "8k", "16k", "31k", "63k", "125k", "250k", "500k", "1m"];
 const SOURCE_NAMES = ["auto", "youtube", "soundcloud", "deezer", "spotify"];
+const COMPACT_STATUS_FALLBACKS = [
+  "neon ears engaged",
+  "the bassline has been peer reviewed",
+  "catgirl-approved queue detected",
+  "MewBit is judging this transition",
+  "algorithmically silly, emotionally loud",
+];
 
 function formatTime(milliseconds) {
   const seconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
@@ -242,81 +249,45 @@ function NowPlaying({ state, position, onAction, onTab, className = "" }) {
   );
 }
 
-function CompactPlayer({ state, position, onAction, connection }) {
+function CompactPlayer({ state, position }) {
   const { player } = state;
   const track = player.currentTrack;
-  const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
-  const progress = clamp(position, 0, duration);
-  const [seekValue, setSeekValue] = useState(progress);
+  const lines = player.lyrics?.lines || [];
+  const lyricIndex = lines.reduce((last, line, index) => line.timestamp <= position ? index : last, -1);
+  const activeLyric = lines[lyricIndex]?.line || lines[0]?.line || player.lyrics?.text?.split("\n").find(Boolean);
+  const upcomingLyric = lines[lyricIndex + 1]?.line;
+  const hasLyrics = Boolean(activeLyric);
+  const statusSeed = `${track?.id || "mewbit"}`.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const statusLine = state.botStatus || COMPACT_STATUS_FALLBACKS[statusSeed % COMPACT_STATUS_FALLBACKS.length];
 
-  useEffect(() => setSeekValue(progress), [progress]);
-
-  const commitSeek = () => onAction("seek", { positionMs: Number(seekValue) });
-  const volume = clamp(Number(player.volume || 0), 0, 100);
-  const isPlaying = player.playing && !player.paused;
+  if (hasLyrics) {
+    return (
+      <section className="compact-player compact-lyrics-preview" aria-label="MewBit compact lyrics">
+        <div className="compact-lyrics-kicker"><MusicNotes size={13} weight="fill" aria-hidden="true" /> LIVE LYRICS</div>
+        <p>{activeLyric}</p>
+        {upcomingLyric ? <span>{upcomingLyric}</span> : null}
+      </section>
+    );
+  }
 
   return (
-    <section className="compact-player" aria-label="MewBit compact player">
+    <section className="compact-player compact-now-playing" aria-label="MewBit compact player">
       <div className="compact-header">
-        <div className={`compact-artwork-wrap ${isPlaying ? "is-playing" : ""}`}>
+        <div className="compact-artwork-wrap">
           <Artwork track={track} size="compact" />
-          <div className="compact-artwork-signal" aria-hidden="true"><span /><span /><span /></div>
         </div>
         <div className="compact-copy">
-          <div className="compact-kicker"><Waveform size={12} weight="bold" aria-hidden="true" /> MEWBIT PLAYER</div>
+          <div className="compact-kicker"><Waveform size={12} weight="bold" aria-hidden="true" /> NOW PLAYING</div>
           <strong title={track?.title || "Nothing is playing"}>{track?.title || "Nothing is playing"}</strong>
           <div className="compact-meta"><span title={track?.author || "Waiting for a track"}>{track?.author || "Waiting for a track"}</span><SourceTag source={track?.source} /></div>
         </div>
-        <div className={`compact-status status-${connection.status}`} title={connection.message} aria-label={connection.message}>
-          <span className="status-dot" aria-hidden="true" />
-        </div>
       </div>
-      <div className="compact-progress">
-        <input
-          className="range range-progress"
-          type="range"
-          min="0"
-          max={duration}
-          value={seekValue}
-          aria-label="Seek through current track"
-          style={{ "--range-progress": `${(progress / duration) * 100}%` }}
-          onChange={(event) => setSeekValue(Number(event.target.value))}
-          onPointerUp={commitSeek}
-          onKeyUp={(event) => {
-            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitSeek();
-          }}
-        />
-        <div className="compact-time"><span>{formatTime(seekValue)}</span><span>{formatTime(duration)}</span></div>
+      <div className="compact-flags" aria-label="Player modes">
+        <span className={player.autoplay ? "is-on" : ""}>Autoplay {player.autoplay ? "on" : "off"}</span>
+        <span className={player.loop !== "NONE" ? "is-on" : ""}>Loop {player.loop !== "NONE" ? player.loop.toLowerCase() : "off"}</span>
+        <span className={player.shuffleActive ? "is-on" : ""}>Shuffle {player.shuffleActive ? "on" : "off"}</span>
       </div>
-      <div className="compact-controls">
-        <IconButton label="Play previous track" onClick={() => onAction("previous")}><SkipBack size={18} weight="regular" aria-hidden="true" /></IconButton>
-        <button className="play-button compact-play" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")}>
-          {isPlaying ? <Pause size={19} weight="fill" aria-hidden="true" /> : <Play size={19} weight="fill" aria-hidden="true" />}
-        </button>
-        <IconButton label="Skip track" onClick={() => onAction("skip")}><SkipForward size={18} weight="bold" aria-hidden="true" /></IconButton>
-        <IconButton label="Refresh lyrics" onClick={() => onAction("refresh_lyrics")}><MusicNotes size={18} aria-hidden="true" /></IconButton>
-        <IconButton label={volume === 0 ? "Unmute" : "Mute"} onClick={() => onAction("volume", { volume: volume === 0 ? 52 : 0 })}>
-          <SpeakerHigh size={18} weight={volume === 0 ? "regular" : "fill"} aria-hidden="true" />
-        </IconButton>
-      </div>
-      <div className="compact-volume" aria-label="Player volume">
-        <SpeakerHigh size={14} aria-hidden="true" />
-        <input
-          className="range range-volume"
-          type="range"
-          min="0"
-          max="100"
-          value={volume}
-          aria-label="Player volume"
-          style={{ "--range-progress": `${volume}%` }}
-          onChange={(event) => onAction("volume-preview", { volume: Number(event.target.value) })}
-          onPointerUp={(event) => onAction("volume", { volume: Number(event.currentTarget.value) })}
-          onKeyUp={(event) => {
-            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") onAction("volume", { volume: Number(event.currentTarget.value) });
-          }}
-        />
-        <span>{Math.round(volume)}</span>
-      </div>
+      <p className="compact-presence">{statusLine}</p>
     </section>
   );
 }
@@ -386,19 +357,14 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
   );
 }
 
-function FiltersPanel({ filters, filterPresets, onAction }) {
+function FiltersPanel({ filters, filterPresets, onAction, activeSection = "effects" }) {
   const values = useMemo(() => Array.from({ length: 15 }, (_, index) => filters.equalizer?.find((band) => band.band === index)?.gain ?? 0), [filters.equalizer]);
   const [bands, setBands] = useState(values);
-  const [activeSection, setActiveSection] = useState("effects");
   useEffect(() => setBands(values), [values]);
 
   const commitBands = () => onAction("equalizer", { bands: bands.map((gain, band) => ({ band, gain })) });
   return (
     <div className="filters-panel">
-      <div className="filter-tabs" role="tablist" aria-label="Sound controls">
-        <button type="button" role="tab" aria-selected={activeSection === "effects"} className={activeSection === "effects" ? "is-active" : ""} onClick={() => setActiveSection("effects")}><Faders size={16} aria-hidden="true" /> Effects</button>
-        <button type="button" role="tab" aria-selected={activeSection === "equalizer"} className={activeSection === "equalizer" ? "is-active" : ""} onClick={() => setActiveSection("equalizer")}><SlidersHorizontal size={16} aria-hidden="true" /> Equalizer</button>
-      </div>
       {activeSection === "effects" ? <div className="filter-section"><div className="filter-label-row"><div><strong>Fun filters</strong><span>One-click Lavalink effects</span></div><button className="ghost-button" type="button" onClick={() => onAction("filter", { preset: "off" })}>Reset</button></div><div className="filter-grid">{(filterPresets || []).map((preset) => <button type="button" key={preset} className={`filter-tile ${filters.effectPreset === preset ? "is-selected" : ""}`} onClick={() => onAction("filter", { preset })}><Faders size={17} aria-hidden="true" /><span>{preset}</span>{filters.effectPreset === preset ? <Check size={15} weight="bold" aria-hidden="true" /> : null}</button>)}</div></div> : null}
       {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><button className="ghost-button" type="button" onClick={() => { setBands(Array(15).fill(0)); onAction("equalizer", { bands: [] }); }}>Flat</button></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><input type="range" min="-0.25" max="1" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band`} onChange={(event) => setBands((current) => current.map((value, band) => band === index ? Number(event.target.value) : value))} onPointerUp={commitBands} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /><span>{BAND_LABELS[index]}</span></label>)}</div></div> : null}
     </div>
@@ -600,6 +566,7 @@ function App() {
   const [context, setContext] = useState({ mode: "local", guildId: "demo", accessToken: null, user: { username: "Local Listener" } });
   const [connection, setConnection] = useState({ status: "connecting", message: "Starting Activity" });
   const [activeTab, setActiveTab] = useState("home");
+  const [soundSection, setSoundSection] = useState("effects");
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 900);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
@@ -710,7 +677,7 @@ function App() {
         }
       }
       if (action === "previous") next.player.positionMs = 0;
-      if (action === "shuffle") next.player.queue.sort(() => Math.random() - 0.5);
+      if (action === "shuffle") { next.player.queue.sort(() => Math.random() - 0.5); next.player.shuffleActive = true; }
       if (action === "remove_queue") next.player.queue.splice(payload.position, 1);
       if (action === "clear_queue") next.player.queue = [];
       if (action === "move_queue") { const [track] = next.player.queue.splice(payload.from, 1); next.player.queue.splice(payload.to, 0, track); }
@@ -813,7 +780,7 @@ function App() {
 
   return (
     <main className={`activity-app ${isCompact ? "is-compact" : ""}`}>
-      {isCompact ? <CompactPlayer state={viewState} position={position} onAction={onAction} connection={connection} /> : <>
+      {isCompact ? <CompactPlayer state={viewState} position={position} /> : <>
         <div className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
           <aside className="sidebar sidebar-left" aria-label="Playlists sidebar">
             <DrawerToggle side="left" open={leftSidebarOpen} onClick={() => setLeftSidebarOpen((value) => !value)} />
@@ -839,7 +806,7 @@ function App() {
             <div className={`main-content main-view-${activeTab}`}>
               {activeTab === "home" ? (state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={viewState} position={position} onAction={onAction} onTab={goToView} /> : <HomePanel onView={goToView} />) : null}
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
-              {activeTab === "filters" ? <section className="content-panel panel-surface"><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} onAction={onAction} /></section> : null}
+              {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} activeSection={soundSection} onAction={onAction} /></section> : null}
               {activeTab === "lyrics" ? <section className="content-panel panel-surface"><LyricsPanel lyrics={state.player.lyrics} position={state.player.positionMs} onAction={onAction} /></section> : null}
               {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} onAction={onAction} /></section> : null}
             </div>
