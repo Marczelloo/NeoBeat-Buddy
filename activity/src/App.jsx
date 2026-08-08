@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  ArrowsIn,
+  ArrowsOut,
   CaretRight,
   Check,
   Cloud,
@@ -9,6 +11,7 @@ import {
   Faders,
   Headphones,
   Heart,
+  House,
   ListDashes,
   MagnifyingGlass,
   MusicNotes,
@@ -181,7 +184,7 @@ function PlayerControls({ player, onAction, onTab }) {
   );
 }
 
-function NowPlaying({ state, position, onAction, onTab }) {
+function NowPlaying({ state, position, onAction, onTab, className = "" }) {
   const { player } = state;
   const track = player.currentTrack;
   const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
@@ -194,7 +197,7 @@ function NowPlaying({ state, position, onAction, onTab }) {
   const volume = clamp(Number(player.volume || 0), 0, 100);
 
   return (
-    <section className="now-playing panel-surface">
+    <section className={`now-playing panel-surface ${className}`}>
       <div className="section-kicker"><Waveform size={14} weight="bold" aria-hidden="true" /> NOW PLAYING</div>
       <div className="now-playing-main">
         <div className={`cover-wrap ${player.playing ? "is-playing" : ""}`}>
@@ -374,16 +377,16 @@ function QueuePanel({ queue, onAction }) {
   );
 }
 
-function SearchPanel({ query, setQuery, source, setSource, results, status, onSearch, onAction }) {
+function SearchPanel({ query, setQuery, source, setSource, results, status, onSearch, onAction, showSearchBar = true }) {
   return (
     <div className="search-panel">
-      <div className="search-bar-row">
+      {showSearchBar ? <div className="search-bar-row">
         <div className="search-input-wrap"><MagnifyingGlass size={18} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder="Search title, artist, or a direct link" aria-label="Search music" /></div>
         <select value={source} onChange={(event) => setSource(event.target.value)} aria-label="Search source">
           {SOURCE_NAMES.map((name) => <option value={name} key={name}>{sourceLabel(name)}</option>)}
         </select>
         <button className="primary-button" type="button" onClick={onSearch}><MagnifyingGlass size={17} weight="bold" aria-hidden="true" /> Search</button>
-      </div>
+      </div> : null}
       <div className="search-caption"><span>{status === "searching" ? "Searching all providers" : status === "error" ? "Search needs attention" : "Results ranked by match quality and provider confidence"}</span><span className="source-coverage"><Cloud size={15} aria-hidden="true" /> Deezer + YouTube + Spotify + SoundCloud</span></div>
       {status === "searching" ? <div className="skeleton-list" aria-label="Loading search results"><span /><span /><span /></div> : null}
       {status === "error" ? <div className="inline-error"><WarningCircle size={18} aria-hidden="true" /> Search is temporarily unavailable. Check the Lavalink connection.</div> : null}
@@ -440,6 +443,124 @@ function PlaylistsPanel({ playlists, currentTrack, onAction }) {
   );
 }
 
+function GlobalSearch({ query, setQuery, source, setSource, onSearch, onFocus }) {
+  return (
+    <div className="global-search">
+      <MagnifyingGlass size={18} aria-hidden="true" />
+      <input
+        value={query}
+        onFocus={onFocus}
+        onChange={(event) => { onFocus?.(); setQuery(event.target.value); }}
+        onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }}
+        placeholder="What do you want to play?"
+        aria-label="Search music"
+      />
+      <select value={source} onChange={(event) => setSource(event.target.value)} aria-label="Search source">
+        {SOURCE_NAMES.map((name) => <option value={name} key={name}>{sourceLabel(name)}</option>)}
+      </select>
+      <button className="global-search-submit" type="button" onClick={onSearch} aria-label="Search music" title="Search music">
+        <MagnifyingGlass size={17} weight="bold" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onView }) {
+  return (
+    <div className="sidebar-content">
+      <div className="sidebar-heading">
+        <div><span className="sidebar-kicker">YOUR LIBRARY</span><h2>Playlists</h2></div>
+        <button className="icon-button" type="button" onClick={() => onView("playlists")} aria-label="Create or edit playlists" title="Create or edit playlists"><Plus size={18} weight="bold" aria-hidden="true" /></button>
+      </div>
+      <button className={`library-home ${!selectedPlaylist ? "is-active" : ""}`} type="button" onClick={() => onSelect(null)}>
+        <House size={18} weight={!selectedPlaylist ? "fill" : "regular"} aria-hidden="true" />
+        <span>All playlists</span>
+      </button>
+      <div className="playlist-nav-list">
+        {(playlists || []).map((playlist) => (
+          <button className={`playlist-nav-row ${selectedPlaylist === playlist.id ? "is-active" : ""}`} type="button" key={playlist.id} onClick={() => onSelect(playlist.id)}>
+            <Artwork track={{ title: playlist.name, artworkUrl: playlist.thumbnail }} size="small" />
+            <span><strong>{playlist.name}</strong><small>{playlist.trackCount} tracks</small></span>
+          </button>
+        ))}
+      </div>
+      <button className="sidebar-footer-action" type="button" onClick={() => onView("playlists")}><Plus size={16} aria-hidden="true" /> New playlist</button>
+    </div>
+  );
+}
+
+function QueueSidebar({ queue, onAction }) {
+  return (
+    <div className="sidebar-content queue-sidebar-content">
+      <div className="sidebar-heading">
+        <div><span className="sidebar-kicker">UP NEXT</span><h2>Queue <b>{queue.length}</b></h2></div>
+        <button className="icon-button" type="button" onClick={() => onAction("clear_queue")} disabled={!queue.length} aria-label="Clear queue" title="Clear queue"><Trash size={16} aria-hidden="true" /></button>
+      </div>
+      <QueuePanel queue={queue} onAction={onAction} />
+    </div>
+  );
+}
+
+function HomePanel({ onView }) {
+  return (
+    <section className="home-panel panel-surface">
+      <div className="home-orbit" aria-hidden="true"><span /><span /><span /></div>
+      <div className="home-copy">
+        <span className="home-kicker"><Waveform size={14} weight="bold" aria-hidden="true" /> MEWBIT RADIO</span>
+        <h1>Make the room<br /><em>sound like you.</em></h1>
+        <p>Search a track, open a playlist, or tune the signal. MewBit keeps the whole room in sync.</p>
+        <div className="home-actions">
+          <button className="primary-button" type="button" onClick={() => onView("search")}><MagnifyingGlass size={17} weight="bold" aria-hidden="true" /> Find a track</button>
+          <button className="secondary-button" type="button" onClick={() => onView("playlists")}><VinylRecord size={17} aria-hidden="true" /> Browse playlists</button>
+        </div>
+      </div>
+      <div className="home-signal" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div>
+    </section>
+  );
+}
+
+function PlayerBar({ state, position, onAction, onView, isExpanded, onToggleExpanded }) {
+  const { player } = state;
+  const track = player.currentTrack;
+  const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
+  const progress = clamp(position, 0, duration);
+  const [seekValue, setSeekValue] = useState(progress);
+  const volume = clamp(Number(player.volume || 0), 0, 100);
+  const isPlaying = player.playing && !player.paused;
+
+  useEffect(() => setSeekValue(progress), [progress]);
+
+  const commitSeek = () => onAction("seek", { positionMs: Number(seekValue) });
+  return (
+    <footer className={`player-bar ${isExpanded ? "is-expanded" : ""}`}>
+      <button className="player-bar-track" type="button" onClick={() => onView("home")} aria-label="Open full player">
+        <Artwork track={track} size="small" />
+        <span><strong>{track?.title || "Nothing is playing"}</strong><small>{track?.author || "Choose a track to start the room"}</small></span>
+      </button>
+      <div className="player-bar-center">
+        <div className="bar-controls">
+          <IconButton label="Play previous track" onClick={() => onAction("previous")} disabled={!track}><Rewind size={17} weight="bold" aria-hidden="true" /></IconButton>
+          <button className="bar-play" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")} disabled={!track}>{isPlaying ? <Pause size={18} weight="fill" aria-hidden="true" /> : <Play size={18} weight="fill" aria-hidden="true" />}</button>
+          <IconButton label="Skip track" onClick={() => onAction("skip")} disabled={!track}><SkipForward size={17} weight="bold" aria-hidden="true" /></IconButton>
+          <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")} disabled={!track}><Shuffle size={16} aria-hidden="true" /></IconButton>
+          <IconButton label="Open lyrics" onClick={() => onView("lyrics")} disabled={!track}><MusicNotes size={16} aria-hidden="true" /></IconButton>
+        </div>
+        <div className="bar-progress">
+          <span>{formatTime(seekValue)}</span>
+          <input className="range range-progress" type="range" min="0" max={duration} value={seekValue} aria-label="Seek through current track" style={{ "--range-progress": `${(progress / duration) * 100}%` }} onChange={(event) => setSeekValue(Number(event.target.value))} onPointerUp={commitSeek} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitSeek(); }} disabled={!track} />
+          <span>{formatTime(duration)}</span>
+        </div>
+      </div>
+      <div className="player-bar-actions">
+        {track ? <SourceTag source={track.source} /> : null}
+        <IconButton label={volume === 0 ? "Unmute" : "Mute"} onClick={() => onAction("volume", { volume: volume === 0 ? 52 : 0 })}><SpeakerHigh size={17} weight={volume === 0 ? "regular" : "fill"} aria-hidden="true" /></IconButton>
+        <input className="range range-volume bar-volume" type="range" min="0" max="100" value={volume} aria-label="Player volume" style={{ "--range-progress": `${volume}%` }} onChange={(event) => onAction("volume-preview", { volume: Number(event.target.value) })} onPointerUp={(event) => onAction("volume", { volume: Number(event.currentTarget.value) })} />
+        <button className="bar-expand" type="button" onClick={onToggleExpanded} aria-label={isExpanded ? "Collapse player" : "Expand player"} title={isExpanded ? "Collapse player" : "Expand player"}>{isExpanded ? <ArrowsIn size={18} aria-hidden="true" /> : <ArrowsOut size={18} aria-hidden="true" />}</button>
+      </div>
+    </footer>
+  );
+}
+
 function Workspace({ state, activeTab, setActiveTab, search, onAction }) {
   const tabs = [
     ["queue", "Queue", <ListDashes size={17} aria-hidden="true" />],
@@ -468,7 +589,11 @@ function App() {
   const [state, setState] = useState(() => createMockState());
   const [context, setContext] = useState({ mode: "local", guildId: "demo", accessToken: null, user: { username: "Local Listener" } });
   const [connection, setConnection] = useState({ status: "connecting", message: "Starting Activity" });
-  const [activeTab, setActiveTab] = useState("queue");
+  const [activeTab, setActiveTab] = useState("home");
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 900);
+  const [selectedPlaylist, setSelectedPlaylist] = useState(null);
+  const [playerBarExpanded, setPlayerBarExpanded] = useState(true);
   const [clock, setClock] = useState(Date.now());
   const [toast, setToast] = useState(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -478,6 +603,11 @@ function App() {
   const [searchStatus, setSearchStatus] = useState("idle");
   const syncAt = useRef(Date.now());
   const isCompact = useCompactViewport();
+
+  const goToView = useCallback((view) => {
+    setActiveTab(view);
+    setPlayerBarExpanded(view === "home");
+  }, []);
 
   const showToast = useCallback((message, type = "info") => {
     setToast({ message, type });
@@ -649,15 +779,47 @@ function App() {
     onSearch: runSearch,
   };
 
+  const viewState = { ...state, player: { ...state.player, positionMs: position } };
+
   return (
     <main className={`activity-app ${isCompact ? "is-compact" : ""}`}>
-      {isCompact ? <CompactPlayer state={{ ...state, player: { ...state.player, positionMs: position } }} position={position} onAction={onAction} connection={connection} /> : <>
+      {isCompact ? <CompactPlayer state={viewState} position={position} onAction={onAction} connection={connection} /> : <>
         <TopBar state={state} context={context} connection={connection} />
-        <div className="activity-body">
-          <NowPlaying state={{ ...state, player: { ...state.player, positionMs: position } }} position={position} onAction={onAction} onTab={setActiveTab} />
-          <Workspace state={{ ...state, player: { ...state.player, positionMs: position } }} activeTab={activeTab} setActiveTab={setActiveTab} search={searchProps} onAction={onAction} />
+        <div className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
+          <aside className="sidebar sidebar-left" aria-label="Playlists sidebar">
+            <PlaylistSidebar
+              playlists={state.playlists}
+              selectedPlaylist={selectedPlaylist}
+              onSelect={(playlistId) => { setSelectedPlaylist(playlistId); goToView("playlists"); }}
+              onView={goToView}
+            />
+          </aside>
+          <section className="main-stage">
+            <div className="stage-toolbar">
+              <div className="stage-navigation" aria-label="Activity navigation">
+                <button className={activeTab === "home" ? "is-active" : ""} type="button" onClick={() => goToView("home")}><House size={17} weight={activeTab === "home" ? "fill" : "regular"} aria-hidden="true" /> Home</button>
+                <button className={leftSidebarOpen ? "is-active" : ""} type="button" onClick={() => setLeftSidebarOpen((value) => !value)}><VinylRecord size={17} aria-hidden="true" /> Library</button>
+                <button className={rightSidebarOpen ? "is-active" : ""} type="button" onClick={() => setRightSidebarOpen((value) => !value)}><ListDashes size={17} aria-hidden="true" /> Queue <b>{state.player.queue.length}</b></button>
+              </div>
+              <GlobalSearch {...searchProps} onFocus={() => goToView("search")} />
+              <div className="stage-actions" aria-label="Player tools">
+                <button className={activeTab === "filters" ? "is-active" : ""} type="button" onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /> Sound</button>
+                <button className={activeTab === "lyrics" ? "is-active" : ""} type="button" onClick={() => goToView("lyrics")}><MusicNotes size={17} aria-hidden="true" /> Lyrics</button>
+              </div>
+            </div>
+            <div className={`main-content main-view-${activeTab}`}>
+              {activeTab === "home" ? (state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={viewState} position={position} onAction={onAction} onTab={goToView} /> : <HomePanel onView={goToView} />) : null}
+              {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
+              {activeTab === "filters" ? <section className="content-panel panel-surface"><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} onAction={onAction} /></section> : null}
+              {activeTab === "lyrics" ? <section className="content-panel panel-surface"><LyricsPanel lyrics={state.player.lyrics} position={state.player.positionMs} onAction={onAction} /></section> : null}
+              {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} onAction={onAction} /></section> : null}
+            </div>
+          </section>
+          <aside className="sidebar sidebar-right" aria-label="Queue sidebar">
+            <QueueSidebar queue={state.player.queue} onAction={onAction} />
+          </aside>
         </div>
-        <footer className="activity-footer"><span><span className="status-dot" aria-hidden="true" /> MewBit keeps the bot and Lavalink in control</span><span>{actionBusy ? "Applying change" : connection.message}</span></footer>
+        <PlayerBar state={viewState} position={position} onAction={onAction} onView={goToView} isExpanded={playerBarExpanded} onToggleExpanded={() => setPlayerBarExpanded((value) => !value)} />
       </>}
       {toast ? <div className={`toast toast-${toast.type}`} role="status"><span>{toast.type === "error" ? <WarningCircle size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}</span>{toast.message}<button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification"><X size={16} aria-hidden="true" /></button></div> : null}
     </main>

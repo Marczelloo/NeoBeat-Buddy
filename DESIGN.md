@@ -18,7 +18,7 @@ Panels use an 18px radius. Controls use a 12px radius. Artwork uses a 12px radiu
 
 ## Composition
 
-The first viewport is a two-column split. The left column holds the current artwork, title, source, progress, transport controls, volume, and autoplay state. The right column is a tabbed workspace for queue, search, sound, lyrics, and playlists. Below 1060px the layout becomes a single column. Below 680px controls and search collapse into touch-friendly rows with no horizontal overflow.
+The first viewport follows a Spotify-like player shell. A dynamic center is surrounded by a slide-out playlist library on the left and an always-ready queue on the right. The center opens on Home when nothing is playing and becomes the full player when a track is active. Search, sound, lyrics, and playlist editing replace the center content without leaving the room. A sticky bottom player bar keeps the current track, transport, seek, volume, provider, and expand-to-full-player action available across every view. The queue is open by default on desktop; the library is closed by default. Below 900px the sidebars become drawers, and on narrow/short Discord windows the dedicated compact player takes over.
 
 ## Discord compact mode
 
