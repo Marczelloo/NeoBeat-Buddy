@@ -2,6 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("disco
 const announcer = require("../../helpers/announcements/announcer");
 const { BRAND } = require("../../helpers/brand");
 const { updateGuildState, getGuildState } = require("../../helpers/guildState");
+const { getPlayer } = require("../../helpers/lavalink/players");
 const userPrefs = require("../../helpers/users/preferences");
 
 module.exports = {
@@ -123,7 +124,16 @@ async function handlePlayer(interaction, subcommand) {
   switch (subcommand) {
     case "channel": {
       const channel = interaction.options.getChannel("channel");
-      updateGuildState(guildId, { playerChannel: channel.id });
+      const previousChannelId = state?.nowPlayingChannel;
+      const previousMessageId = state?.nowPlayingMessage;
+      const player = getPlayer(guildId);
+      if (player) player.textChannel = channel.id;
+      updateGuildState(guildId, { playerChannel: channel.id, nowPlayingChannel: channel.id, nowPlayingMessage: null });
+
+      if (previousChannelId && previousChannelId !== channel.id && previousMessageId) {
+        const previousChannel = await interaction.client.channels.fetch(previousChannelId).catch(() => null);
+        await previousChannel?.messages.delete(previousMessageId).catch(() => null);
+      }
       return interaction.reply({
         content: `✅ MewBit player and Activity playback will use ${channel}.`,
         ephemeral: true,

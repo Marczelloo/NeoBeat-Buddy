@@ -334,7 +334,7 @@ function toSource(value) {
 }
 
 function serializeActivitySearchResults(tracks, query) {
-  return rankSearchResults(tracks, query, { limit: 24 }).map((track) => {
+  return rankSearchResults(tracks, query, { limit: 48 }).map((track) => {
     const serialized = serializeTrack(track);
     return {
       ...serialized,
@@ -354,9 +354,11 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       const settings = guildState.getGuildState(guildId);
       const memberVoice = identity.member?.voice?.channelId;
       const voiceId = player?.voiceChannel || memberVoice;
-      const textId = player?.textChannel || settings?.playerChannel || null;
+      const textId = settings?.playerChannel || player?.textChannel || null;
       if (!voiceId) throw Object.assign(new Error("Join a voice channel before starting playback."), { statusCode: 400 });
       if (!textId) throw Object.assign(new Error("Set the player channel first with /setup player channel."), { statusCode: 400 });
+      if (player && player.textChannel !== textId) player.textChannel = textId;
+      if (settings?.playerChannel) guildState.updateGuildState(guildId, { nowPlayingChannel: textId });
 
       return lavalinkPlay({
         guildId,
@@ -439,9 +441,11 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       if (!playlist?.tracks?.length) throw Object.assign(new Error("That playlist is empty or unavailable."), { statusCode: 404 });
       const voiceId = player?.voiceChannel || identity.member?.voice?.channelId;
       const settings = guildState.getGuildState(guildId);
-      const textId = player?.textChannel || settings?.playerChannel || null;
+      const textId = settings?.playerChannel || player?.textChannel || null;
       if (!voiceId) throw Object.assign(new Error("Join a voice channel before playing a playlist."), { statusCode: 400 });
       if (!textId) throw Object.assign(new Error("Set the player channel first with /setup player channel."), { statusCode: 400 });
+      if (player && player.textChannel !== textId) player.textChannel = textId;
+      if (settings?.playerChannel) guildState.updateGuildState(guildId, { nowPlayingChannel: textId });
 
       for (const track of playlist.tracks.slice(0, 100)) {
         const query = track.uri || `${track.title} ${track.author}`;

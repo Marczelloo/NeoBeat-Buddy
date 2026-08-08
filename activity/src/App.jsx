@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
-  ArrowsIn,
-  ArrowsOut,
   CaretRight,
   Check,
   Cloud,
@@ -29,6 +27,7 @@ import {
   VinylRecord,
   SpeakerHigh,
   SpeakerSlash,
+  Stop,
   Waveform,
   WarningCircle,
   X,
@@ -155,6 +154,9 @@ function PlayerControls({ player, volume, onAction, onTab }) {
         <button className="play-button" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")}>
           {isPlaying ? <Pause size={24} weight="fill" aria-hidden="true" /> : <Play size={24} weight="fill" aria-hidden="true" />}
         </button>
+        <IconButton label="Stop playback and clear queue" onClick={() => onAction("stop")} disabled={!player.currentTrack}>
+          <Stop size={19} weight="fill" aria-hidden="true" />
+        </IconButton>
         <IconButton label="Skip track" onClick={() => onAction("skip")}>
           <SkipForward size={20} weight="regular" aria-hidden="true" />
         </IconButton>
@@ -387,13 +389,18 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
 function FiltersPanel({ filters, filterPresets, onAction }) {
   const values = useMemo(() => Array.from({ length: 15 }, (_, index) => filters.equalizer?.find((band) => band.band === index)?.gain ?? 0), [filters.equalizer]);
   const [bands, setBands] = useState(values);
+  const [activeSection, setActiveSection] = useState("effects");
   useEffect(() => setBands(values), [values]);
 
   const commitBands = () => onAction("equalizer", { bands: bands.map((gain, band) => ({ band, gain })) });
   return (
     <div className="filters-panel">
-      <div className="filter-section"><div className="filter-label-row"><div><strong>Fun filters</strong><span>One-click Lavalink effects</span></div><button className="ghost-button" type="button" onClick={() => onAction("filter", { preset: "off" })}>Reset</button></div><div className="filter-grid">{(filterPresets || []).map((preset) => <button type="button" key={preset} className={`filter-tile ${filters.effectPreset === preset ? "is-selected" : ""}`} onClick={() => onAction("filter", { preset })}><Faders size={17} aria-hidden="true" /><span>{preset}</span>{filters.effectPreset === preset ? <Check size={15} weight="bold" aria-hidden="true" /> : null}</button>)}</div></div>
-      <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><button className="ghost-button" type="button" onClick={() => { setBands(Array(15).fill(0)); onAction("equalizer", { bands: [] }); }}>Flat</button></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><input type="range" min="-0.25" max="1" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band`} onChange={(event) => setBands((current) => current.map((value, band) => band === index ? Number(event.target.value) : value))} onPointerUp={commitBands} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /><span>{BAND_LABELS[index]}</span></label>)}</div></div>
+      <div className="filter-tabs" role="tablist" aria-label="Sound controls">
+        <button type="button" role="tab" aria-selected={activeSection === "effects"} className={activeSection === "effects" ? "is-active" : ""} onClick={() => setActiveSection("effects")}><Faders size={16} aria-hidden="true" /> Effects</button>
+        <button type="button" role="tab" aria-selected={activeSection === "equalizer"} className={activeSection === "equalizer" ? "is-active" : ""} onClick={() => setActiveSection("equalizer")}><SlidersHorizontal size={16} aria-hidden="true" /> Equalizer</button>
+      </div>
+      {activeSection === "effects" ? <div className="filter-section"><div className="filter-label-row"><div><strong>Fun filters</strong><span>One-click Lavalink effects</span></div><button className="ghost-button" type="button" onClick={() => onAction("filter", { preset: "off" })}>Reset</button></div><div className="filter-grid">{(filterPresets || []).map((preset) => <button type="button" key={preset} className={`filter-tile ${filters.effectPreset === preset ? "is-selected" : ""}`} onClick={() => onAction("filter", { preset })}><Faders size={17} aria-hidden="true" /><span>{preset}</span>{filters.effectPreset === preset ? <Check size={15} weight="bold" aria-hidden="true" /> : null}</button>)}</div></div> : null}
+      {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><button className="ghost-button" type="button" onClick={() => { setBands(Array(15).fill(0)); onAction("equalizer", { bands: [] }); }}>Flat</button></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><input type="range" min="-0.25" max="1" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band`} onChange={(event) => setBands((current) => current.map((value, band) => band === index ? Number(event.target.value) : value))} onPointerUp={commitBands} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /><span>{BAND_LABELS[index]}</span></label>)}</div></div> : null}
     </div>
   );
 }
@@ -516,7 +523,7 @@ function HomePanel({ onView }) {
   );
 }
 
-function PlayerBar({ state, position, onAction, onView, isExpanded, onToggleExpanded }) {
+function PlayerBar({ state, position, onAction, onView }) {
   const { player } = state;
   const track = player.currentTrack;
   const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
@@ -529,18 +536,24 @@ function PlayerBar({ state, position, onAction, onView, isExpanded, onToggleExpa
 
   const commitSeek = () => onAction("seek", { positionMs: Number(seekValue) });
   return (
-    <footer className={`player-bar ${isExpanded ? "is-expanded" : ""}`}>
-      <button className="player-bar-track" type="button" onClick={() => onView("home")} aria-label="Open full player">
-        <Artwork track={track} size="small" />
-        <span><strong>{track?.title || "Nothing is playing"}</strong><small>{track?.author || "Choose a track to start the room"}</small></span>
-      </button>
+    <footer className="player-bar">
+      <div className="player-bar-leading">
+        <button className="player-bar-track" type="button" onClick={() => onView("home")} aria-label="Open full player">
+          <Artwork track={track} size="small" />
+          <span><strong>{track?.title || "Nothing is playing"}</strong><small>{track?.author || "Choose a track to start the room"}</small></span>
+        </button>
+        <IconButton label={player.autoplay ? "Disable autoplay" : "Enable autoplay"} className={`bar-autoplay ${player.autoplay ? "is-active" : ""}`} onClick={() => onAction("autoplay", { enabled: !player.autoplay })} aria-pressed={player.autoplay}>
+          <Sparkle size={16} weight={player.autoplay ? "fill" : "regular"} aria-hidden="true" />
+        </IconButton>
+      </div>
       <div className="player-bar-center">
         <div className="bar-controls">
+          <IconButton label={`Loop mode ${player.loop}`} className={player.loop !== "NONE" ? "is-active" : ""} onClick={() => onAction("loop")} disabled={!track}><Repeat size={16} weight={player.loop !== "NONE" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
           <IconButton label="Play previous track" onClick={() => onAction("previous")} disabled={!track}><SkipBack size={17} weight="regular" aria-hidden="true" /></IconButton>
           <button className="bar-play" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")} disabled={!track}>{isPlaying ? <Pause size={18} weight="fill" aria-hidden="true" /> : <Play size={18} weight="fill" aria-hidden="true" />}</button>
+          <IconButton label="Stop playback and clear queue" onClick={() => onAction("stop")} disabled={!track}><Stop size={16} weight="fill" aria-hidden="true" /></IconButton>
           <IconButton label="Skip track" onClick={() => onAction("skip")} disabled={!track}><SkipForward size={17} weight="regular" aria-hidden="true" /></IconButton>
           <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")} disabled={!track}><Shuffle size={16} weight="regular" aria-hidden="true" /></IconButton>
-          <IconButton label="Open lyrics" onClick={() => onView("lyrics")} disabled={!track}><MusicNotes size={16} weight="regular" aria-hidden="true" /></IconButton>
         </div>
         <div className="bar-progress">
           <span>{formatTime(seekValue)}</span>
@@ -550,9 +563,9 @@ function PlayerBar({ state, position, onAction, onView, isExpanded, onToggleExpa
       </div>
       <div className="player-bar-actions">
         {track ? <SourceTag source={track.source} /> : null}
+        <IconButton label="Open lyrics" onClick={() => onView("lyrics")} disabled={!track}><MusicNotes size={16} weight="regular" aria-hidden="true" /></IconButton>
         <IconButton label={volume === 0 ? "Unmute" : "Mute"} onClick={() => onAction("volume", { volume: volume === 0 ? 52 : 0 })}><SpeakerHigh size={17} weight={volume === 0 ? "regular" : "fill"} aria-hidden="true" /></IconButton>
         <input className="range range-volume bar-volume" type="range" min="0" max="100" value={volume} aria-label="Player volume" style={{ "--range-progress": `${volume}%` }} onChange={(event) => onAction("volume-preview", { volume: Number(event.target.value) })} onPointerUp={(event) => onAction("volume", { volume: Number(event.currentTarget.value) })} />
-        <button className="bar-expand" type="button" onClick={onToggleExpanded} aria-label={isExpanded ? "Collapse player" : "Expand player"} title={isExpanded ? "Collapse player" : "Expand player"}>{isExpanded ? <ArrowsIn size={18} aria-hidden="true" /> : <ArrowsOut size={18} aria-hidden="true" />}</button>
       </div>
     </footer>
   );
@@ -590,7 +603,6 @@ function App() {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 900);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
-  const [playerBarExpanded, setPlayerBarExpanded] = useState(true);
   const [clock, setClock] = useState(Date.now());
   const [toast, setToast] = useState(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -603,7 +615,6 @@ function App() {
 
   const goToView = useCallback((view) => {
     setActiveTab(view);
-    setPlayerBarExpanded(view === "home");
   }, []);
 
   const showToast = useCallback((message, type = "info") => {
@@ -678,6 +689,7 @@ function App() {
       if (action === "toggle") next.player.playing = !next.player.playing, next.player.paused = !next.player.playing;
       if (action === "pause") next.player.playing = false, next.player.paused = true;
       if (action === "resume") next.player.playing = true, next.player.paused = false;
+      if (action === "stop") { next.player.currentTrack = null; next.player.queue = []; next.player.playing = false; next.player.paused = true; next.player.positionMs = 0; }
       if (action === "volume") next.player.volume = payload.volume;
       if (action === "volume-preview") next.player.volume = payload.volume;
       if (action === "seek") next.player.positionMs = payload.positionMs;
@@ -837,7 +849,7 @@ function App() {
             <QueueSidebar queue={state.player.queue} onAction={onAction} />
           </aside>
         </div>
-        {activeTab === "home" ? null : <PlayerBar state={viewState} position={position} onAction={onAction} onView={goToView} isExpanded={playerBarExpanded} onToggleExpanded={() => setPlayerBarExpanded((value) => !value)} />}
+        {activeTab === "home" ? null : <PlayerBar state={viewState} position={position} onAction={onAction} onView={goToView} />}
       </>}
       {toast ? <div className={`toast toast-${toast.type}`} role="status"><span>{toast.type === "error" ? <WarningCircle size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}</span>{toast.message}<button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification"><X size={16} aria-hidden="true" /></button></div> : null}
     </main>

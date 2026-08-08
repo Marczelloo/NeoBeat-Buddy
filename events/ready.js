@@ -38,7 +38,7 @@ module.exports = {
           }
 
           const state = getGuildState(player.guildId) ?? {};
-          const channelId = state.nowPlayingChannel ?? player.textChannel;
+          const channelId = state.playerChannel ?? state.nowPlayingChannel ?? player.textChannel;
           if (!channelId) return;
 
           const channel = await client.channels.fetch(channelId).catch(() => null);

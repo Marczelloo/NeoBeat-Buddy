@@ -1,7 +1,7 @@
 const { getSearchPrefix } = require("./searchSources");
 
 const CACHE_TTL_MS = 15_000;
-const MAX_RESULTS_PER_SOURCE = 20;
+const MAX_RESULTS_PER_SOURCE = 50;
 const SOURCE_TIMEOUT_MS = 1_500;
 const searchCache = new Map();
 

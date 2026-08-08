@@ -180,6 +180,7 @@ module.exports = {
     const userSource = userPrefs.getUserDefaultSource(interaction.user.id);
     const guildSettings = getGuildState(interaction.guildId);
     const source = resolveSearchSource(selectedSource, userSource, guildSettings?.defaultSource);
+    const playerChannelId = guildSettings?.playerChannel || interaction.channel.id;
 
     const requester = {
       id: interaction.user.id,
@@ -234,11 +235,14 @@ module.exports = {
     }
 
     try {
+      updateGuildState(interaction.guild.id, {
+        nowPlayingChannel: playerChannelId,
+      });
       const { track, player, isPlaylist, playlistInfo, playlistUrl, playlistTrackCount, playlistDurationMs } =
         await lavalinkPlay({
           guildId: interaction.guild.id,
           voiceId: voiceChannel.id,
-          textId: interaction.channel.id,
+          textId: playerChannelId,
           query: query,
           requester: requester,
           prepend: prepend,
@@ -289,7 +293,7 @@ module.exports = {
       }
 
       updateGuildState(interaction.guild.id, {
-        nowPlayingChannel: interaction.channel.id,
+        nowPlayingChannel: playerChannelId,
       });
     } catch (error) {
       Log.error("Error in /play command:", error);
