@@ -229,9 +229,10 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
 .filter-tile:active { transform: scale(0.98); }
 .filter-tile svg:last-child { margin-left: auto; }
 .eq-section { padding-top: 2px; }
-.eq-grid { min-height: 0; height: clamp(176px, 32vh, 270px); display: grid; grid-template-columns: repeat(15, minmax(18px, 1fr)); gap: 6px; align-items: end; padding: 8px 2px 0; border-bottom: 1px solid var(--line); background: linear-gradient(transparent 49%, rgb(101 231 255 / 0.06) 50%, transparent 51%); }
-.eq-band { min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 6px; color: var(--muted); font: 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.eq-band input { width: clamp(156px, 27vh, 224px); height: 14px; margin: 0; transform: rotate(-90deg); transform-origin: center; appearance: none; background: transparent; cursor: pointer; }
+.eq-grid { min-height: 0; height: clamp(190px, 31vh, 250px); display: grid; grid-template-columns: repeat(15, minmax(18px, 1fr)); gap: 6px; align-items: end; padding: 10px 4px 8px; border-bottom: 1px solid var(--line); background: linear-gradient(transparent 49%, rgb(101 231 255 / 0.06) 50%, transparent 51%); }
+.eq-band { min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 8px; color: var(--muted-strong); font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; letter-spacing: 0.025em; }
+.eq-band span { color: var(--muted-strong); text-shadow: 0 1px 0 rgb(0 0 0 / 0.55); }
+.eq-band input { width: clamp(166px, 25vh, 204px); height: 14px; margin: 0; transform: rotate(-90deg); transform-origin: center; appearance: none; background: transparent; cursor: pointer; }
 .eq-band input::-webkit-slider-runnable-track { height: 3px; border-radius: 3px; background: var(--line); }
 .eq-band input::-moz-range-track { height: 3px; border-radius: 3px; background: var(--line); }
 .eq-band input::-webkit-slider-thumb { width: 11px; height: 11px; margin-top: -4px; appearance: none; border: 2px solid var(--bg); border-radius: 999px; background: var(--magenta); }
@@ -507,8 +508,8 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
 .main-view-filters .filters-panel { flex: 1; height: auto; gap: 10px; }
 .main-view-filters .filter-section { gap: 8px; }
 .main-view-filters .filter-tile { min-height: 36px; }
-.main-view-filters .eq-section { min-height: 0; height: 100%; grid-template-rows: auto minmax(0, 1fr); padding-top: 2px; }
-.main-view-filters .eq-grid { height: 100%; min-height: clamp(176px, 32vh, 270px); }
+.main-view-filters .eq-section { align-content: start; height: auto; grid-template-rows: auto auto; padding-top: 2px; }
+.main-view-filters .eq-grid { height: clamp(190px, 31vh, 250px); min-height: 0; margin-top: 8px; }
 
 @media (max-width: 900px) {
   .player-bar { height: 72px; min-height: 72px; max-height: 72px; }

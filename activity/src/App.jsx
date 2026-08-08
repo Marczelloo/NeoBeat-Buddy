@@ -739,10 +739,15 @@ function App() {
       if (shouldHitGateway) {
         const response = await sendActivityAction({ ...context, action, payload });
         applyState(response.state);
-        showToast(action === "play" ? (payload.playNow ? "Playing now" : "Added to queue") : "Player updated", "success");
+        const successMessage = action === "play"
+          ? (payload.playNow ? "Playing now" : "Added to queue")
+          : action === "stop"
+            ? "Playback stopped"
+            : null;
+        if (successMessage) showToast(successMessage, "success");
       } else {
         localMutation(action, payload);
-        showToast("Local preview updated", "info");
+        if (action === "play") showToast(payload.playNow ? "Playing now" : "Added to queue", "info");
       }
     } catch (error) {
       if (context.mode === "local") {
