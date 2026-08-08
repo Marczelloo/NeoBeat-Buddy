@@ -64,6 +64,7 @@ async function persist() {
 const createDefaultState = () => ({
   nowPlayingMessage: null,
   nowPlayingChannel: null,
+  playerChannel: null,
   autoplay: false,
   radio247: false,
   announcementChannel: null,

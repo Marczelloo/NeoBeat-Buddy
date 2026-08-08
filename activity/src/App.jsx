@@ -19,7 +19,6 @@ import {
   Plus,
   Queue,
   Repeat,
-  Rewind,
   SkipBack,
   Shuffle,
   SkipForward,
@@ -29,6 +28,7 @@ import {
   UploadSimple,
   VinylRecord,
   SpeakerHigh,
+  SpeakerSlash,
   Waveform,
   WarningCircle,
   X,
@@ -38,7 +38,7 @@ import { connectActivitySocket, fetchActivityState, searchActivity, sendActivity
 import { createMockState, mockSearchResults } from "./mockState.js";
 
 const BAND_LABELS = ["60", "120", "250", "500", "1k", "2k", "4k", "8k", "16k", "31k", "63k", "125k", "250k", "500k", "1m"];
-const SOURCE_NAMES = ["auto", "deezer", "youtube", "spotify", "soundcloud"];
+const SOURCE_NAMES = ["auto", "youtube", "soundcloud", "deezer", "spotify"];
 
 function formatTime(milliseconds) {
   const seconds = Math.max(0, Math.floor(Number(milliseconds || 0) / 1000));
@@ -67,7 +67,7 @@ function useCompactViewport() {
 }
 
 function sourceLabel(source) {
-  return ({ deezer: "Deezer", youtube: "YouTube", spotify: "Spotify", soundcloud: "SoundCloud", auto: "Auto" })[source] || source || "Unknown";
+  return ({ deezer: "Deezer", youtube: "YouTube", spotify: "Spotify", soundcloud: "SoundCloud", auto: "YouTube first" })[source] || source || "Unknown";
 }
 
 function IconButton({ label, children, className = "", ...props }) {
@@ -82,11 +82,26 @@ function SourceTag({ source }) {
   return <span className={`source-tag source-${source || "unknown"}`}>{sourceLabel(source)}</span>;
 }
 
+function resolveArtworkUrl(artworkUrl) {
+  if (!artworkUrl) return null;
+
+  try {
+    const parsed = new URL(artworkUrl, window.location.origin);
+    if (["data:", "blob:"].includes(parsed.protocol) || parsed.origin === window.location.origin) return parsed.toString();
+    return `/api/activity/artwork?url=${encodeURIComponent(parsed.toString())}`;
+  } catch {
+    return null;
+  }
+}
+
 function Artwork({ track, size = "large" }) {
   const [broken, setBroken] = useState(false);
   const artworkUrl = track?.artworkUrl;
+  const resolvedArtworkUrl = resolveArtworkUrl(artworkUrl);
 
-  if (!artworkUrl || broken) {
+  useEffect(() => setBroken(false), [artworkUrl]);
+
+  if (!resolvedArtworkUrl || broken) {
     return (
       <div className={`artwork artwork-${size} artwork-fallback`} aria-label="No artwork available">
         <MusicNotes size={size === "large" ? 56 : 26} weight="duotone" aria-hidden="true" />
@@ -98,7 +113,7 @@ function Artwork({ track, size = "large" }) {
   return (
     <img
       className={`artwork artwork-${size}`}
-      src={artworkUrl}
+      src={resolvedArtworkUrl}
       alt={`${track.title} artwork`}
       onError={() => setBroken(true)}
     />
@@ -120,29 +135,56 @@ function PanelTitle({ icon, title, description, action }) {
   );
 }
 
-function PlayerControls({ player, onAction, onTab }) {
+function PlayerControls({ player, volume, onAction, onTab }) {
   const isPlaying = player.playing && !player.paused;
   return (
-    <div className="transport-controls">
-      <IconButton label="Play previous track" onClick={() => onAction("previous")}>
-        <Rewind size={20} weight="bold" aria-hidden="true" />
-      </IconButton>
-      <button className="play-button" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")}>
-        {isPlaying ? <Pause size={24} weight="fill" aria-hidden="true" /> : <Play size={24} weight="fill" aria-hidden="true" />}
-      </button>
-      <IconButton label="Skip track" onClick={() => onAction("skip")}>
-        <SkipForward size={20} weight="bold" aria-hidden="true" />
-      </IconButton>
-      <span className="control-divider" aria-hidden="true" />
-      <IconButton label={`Loop mode ${player.loop}`} className={player.loop !== "NONE" ? "is-active" : ""} onClick={() => onAction("loop")}>
-        <Repeat size={19} weight={player.loop !== "NONE" ? "fill" : "regular"} aria-hidden="true" />
-      </IconButton>
-      <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")}>
-        <Shuffle size={19} aria-hidden="true" />
-      </IconButton>
-      <IconButton label="Open lyrics" onClick={() => onTab("lyrics")}>
-        <MusicNotes size={19} aria-hidden="true" />
-      </IconButton>
+    <div className="player-control-deck">
+      <div className="player-control-side player-control-left">
+        <button className={`autoplay-control ${player.autoplay ? "is-on" : ""}`} type="button" onClick={() => onAction("autoplay", { enabled: !player.autoplay })} aria-pressed={player.autoplay}>
+          <Sparkle size={16} weight={player.autoplay ? "fill" : "regular"} aria-hidden="true" />
+          <span>Autoplay</span>
+        </button>
+      </div>
+      <div className="transport-controls">
+        <IconButton label={`Loop mode ${player.loop}`} className={player.loop !== "NONE" ? "is-active" : ""} onClick={() => onAction("loop")}>
+          <Repeat size={19} weight={player.loop !== "NONE" ? "fill" : "regular"} aria-hidden="true" />
+        </IconButton>
+        <IconButton label="Play previous track" onClick={() => onAction("previous")}>
+          <SkipBack size={20} weight="regular" aria-hidden="true" />
+        </IconButton>
+        <button className="play-button" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")}>
+          {isPlaying ? <Pause size={24} weight="fill" aria-hidden="true" /> : <Play size={24} weight="fill" aria-hidden="true" />}
+        </button>
+        <IconButton label="Skip track" onClick={() => onAction("skip")}>
+          <SkipForward size={20} weight="regular" aria-hidden="true" />
+        </IconButton>
+        <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")}>
+          <Shuffle size={19} weight="regular" aria-hidden="true" />
+        </IconButton>
+      </div>
+      <div className="player-control-side player-control-right">
+        <IconButton label="Open lyrics" onClick={() => onTab("lyrics")}>
+          <MusicNotes size={19} weight="regular" aria-hidden="true" />
+        </IconButton>
+        <IconButton label={volume === 0 ? "Unmute" : "Mute"} onClick={() => onAction("volume", { volume: volume === 0 ? 52 : 0 })}>
+          {volume === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
+        </IconButton>
+        <input
+          className="range range-volume"
+          type="range"
+          min="0"
+          max="100"
+          value={volume}
+          aria-label="Player volume"
+          style={{ "--range-progress": `${volume}%` }}
+          onChange={(event) => onAction("volume-preview", { volume: Number(event.target.value) })}
+          onPointerUp={(event) => onAction("volume", { volume: Number(event.currentTarget.value) })}
+          onKeyUp={(event) => {
+            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") onAction("volume", { volume: Number(event.currentTarget.value) });
+          }}
+        />
+        <span className="volume-number">{Math.round(volume)}</span>
+      </div>
     </div>
   );
 }
@@ -161,7 +203,6 @@ function NowPlaying({ state, position, onAction, onTab, className = "" }) {
 
   return (
     <section className={`now-playing panel-surface ${className}`}>
-      <div className="section-kicker"><Waveform size={14} weight="bold" aria-hidden="true" /> NOW PLAYING</div>
       <div className="now-playing-main">
         <div className={`cover-wrap ${player.playing ? "is-playing" : ""}`}>
           <Artwork track={track} size="large" />
@@ -194,34 +235,7 @@ function NowPlaying({ state, position, onAction, onTab, className = "" }) {
         />
         <div className="time-row"><span>{formatTime(seekValue)}</span><span>{formatTime(duration)}</span></div>
       </div>
-      <PlayerControls player={player} onAction={onAction} onTab={onTab} />
-      <div className="volume-row">
-        <IconButton label={volume === 0 ? "Unmute" : "Mute"} className="subtle-icon" onClick={() => onAction("volume", { volume: volume === 0 ? 52 : 0 })}>
-          <SpeakerHigh size={18} weight={volume === 0 ? "regular" : "fill"} aria-hidden="true" />
-        </IconButton>
-        <input
-          className="range range-volume"
-          type="range"
-          min="0"
-          max="100"
-          value={volume}
-          aria-label="Player volume"
-          style={{ "--range-progress": `${volume}%` }}
-          onChange={(event) => onAction("volume-preview", { volume: Number(event.target.value) })}
-          onPointerUp={(event) => onAction("volume", { volume: Number(event.currentTarget.value) })}
-          onKeyUp={(event) => {
-            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") onAction("volume", { volume: Number(event.currentTarget.value) });
-          }}
-        />
-        <span className="volume-number">{Math.round(volume)}</span>
-      </div>
-      <div className="player-footer">
-        <button className={`toggle-control ${player.autoplay ? "is-on" : ""}`} type="button" onClick={() => onAction("autoplay", { enabled: !player.autoplay })}>
-          <Sparkle size={15} weight={player.autoplay ? "fill" : "regular"} aria-hidden="true" />
-          Autoplay {player.autoplay ? "on" : "off"}
-        </button>
-        <div className="live-readout"><span className="status-dot" aria-hidden="true" /> synced {player.updatedAt ? "now" : "waiting"}</div>
-      </div>
+      <PlayerControls player={player} volume={volume} onAction={onAction} onTab={onTab} />
     </section>
   );
 }
@@ -273,7 +287,7 @@ function CompactPlayer({ state, position, onAction, connection }) {
         <div className="compact-time"><span>{formatTime(seekValue)}</span><span>{formatTime(duration)}</span></div>
       </div>
       <div className="compact-controls">
-        <IconButton label="Play previous track" onClick={() => onAction("previous")}><Rewind size={18} weight="bold" aria-hidden="true" /></IconButton>
+        <IconButton label="Play previous track" onClick={() => onAction("previous")}><SkipBack size={18} weight="regular" aria-hidden="true" /></IconButton>
         <button className="play-button compact-play" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")}>
           {isPlaying ? <Pause size={19} weight="fill" aria-hidden="true" /> : <Play size={19} weight="fill" aria-hidden="true" />}
         </button>
@@ -326,16 +340,20 @@ function QueuePanel({ queue, onAction }) {
         >
           <div className="drag-handle" aria-label="Drag to reorder"><DotsSixVertical size={18} aria-hidden="true" /></div>
           <Artwork track={track} size="small" />
-          <div className="queue-track-copy"><strong>{track.title}</strong><span>{track.author}</span></div>
-          <SourceTag source={track.source} />
-          {track.autoplay ? <span className="autoplay-mark" title="Added by autoplay"><Sparkle size={15} weight="fill" aria-hidden="true" /></span> : null}
-          <span className="queue-duration">{formatTime(track.durationMs)}</span>
+          <div className="queue-track-copy">
+            <strong>{track.title}</strong>
+            <span>{track.author}</span>
+            <div className="queue-track-meta">
+              <SourceTag source={track.source} />
+              {track.autoplay ? <span className="autoplay-mark" title="Added by autoplay"><Sparkle size={13} weight="fill" aria-hidden="true" /></span> : null}
+              <span className="queue-duration">{formatTime(track.durationMs)}</span>
+            </div>
+          </div>
           <IconButton label={`Remove ${track.title} from queue`} className="queue-remove" onClick={() => onAction("remove_queue", { position: index })}>
             <Trash size={16} aria-hidden="true" />
           </IconButton>
         </div>
       ))}
-      {queue.length ? <button className="clear-queue" type="button" onClick={() => onAction("clear_queue")}><Trash size={15} aria-hidden="true" /> Clear queue</button> : null}
     </div>
   );
 }
@@ -350,7 +368,7 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
         </select>
         <button className="primary-button" type="button" onClick={onSearch}><MagnifyingGlass size={17} weight="bold" aria-hidden="true" /> Search</button>
       </div> : null}
-      <div className="search-caption"><span>{status === "searching" ? "Searching all providers" : status === "error" ? "Search needs attention" : "Results ranked by match quality and provider confidence"}</span><span className="source-coverage"><Cloud size={15} aria-hidden="true" /> Deezer + YouTube + Spotify + SoundCloud</span></div>
+      <div className="search-caption"><span>{status === "searching" ? "Searching the selected source" : status === "error" ? "Search needs attention" : "One source at a time — YouTube first in automatic mode"}</span><span className="source-coverage"><Cloud size={15} aria-hidden="true" /> YouTube → SoundCloud → Deezer → Spotify</span></div>
       {status === "searching" ? <div className="skeleton-list" aria-label="Loading search results"><span /><span /><span /></div> : null}
       {status === "error" ? <div className="inline-error"><WarningCircle size={18} aria-hidden="true" /> Search is temporarily unavailable. Check the Lavalink connection.</div> : null}
       {status === "empty" ? <div className="empty-state compact"><MagnifyingGlass size={30} weight="duotone" aria-hidden="true" /><strong>No close matches</strong><span>Try the artist name, a direct URL, or another source.</span></div> : null}
@@ -358,8 +376,8 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
         <div className="result-row" key={track.id}>
           <Artwork track={track} size="small" />
           <div className="result-copy"><strong>{track.title}</strong><span>{track.author}</span><div><SourceTag source={track.source} /> <span className="result-duration">{formatTime(track.durationMs)}</span></div></div>
-          <button className="result-action" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source, prepend: false })}><Play size={16} weight="fill" aria-hidden="true" /> Play</button>
-          <button className="result-next" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source, prepend: true })} title="Play next"><Plus size={17} weight="bold" aria-hidden="true" /></button>
+          <button className="result-action" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source, playNow: true })}><Play size={16} weight="fill" aria-hidden="true" /> Play</button>
+          <button className="result-next" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source })} title="Add to queue"><Plus size={17} weight="bold" aria-hidden="true" /></button>
         </div>
       ))}</div> : null}
     </div>
@@ -608,6 +626,13 @@ function App() {
       .then(async (nextContext) => {
         if (!alive) return;
         setContext(nextContext);
+
+        const connectLocalPreview = nextContext.mode === "local" && Boolean(import.meta.env.VITE_ACTIVITY_CONNECT_LOCAL);
+        if (nextContext.mode === "local" && !connectLocalPreview) {
+          setConnection({ status: "preview", message: nextContext.reason || "Local Activity preview" });
+          return;
+        }
+
         try {
           const response = await fetchActivityState(nextContext);
           if (alive && response.state) applyState(response.state);
@@ -616,7 +641,6 @@ function App() {
           if (alive) {
             if (nextContext.mode === "local") {
               setConnection({ status: "preview", message: error.message });
-              showToast("Showing the local Activity preview. Start the gateway for live controls.", "info");
             } else {
               setConnection({ status: "error", message: error.message });
               showToast(`Live Activity gateway unavailable: ${error.message}`, "error");
@@ -683,8 +707,18 @@ function App() {
       if (action === "play") {
         const result = searchResults.find((track) => track.playQuery === payload.query);
         if (result && next.player.currentTrack) {
-          if (payload.prepend) next.player.queue.unshift(result);
-          else next.player.queue.push(result);
+          if (payload.playNow) {
+            next.player.queue.unshift(next.player.currentTrack);
+            next.player.currentTrack = result;
+            next.player.durationMs = result.durationMs;
+            next.player.positionMs = 0;
+            next.player.playing = true;
+            next.player.paused = false;
+          } else {
+            const autoplayIndex = next.player.queue.findIndex((track) => track.autoplayed || track.userData?.autoplay);
+            if (autoplayIndex === -1) next.player.queue.push(result);
+            else next.player.queue.splice(autoplayIndex, 0, result);
+          }
         } else if (result) {
           next.player.currentTrack = result;
           next.player.durationMs = result.durationMs;
@@ -707,7 +741,7 @@ function App() {
       if (shouldHitGateway) {
         const response = await sendActivityAction({ ...context, action, payload });
         applyState(response.state);
-        showToast(action === "play" ? "Added to the room" : "Player updated", "success");
+        showToast(action === "play" ? (payload.playNow ? "Playing now" : "Added to queue") : "Player updated", "success");
       } else {
         localMutation(action, payload);
         showToast("Local preview updated", "info");
@@ -780,12 +814,14 @@ function App() {
           </aside>
           <section className="main-stage">
             <div className="stage-toolbar">
-              <div className="stage-navigation" aria-label="Activity navigation">
-                <IconButton label="Home" className={activeTab === "home" ? "is-active" : ""} onClick={() => goToView("home")}><House size={17} weight={activeTab === "home" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
-              </div>
-              <GlobalSearch {...searchProps} onFocus={() => goToView("search")} />
-              <div className="stage-actions" aria-label="Player tools">
-                <IconButton label="Sound settings" className={activeTab === "filters" ? "is-active" : ""} onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /></IconButton>
+              <div className="stage-toolbar-inner">
+                <div className="stage-navigation" aria-label="Activity navigation">
+                  <IconButton label="Home" className={activeTab === "home" ? "is-active" : ""} onClick={() => goToView("home")}><House size={17} weight={activeTab === "home" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
+                </div>
+                <GlobalSearch {...searchProps} onFocus={() => goToView("search")} />
+                <div className="stage-actions" aria-label="Player tools">
+                  <IconButton label="Sound settings" className={activeTab === "filters" ? "is-active" : ""} onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /></IconButton>
+                </div>
               </div>
             </div>
             <div className={`main-content main-view-${activeTab}`}>

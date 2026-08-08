@@ -241,7 +241,7 @@ async function lavalinkResolveTracks(query, source = "deezer") {
   };
 }
 
-async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepend = false, source = "deezer" }) {
+async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepend = false, playNow = false, source = "deezer" }) {
   const player = await ensurePlayer(guildId, voiceId, textId);
 
   const resolution = await lavalinkResolveTracks(query, source);
@@ -262,8 +262,12 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
       }
     : {};
 
-  const shouldPrepend = prepend && player.queue.length > 0;
-  const queueTargets = shouldPrepend ? [...tracksToAdd].reverse() : tracksToAdd;
+  // "Play now" puts the chosen result ahead of every queued track and then
+  // skips the current one. Ordinary manual additions still preserve the
+  // manual queue before the autoplay buffer (see addManualTracksToQueue).
+  const shouldPlayNow = Boolean(playNow) && Boolean(player.currentTrack);
+  const shouldPrepend = !shouldPlayNow && prepend && player.queue.length > 0;
+  const queueTargets = (shouldPlayNow || shouldPrepend) ? [...tracksToAdd].reverse() : tracksToAdd;
 
   for (const track of queueTargets) {
     if (!track) continue;
@@ -274,10 +278,14 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
       fallbackAttempts: 0,
     };
 
-    if (shouldPrepend) await player.queue.unshift(track);
+    if (shouldPlayNow || shouldPrepend) await player.queue.unshift(track);
   }
 
-  if (!shouldPrepend) addManualTracksToQueue(player, queueTargets);
+  if (!shouldPlayNow && !shouldPrepend) addManualTracksToQueue(player, queueTargets);
+
+  if (shouldPlayNow) {
+    await player.skip();
+  }
 
   const currentTitle = player.currentTrack?.info?.title || "none";
   Log.info(

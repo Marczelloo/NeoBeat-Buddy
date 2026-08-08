@@ -1,7 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { WebSocket } = require("ws");
-const { createActivityServer } = require("../../../helpers/activity/server");
+const { createActivityServer, isAllowedArtworkUrl } = require("../../../helpers/activity/server");
+
+test("Activity artwork proxy only accepts known HTTPS media hosts", () => {
+  assert.equal(isAllowedArtworkUrl("https://i.ytimg.com/vi/example/maxresdefault.jpg"), true);
+  assert.equal(isAllowedArtworkUrl("https://i1.sndcdn.com/artworks-example-t500x500.jpg"), true);
+  assert.equal(isAllowedArtworkUrl("https://cdn-images.dzcdn.net/images/cover/example/500x500.jpg"), true);
+  assert.equal(isAllowedArtworkUrl("http://127.0.0.1:8787/private"), false);
+  assert.equal(isAllowedArtworkUrl("https://example.test/not-allowed.jpg"), false);
+});
 
 function waitForListening(server) {
   if (server.listening) return Promise.resolve();
@@ -42,11 +50,15 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
 
   const health = await fetch(`${baseUrl}/api/activity/health`).then((response) => response.json());
   const state = await fetch(`${baseUrl}/api/activity/state?guildId=activity-test-guild`).then((response) => response.json());
+  const blockedArtworkResponse = await fetch(`${baseUrl}/api/activity/artwork?url=${encodeURIComponent("http://127.0.0.1/private.jpg")}`);
+  const blockedArtwork = await blockedArtworkResponse.json();
 
   assert.equal(health.ok, true);
   assert.equal(state.ok, true);
   assert.equal(state.state.guild.id, "activity-test-guild");
   assert.equal(state.state.player.currentTrack, null);
+  assert.equal(blockedArtworkResponse.status, 400);
+  assert.match(blockedArtwork.error, /not allowed/i);
 
   const messages = [];
   await new Promise((resolve, reject) => {

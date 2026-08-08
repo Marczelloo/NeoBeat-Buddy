@@ -72,6 +72,25 @@ module.exports = {
             )
         )
         .addSubcommand((sub) => sub.setName("status").setDescription("View current search source settings"))
+    )
+    .addSubcommandGroup((group) =>
+      group
+        .setName("player")
+        .setDescription("Configure the music player and Activity")
+        .addSubcommand((sub) =>
+          sub
+            .setName("channel")
+            .setDescription("Set the text channel used by the player and Activity")
+            .addChannelOption((option) =>
+              option
+                .setName("channel")
+                .setDescription("Channel for the player message and Activity playback")
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                .setRequired(true)
+            )
+        )
+        .addSubcommand((sub) => sub.setName("clear").setDescription("Clear the configured player channel"))
+        .addSubcommand((sub) => sub.setName("status").setDescription("View the configured player channel"))
     ),
 
   async execute(interaction) {
@@ -86,12 +105,44 @@ module.exports = {
       return handleSource(interaction, subcommand);
     }
 
+    if (subcommandGroup === "player") {
+      return handlePlayer(interaction, subcommand);
+    }
+
     await interaction.reply({
       content: "❌ Unknown setup command.",
       ephemeral: true,
     });
   },
 };
+
+async function handlePlayer(interaction, subcommand) {
+  const guildId = interaction.guild.id;
+  const state = getGuildState(guildId);
+
+  switch (subcommand) {
+    case "channel": {
+      const channel = interaction.options.getChannel("channel");
+      updateGuildState(guildId, { playerChannel: channel.id });
+      return interaction.reply({
+        content: `✅ MewBit player and Activity playback will use ${channel}.`,
+        ephemeral: true,
+      });
+    }
+    case "clear":
+      updateGuildState(guildId, { playerChannel: null });
+      return interaction.reply({ content: "✅ The configured player channel was cleared.", ephemeral: true });
+    case "status":
+      return interaction.reply({
+        content: state?.playerChannel
+          ? `🎵 Player and Activity channel: <#${state.playerChannel}>`
+          : "⚠️ No player channel is configured. Use `/setup player channel` before starting playback from the Activity.",
+        ephemeral: true,
+      });
+    default:
+      return interaction.reply({ content: "❌ Unknown player setup subcommand.", ephemeral: true });
+  }
+}
 
 async function handleAnnouncements(interaction, subcommand) {
   const guildId = interaction.guild.id;

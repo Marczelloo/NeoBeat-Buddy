@@ -45,6 +45,24 @@ function searchSourceWithTimeout(poru, query, source) {
 }
 
 /**
+ * Queries one provider only. Activity search uses this to avoid mixing a
+ * loosely related result from another provider into an otherwise good list.
+ */
+async function searchSingleSource(poru, query, source) {
+  const normalizedQuery = normalizeCacheQuery(query);
+  if (!poru || !normalizedQuery) return [];
+
+  const normalizedSource = SEARCH_VARIANTS[source] ? source : "youtube";
+  const cacheKey = `single:${normalizedSource}:${normalizedQuery}`;
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) return cached.tracks;
+
+  const tracks = await searchSourceWithTimeout(poru, query, normalizedSource);
+  searchCache.set(cacheKey, { timestamp: Date.now(), tracks });
+  return tracks;
+}
+
+/**
  * Searches every free provider in parallel. The selected source remains the
  * playback preference, but autocomplete ranks the combined result pool by
  * artist/title accuracy and popularity instead of hiding good matches from
@@ -78,5 +96,6 @@ module.exports = {
   MAX_RESULTS_PER_SOURCE,
   SEARCH_VARIANTS,
   clearSearchCache,
+  searchSingleSource,
   searchAcrossSources,
 };

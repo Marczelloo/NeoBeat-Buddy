@@ -6,7 +6,7 @@ const {
   isLatestAutocompleteRequest,
 } = require("../../../helpers/interactions/autocompleteGuard");
 const { buildFallbackQueries } = require("../../../helpers/lavalink/fallbacks");
-const { clearSearchCache, searchAcrossSources } = require("../../../helpers/lavalink/searchAggregator");
+const { clearSearchCache, searchAcrossSources, searchSingleSource } = require("../../../helpers/lavalink/searchAggregator");
 const { parseSearchIdentifier } = require("../../../helpers/lavalink/searchIdentifier");
 const {
   getFallbackSources,
@@ -92,6 +92,22 @@ describe("Search source selection", () => {
       "ytmsearch",
       "ytsearch",
     ]);
+  });
+
+  it("keeps single-provider Activity searches isolated to the chosen provider", async () => {
+    clearSearchCache();
+    const calls = [];
+    const poru = {
+      resolve: async (options) => {
+        calls.push(options);
+        return { tracks: [{ info: { title: "Ciepłe Dranie", author: "Kuki" } }] };
+      },
+    };
+
+    const tracks = await searchSingleSource(poru, "kuki cieple dranie", "soundcloud");
+
+    assert.strictEqual(tracks.length, 1);
+    assert.deepStrictEqual(calls.map((call) => call.source), ["scsearch"]);
   });
 
   it("parses source-pinned autocomplete values without double-prefixing them", () => {

@@ -1,25 +1,9 @@
 import { DiscordSDK } from "@discord/embedded-app-sdk";
 
-const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
+const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID || "1418000096221466715";
 const devGuildId = import.meta.env.VITE_ACTIVITY_DEV_GUILD_ID || "demo";
 const configuredGateway = String(import.meta.env.VITE_ACTIVITY_GATEWAY_URL || "").replace(/\/$/, "");
 const isDevPreview = import.meta.env.DEV && String(import.meta.env.VITE_ACTIVITY_DEV_MODE || "true") !== "false";
-
-function readLaunchContext() {
-  const query = new URLSearchParams(window.location.search);
-  return {
-    frameId: query.get("frame_id"),
-    instanceId: query.get("instance_id"),
-    platform: query.get("platform"),
-  };
-}
-
-function getMissingLaunchParameter(launchContext) {
-  if (!launchContext.frameId) return "frame_id";
-  if (!launchContext.instanceId) return "instance_id";
-  if (!launchContext.platform) return "platform";
-  return null;
-}
 
 function readGuildId(sdk) {
   const query = new URLSearchParams(window.location.search);
@@ -47,10 +31,7 @@ function activityUrl(path) {
 }
 
 export async function setupDiscord() {
-  const launchContext = readLaunchContext();
-  const missingLaunchParameter = getMissingLaunchParameter(launchContext);
-
-  if (!clientId || isDevPreview || missingLaunchParameter) {
+  if (!clientId || isDevPreview) {
     return {
       mode: "local",
       guildId: devGuildId,
@@ -59,9 +40,7 @@ export async function setupDiscord() {
       sdk: null,
       reason: !clientId
         ? "Missing VITE_DISCORD_CLIENT_ID"
-        : isDevPreview
-          ? "Local preview enabled"
-          : `Opened outside Discord Activity (${missingLaunchParameter} launch parameter missing)`,
+        : "Local preview enabled",
     };
   }
 

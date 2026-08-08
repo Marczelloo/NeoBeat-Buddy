@@ -28,7 +28,7 @@ const { getUserVolume } = require("../lavalink/loudness");
 const { fetchLyrics } = require("../lavalink/lyricsClient");
 const { getInterpolatedPosition, stopLyricsSession } = require("../lavalink/lyricsFormatter");
 const { getPoru } = require("../lavalink/players");
-const { searchAcrossSources } = require("../lavalink/searchAggregator");
+const { searchSingleSource } = require("../lavalink/searchAggregator");
 const { filterRelevantSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
 const { getLyricsState, setLyricsState } = require("../lavalink/state");
 const Log = require("../logs/log");
@@ -37,7 +37,21 @@ const { serializeFilters, serializeLyrics, serializePlaylist, serializeTrack, no
 
 const DEFAULT_PORT = 8787;
 const MAX_BODY_SIZE = 64 * 1024;
+const MAX_ARTWORK_SIZE = 8 * 1024 * 1024;
 const CLIENT_CACHE_TTL = 5 * 60 * 1000;
+const ARTWORK_HOSTS = Object.freeze([
+  "dzcdn.net",
+  "sndcdn.com",
+  "scdn.co",
+  "spotifycdn.com",
+  "ytimg.com",
+  "ggpht.com",
+  "img.youtube.com",
+  "discordapp.com",
+  "discordapp.net",
+  "imgur.com",
+  "picsum.photos",
+]);
 const identityCache = new Map();
 const sockets = new Set();
 
@@ -78,6 +92,72 @@ function sendJson(response, statusCode, payload, config) {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   });
   response.end(JSON.stringify(payload));
+}
+
+function isAllowedArtworkUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const hostname = url.hostname.toLowerCase();
+    const configuredHosts = String(process.env.ACTIVITY_ARTWORK_HOSTS || "")
+      .split(",")
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean);
+    return [...ARTWORK_HOSTS, ...configuredHosts].some((host) => hostname === host || hostname.endsWith(`.${host}`));
+  } catch {
+    return false;
+  }
+}
+
+async function sendArtwork(response, sourceUrl) {
+  if (!isAllowedArtworkUrl(sourceUrl)) {
+    throw Object.assign(new Error("That artwork host is not allowed."), { statusCode: 400 });
+  }
+
+  let currentUrl = sourceUrl;
+  let artworkResponse = null;
+
+  for (let redirect = 0; redirect < 4; redirect += 1) {
+    artworkResponse = await fetch(currentUrl, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(10000),
+      headers: {
+        Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8",
+        "User-Agent": "MewBit-Activity/1.1",
+      },
+    });
+
+    if (artworkResponse.status < 300 || artworkResponse.status >= 400) break;
+    const location = artworkResponse.headers.get("location");
+    if (!location) break;
+    currentUrl = new URL(location, currentUrl).toString();
+    if (!isAllowedArtworkUrl(currentUrl)) {
+      throw Object.assign(new Error("Artwork redirect host is not allowed."), { statusCode: 400 });
+    }
+  }
+
+  if (!artworkResponse?.ok) {
+    throw Object.assign(new Error("Artwork provider did not return an image."), { statusCode: 502 });
+  }
+
+  const contentType = String(artworkResponse.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  const contentLength = Number(artworkResponse.headers.get("content-length") || 0);
+  if (!contentType.startsWith("image/") || contentLength > MAX_ARTWORK_SIZE) {
+    throw Object.assign(new Error("Artwork response is invalid or too large."), { statusCode: 502 });
+  }
+
+  const body = Buffer.from(await artworkResponse.arrayBuffer());
+  if (body.length > MAX_ARTWORK_SIZE) {
+    throw Object.assign(new Error("Artwork response is too large."), { statusCode: 502 });
+  }
+
+  response.writeHead(200, {
+    "Content-Type": contentType,
+    "Content-Length": body.length,
+    "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+    "X-Content-Type-Options": "nosniff",
+  });
+  response.end(body);
 }
 
 function readJson(request) {
@@ -253,7 +333,17 @@ function toSource(value) {
   return ["auto", "deezer", "youtube", "spotify", "soundcloud"].includes(value) ? value : "auto";
 }
 
-async function runActivityAction({ client, guildId, identity, action, payload = {} }) {
+function serializeActivitySearchResults(tracks, query) {
+  return rankSearchResults(tracks, query, { limit: 24 }).map((track) => {
+    const serialized = serializeTrack(track);
+    return {
+      ...serialized,
+      playQuery: serialized.uri || `${serialized.title} ${serialized.author}`,
+    };
+  });
+}
+
+async function runActivityAction({ guildId, identity, action, payload = {} }) {
   assertControlPermission(guildId, identity, action);
   const player = getPlayer(guildId);
 
@@ -261,11 +351,12 @@ async function runActivityAction({ client, guildId, identity, action, payload = 
     case "play": {
       const query = limitText(payload.query, 500);
       if (!query) throw Object.assign(new Error("Choose a track or enter a search query."), { statusCode: 400 });
-      const guild = client.guilds.cache.get(guildId);
+      const settings = guildState.getGuildState(guildId);
       const memberVoice = identity.member?.voice?.channelId;
       const voiceId = player?.voiceChannel || memberVoice;
-      const textId = player?.textChannel || guild?.systemChannelId || null;
-      if (!voiceId || !textId) throw Object.assign(new Error("Join a voice channel before starting playback."), { statusCode: 400 });
+      const textId = player?.textChannel || settings?.playerChannel || null;
+      if (!voiceId) throw Object.assign(new Error("Join a voice channel before starting playback."), { statusCode: 400 });
+      if (!textId) throw Object.assign(new Error("Set the player channel first with /setup player channel."), { statusCode: 400 });
 
       return lavalinkPlay({
         guildId,
@@ -274,6 +365,7 @@ async function runActivityAction({ client, guildId, identity, action, payload = 
         query,
         source: toSource(payload.source),
         prepend: Boolean(payload.prepend),
+        playNow: Boolean(payload.playNow),
         requester: {
           id: identity.id,
           tag: identity.tag || identity.username,
@@ -346,9 +438,10 @@ async function runActivityAction({ client, guildId, identity, action, payload = 
       const playlist = playlistStore.getPlaylist(identity.id, guildId, limitText(payload.name, 80));
       if (!playlist?.tracks?.length) throw Object.assign(new Error("That playlist is empty or unavailable."), { statusCode: 404 });
       const voiceId = player?.voiceChannel || identity.member?.voice?.channelId;
-      const guild = client.guilds.cache.get(guildId);
-      const textId = player?.textChannel || guild?.systemChannelId || null;
-      if (!voiceId || !textId) throw Object.assign(new Error("Join a voice channel before playing a playlist."), { statusCode: 400 });
+      const settings = guildState.getGuildState(guildId);
+      const textId = player?.textChannel || settings?.playerChannel || null;
+      if (!voiceId) throw Object.assign(new Error("Join a voice channel before playing a playlist."), { statusCode: 400 });
+      if (!textId) throw Object.assign(new Error("Set the player channel first with /setup player channel."), { statusCode: 400 });
 
       for (const track of playlist.tracks.slice(0, 100)) {
         const query = track.uri || `${track.title} ${track.author}`;
@@ -368,22 +461,28 @@ async function runActivityAction({ client, guildId, identity, action, payload = 
   }
 }
 
-function searchActivityTracks(query, preferredSource) {
+async function searchActivityTracks(query, preferredSource) {
   const poru = getPoru();
   if (!poru) throw Object.assign(new Error("Lavalink is still connecting."), { statusCode: 503 });
 
-  return searchAcrossSources(poru, limitText(query, 200), { preferredSource: toSource(preferredSource) === "auto" ? "deezer" : toSource(preferredSource) })
-    .then((tracks) => {
-      const relevant = filterRelevantSearchResults(tracks, query);
-      const ranked = rankSearchResults(relevant.length ? relevant : tracks, query, { limit: 24 });
-      return ranked.map((track) => {
-        const serialized = serializeTrack(track);
-        return {
-          ...serialized,
-          playQuery: serialized.uri || `${serialized.title} ${serialized.author}`,
-        };
-      });
-    });
+  const selectedSource = toSource(preferredSource);
+  const sources = selectedSource === "auto"
+    ? ["youtube", "soundcloud", "deezer", "spotify"]
+    : [selectedSource];
+  let firstNonEmpty = [];
+
+  for (const source of sources) {
+    const tracks = await searchSingleSource(poru, limitText(query, 200), source);
+    if (!firstNonEmpty.length && tracks.length) firstNonEmpty = tracks;
+
+    const relevant = filterRelevantSearchResults(tracks, query);
+    if (relevant.length) return serializeActivitySearchResults(relevant, query);
+  }
+
+  // An explicitly selected provider should still be allowed to show its best
+  // available matches. Auto mode reaches this only after every fallback has
+  // failed to produce a real match.
+  return serializeActivitySearchResults(firstNonEmpty, query);
 }
 
 function sendSocket(socket, payload) {
@@ -436,6 +535,10 @@ function createActivityServer(client) {
         return sendJson(response, 200, { ok: true, activity: "mewbit", time: Date.now() }, config);
       }
 
+      if (request.method === "GET" && url.pathname === "/api/activity/artwork") {
+        return await sendArtwork(response, url.searchParams.get("url") || "");
+      }
+
       if (url.pathname === "/api/activity/state" && request.method === "GET") {
         const guildId = url.searchParams.get("guildId") || config.devGuildId;
         const identity = await authenticateRequest(client, request, guildId, config);
@@ -454,7 +557,7 @@ function createActivityServer(client) {
         const body = await readJson(request);
         const guildId = limitText(body.guildId || config.devGuildId, 80);
         const identity = await authenticateRequest(client, request, guildId, config);
-        await runActivityAction({ client, guildId, identity, action: body.action, payload: body.payload || {} });
+        await runActivityAction({ guildId, identity, action: body.action, payload: body.payload || {} });
         broadcastGuildState(client, guildId);
         return sendJson(response, 200, { ok: true, state: buildActivityState(client, guildId, identity.id) }, config);
       }
@@ -493,7 +596,7 @@ function createActivityServer(client) {
         }
         if (!socket.authorized) return sendSocket(socket, { type: "error", error: "Authenticate the Activity socket first." });
         if (message.type === "action") {
-          await runActivityAction({ client, guildId: socket.guildId, identity: socket.identity, action: message.action, payload: message.payload || {} });
+          await runActivityAction({ guildId: socket.guildId, identity: socket.identity, action: message.action, payload: message.payload || {} });
           broadcastGuildState(client, socket.guildId);
         }
       } catch (error) {
@@ -540,6 +643,7 @@ function createActivityServer(client) {
 module.exports = {
   createActivityServer,
   buildActivityState,
+  isAllowedArtworkUrl,
   runActivityAction,
   searchActivityTracks,
 };
