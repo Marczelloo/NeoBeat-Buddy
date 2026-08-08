@@ -2,7 +2,24 @@ import { DiscordSDK } from "@discord/embedded-app-sdk";
 
 const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
 const devGuildId = import.meta.env.VITE_ACTIVITY_DEV_GUILD_ID || "demo";
+const configuredGateway = String(import.meta.env.VITE_ACTIVITY_GATEWAY_URL || "").replace(/\/$/, "");
 const isDevPreview = import.meta.env.DEV && String(import.meta.env.VITE_ACTIVITY_DEV_MODE || "true") !== "false";
+
+function readLaunchContext() {
+  const query = new URLSearchParams(window.location.search);
+  return {
+    frameId: query.get("frame_id"),
+    instanceId: query.get("instance_id"),
+    platform: query.get("platform"),
+  };
+}
+
+function getMissingLaunchParameter(launchContext) {
+  if (!launchContext.frameId) return "frame_id";
+  if (!launchContext.instanceId) return "instance_id";
+  if (!launchContext.platform) return "platform";
+  return null;
+}
 
 function readGuildId(sdk) {
   const query = new URLSearchParams(window.location.search);
@@ -25,15 +42,26 @@ async function readJsonResponse(response, context) {
   }
 }
 
+function activityUrl(path) {
+  return `${configuredGateway}${path}`;
+}
+
 export async function setupDiscord() {
-  if (!clientId || isDevPreview) {
+  const launchContext = readLaunchContext();
+  const missingLaunchParameter = getMissingLaunchParameter(launchContext);
+
+  if (!clientId || isDevPreview || missingLaunchParameter) {
     return {
       mode: "local",
       guildId: devGuildId,
       accessToken: null,
       user: { id: "local-user", username: "Local Listener" },
       sdk: null,
-      reason: !clientId ? "Missing VITE_DISCORD_CLIENT_ID" : "Local preview enabled",
+      reason: !clientId
+        ? "Missing VITE_DISCORD_CLIENT_ID"
+        : isDevPreview
+          ? "Local preview enabled"
+          : `Opened outside Discord Activity (${missingLaunchParameter} launch parameter missing)`,
     };
   }
 
@@ -48,7 +76,7 @@ export async function setupDiscord() {
     scope: ["identify", "guilds", "applications.commands"],
   });
 
-  const response = await fetch("/api/token", {
+  const response = await fetch(activityUrl("/api/token"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
