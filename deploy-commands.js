@@ -26,12 +26,34 @@ for (const folder of commandFolders) {
 }
 
 const rest = new REST().setToken(token);
+const PRIMARY_ENTRY_POINT = 4;
+
+function serializePrimaryEntryPoint(command) {
+  const payload = {
+    type: PRIMARY_ENTRY_POINT,
+    name: command.name,
+    description: command.description,
+    handler: command.handler,
+  };
+
+  for (const key of ["default_member_permissions", "dm_permission", "contexts", "integration_types", "nsfw"]) {
+    if (command[key] !== undefined) payload[key] = command[key];
+  }
+
+  return payload;
+}
 
 (async () => {
   try {
-    Log.info(`Started refreshing ${commands.length} application (/) commands.`);
+    const existing = await rest.get(Routes.applicationCommands(clientId));
+    const entryPoints = existing
+      .filter((command) => command.type === PRIMARY_ENTRY_POINT)
+      .map(serializePrimaryEntryPoint);
+    const commandPayload = [...commands, ...entryPoints];
 
-    const data = await rest.put(Routes.applicationCommands(clientId), { body: commands });
+    Log.info(`Started refreshing ${commands.length} application (/) commands. Preserving ${entryPoints.length} Entry Point command(s).`);
+
+    const data = await rest.put(Routes.applicationCommands(clientId), { body: commandPayload });
 
     Log.success(`Successfully reloaded ${data.length} application (/) commands.`);
     process.exit(0);
