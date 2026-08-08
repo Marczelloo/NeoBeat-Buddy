@@ -421,11 +421,14 @@ function createActivityServer(client) {
             client_secret: config.clientSecret,
             grant_type: "authorization_code",
             code: body.code,
-            redirect_uri: config.redirectUri,
           }),
         });
         const tokenPayload = await tokenResponse.json();
-        if (!tokenResponse.ok) throw Object.assign(new Error(tokenPayload.error_description || "Discord token exchange failed."), { statusCode: 502 });
+        if (!tokenResponse.ok) {
+          const detail = [tokenPayload.error, tokenPayload.error_description].filter(Boolean).join(": ") || "Discord token exchange failed.";
+          Log.error("Discord OAuth token exchange rejected", `status=${tokenResponse.status} ${detail}`);
+          throw Object.assign(new Error(detail), { statusCode: 502 });
+        }
         return sendJson(response, 200, tokenPayload, config);
       }
 
