@@ -20,6 +20,10 @@ Panels use an 18px radius. Controls use a 12px radius. Artwork uses a 12px radiu
 
 The first viewport is a two-column split. The left column holds the current artwork, title, source, progress, transport controls, volume, and autoplay state. The right column is a tabbed workspace for queue, search, sound, lyrics, and playlists. Below 1060px the layout becomes a single column. Below 680px controls and search collapse into touch-friendly rows with no horizontal overflow.
 
+## Discord compact mode
+
+When the Activity viewport is both narrow and short, it switches composition instead of compressing the desktop cockpit. The compact surface keeps only the artwork banner, track identity, provider, progress and time, previous/play/skip/lyrics/mute controls, and volume when vertical space allows. Queue and secondary workspaces remain available in the full Activity view. The trigger is content-driven at `max-width: 620px` and `max-height: 420px`, matching Discord's minimized Activity panel rather than ordinary phone portrait use.
+
 ## Motion
 
 Motion communicates live playback and feedback. The cover signal animates only while a track is playing. Search loading uses a restrained skeleton. Toasts enter with a short vertical settle. `prefers-reduced-motion` disables looping and transition-heavy effects.

@@ -47,6 +47,22 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function useCompactViewport() {
+  const query = "(max-width: 620px) and (max-height: 420px)";
+  const readQuery = () => typeof window !== "undefined" && window.matchMedia(query).matches;
+  const [isCompact, setIsCompact] = useState(readQuery);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setIsCompact(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  return isCompact;
+}
+
 function sourceLabel(source) {
   return ({ deezer: "Deezer", youtube: "YouTube", spotify: "Spotify", soundcloud: "SoundCloud", auto: "Auto" })[source] || source || "Unknown";
 }
@@ -244,6 +260,85 @@ function NowPlaying({ state, position, onAction, onTab }) {
   );
 }
 
+function CompactPlayer({ state, position, onAction, connection }) {
+  const { player } = state;
+  const track = player.currentTrack;
+  const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
+  const progress = clamp(position, 0, duration);
+  const [seekValue, setSeekValue] = useState(progress);
+
+  useEffect(() => setSeekValue(progress), [progress]);
+
+  const commitSeek = () => onAction("seek", { positionMs: Number(seekValue) });
+  const volume = clamp(Number(player.volume || 0), 0, 100);
+  const isPlaying = player.playing && !player.paused;
+
+  return (
+    <section className="compact-player" aria-label="MewBit compact player">
+      <div className="compact-header">
+        <div className={`compact-artwork-wrap ${isPlaying ? "is-playing" : ""}`}>
+          <Artwork track={track} size="compact" />
+          <div className="compact-artwork-signal" aria-hidden="true"><span /><span /><span /></div>
+        </div>
+        <div className="compact-copy">
+          <div className="compact-kicker"><Waveform size={12} weight="bold" aria-hidden="true" /> MEWBIT PLAYER</div>
+          <strong title={track?.title || "Nothing is playing"}>{track?.title || "Nothing is playing"}</strong>
+          <div className="compact-meta"><span title={track?.author || "Waiting for a track"}>{track?.author || "Waiting for a track"}</span><SourceTag source={track?.source} /></div>
+        </div>
+        <div className={`compact-status status-${connection.status}`} title={connection.message} aria-label={connection.message}>
+          <span className="status-dot" aria-hidden="true" />
+        </div>
+      </div>
+      <div className="compact-progress">
+        <input
+          className="range range-progress"
+          type="range"
+          min="0"
+          max={duration}
+          value={seekValue}
+          aria-label="Seek through current track"
+          style={{ "--range-progress": `${(progress / duration) * 100}%` }}
+          onChange={(event) => setSeekValue(Number(event.target.value))}
+          onPointerUp={commitSeek}
+          onKeyUp={(event) => {
+            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitSeek();
+          }}
+        />
+        <div className="compact-time"><span>{formatTime(seekValue)}</span><span>{formatTime(duration)}</span></div>
+      </div>
+      <div className="compact-controls">
+        <IconButton label="Play previous track" onClick={() => onAction("previous")}><Rewind size={18} weight="bold" aria-hidden="true" /></IconButton>
+        <button className="play-button compact-play" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")}>
+          {isPlaying ? <Pause size={19} weight="fill" aria-hidden="true" /> : <Play size={19} weight="fill" aria-hidden="true" />}
+        </button>
+        <IconButton label="Skip track" onClick={() => onAction("skip")}><SkipForward size={18} weight="bold" aria-hidden="true" /></IconButton>
+        <IconButton label="Refresh lyrics" onClick={() => onAction("refresh_lyrics")}><MusicNotes size={18} aria-hidden="true" /></IconButton>
+        <IconButton label={volume === 0 ? "Unmute" : "Mute"} onClick={() => onAction("volume", { volume: volume === 0 ? 52 : 0 })}>
+          <SpeakerHigh size={18} weight={volume === 0 ? "regular" : "fill"} aria-hidden="true" />
+        </IconButton>
+      </div>
+      <div className="compact-volume" aria-label="Player volume">
+        <SpeakerHigh size={14} aria-hidden="true" />
+        <input
+          className="range range-volume"
+          type="range"
+          min="0"
+          max="100"
+          value={volume}
+          aria-label="Player volume"
+          style={{ "--range-progress": `${volume}%` }}
+          onChange={(event) => onAction("volume-preview", { volume: Number(event.target.value) })}
+          onPointerUp={(event) => onAction("volume", { volume: Number(event.currentTarget.value) })}
+          onKeyUp={(event) => {
+            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") onAction("volume", { volume: Number(event.currentTarget.value) });
+          }}
+        />
+        <span>{Math.round(volume)}</span>
+      </div>
+    </section>
+  );
+}
+
 function QueuePanel({ queue, onAction }) {
   const [draggedIndex, setDraggedIndex] = useState(null);
 
@@ -382,6 +477,7 @@ function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [searchStatus, setSearchStatus] = useState("idle");
   const syncAt = useRef(Date.now());
+  const isCompact = useCompactViewport();
 
   const showToast = useCallback((message, type = "info") => {
     setToast({ message, type });
@@ -554,13 +650,15 @@ function App() {
   };
 
   return (
-    <main className="activity-app">
-      <TopBar state={state} context={context} connection={connection} />
-      <div className="activity-body">
-        <NowPlaying state={{ ...state, player: { ...state.player, positionMs: position } }} position={position} onAction={onAction} onTab={setActiveTab} />
-        <Workspace state={{ ...state, player: { ...state.player, positionMs: position } }} activeTab={activeTab} setActiveTab={setActiveTab} search={searchProps} onAction={onAction} />
-      </div>
-      <footer className="activity-footer"><span><span className="status-dot" aria-hidden="true" /> MewBit keeps the bot and Lavalink in control</span><span>{actionBusy ? "Applying change" : connection.message}</span></footer>
+    <main className={`activity-app ${isCompact ? "is-compact" : ""}`}>
+      {isCompact ? <CompactPlayer state={{ ...state, player: { ...state.player, positionMs: position } }} position={position} onAction={onAction} connection={connection} /> : <>
+        <TopBar state={state} context={context} connection={connection} />
+        <div className="activity-body">
+          <NowPlaying state={{ ...state, player: { ...state.player, positionMs: position } }} position={position} onAction={onAction} onTab={setActiveTab} />
+          <Workspace state={{ ...state, player: { ...state.player, positionMs: position } }} activeTab={activeTab} setActiveTab={setActiveTab} search={searchProps} onAction={onAction} />
+        </div>
+        <footer className="activity-footer"><span><span className="status-dot" aria-hidden="true" /> MewBit keeps the bot and Lavalink in control</span><span>{actionBusy ? "Applying change" : connection.message}</span></footer>
+      </>}
       {toast ? <div className={`toast toast-${toast.type}`} role="status"><span>{toast.type === "error" ? <WarningCircle size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}</span>{toast.message}<button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification"><X size={16} aria-hidden="true" /></button></div> : null}
     </main>
   );
