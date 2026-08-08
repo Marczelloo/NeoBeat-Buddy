@@ -16,6 +16,15 @@ function withTimeout(promise, timeoutMs) {
   ]);
 }
 
+async function readJsonResponse(response, context) {
+  const body = await response.text();
+  try {
+    return body ? JSON.parse(body) : {};
+  } catch {
+    throw new Error(`${context} returned non-JSON data (${response.status}). Check that the Activity uses https://mewbit.marczelloo.dev instead of the Vite development URL.`);
+  }
+}
+
 export async function setupDiscord() {
   if (!clientId || isDevPreview) {
     return {
@@ -44,7 +53,7 @@ export async function setupDiscord() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
   });
-  const tokenPayload = await response.json();
+  const tokenPayload = await readJsonResponse(response, "Discord token exchange");
   if (!response.ok || !tokenPayload.access_token) {
     throw new Error(tokenPayload.error_description || tokenPayload.error || "Discord token exchange failed.");
   }

@@ -20,6 +20,7 @@ import {
   Queue,
   Repeat,
   Rewind,
+  SkipBack,
   Shuffle,
   SkipForward,
   SlidersHorizontal,
@@ -438,7 +439,7 @@ function DrawerToggle({ side, open, count, onClick }) {
       title={isLeft ? "Playlists" : "Queue"}
     >
       {isLeft ? <VinylRecord size={17} aria-hidden="true" /> : <ListDashes size={17} aria-hidden="true" />}
-      {!isLeft ? <b>{count}</b> : null}
+      {!isLeft ? <span className="drawer-count">{count}</span> : null}
     </button>
   );
 }
@@ -517,7 +518,7 @@ function PlayerBar({ state, position, onAction, onView, isExpanded, onToggleExpa
       </button>
       <div className="player-bar-center">
         <div className="bar-controls">
-          <IconButton label="Play previous track" onClick={() => onAction("previous")} disabled={!track}><Rewind size={17} weight="regular" aria-hidden="true" /></IconButton>
+          <IconButton label="Play previous track" onClick={() => onAction("previous")} disabled={!track}><SkipBack size={17} weight="regular" aria-hidden="true" /></IconButton>
           <button className="bar-play" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")} disabled={!track}>{isPlaying ? <Pause size={18} weight="fill" aria-hidden="true" /> : <Play size={18} weight="fill" aria-hidden="true" />}</button>
           <IconButton label="Skip track" onClick={() => onAction("skip")} disabled={!track}><SkipForward size={17} weight="regular" aria-hidden="true" /></IconButton>
           <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")} disabled={!track}><Shuffle size={16} weight="regular" aria-hidden="true" /></IconButton>
@@ -613,8 +614,13 @@ function App() {
           if (alive) setConnection({ status: "live", message: "Realtime gateway connected" });
         } catch (error) {
           if (alive) {
-            setConnection({ status: "preview", message: error.message });
-            showToast("Showing the local Activity preview. Start the gateway for live controls.", "info");
+            if (nextContext.mode === "local") {
+              setConnection({ status: "preview", message: error.message });
+              showToast("Showing the local Activity preview. Start the gateway for live controls.", "info");
+            } else {
+              setConnection({ status: "error", message: error.message });
+              showToast(`Live Activity gateway unavailable: ${error.message}`, "error");
+            }
           }
         }
 
@@ -627,8 +633,8 @@ function App() {
       })
       .catch((error) => {
         if (alive) {
-          setConnection({ status: "preview", message: error.message });
-          showToast(error.message, "error");
+          setConnection({ status: "error", message: error.message });
+          showToast(`Discord Activity connection failed: ${error.message}`, "error");
         }
       });
 
