@@ -6,6 +6,7 @@ const { errorEmbed, successEmbed, playlistEmbed, songEmbed } = require("../../he
 const { getGuildState, updateGuildState } = require("../../helpers/guildState.js");
 const { recordSearch } = require("../../helpers/history/searchHistory");
 const { beginAutocompleteRequest, isLatestAutocompleteRequest } = require("../../helpers/interactions/autocompleteGuard");
+const { buildTrackAutocompleteValue } = require("../../helpers/lavalink/autocompleteTrack");
 const { lavalinkPlay, lavalinkResolveTracks } = require("../../helpers/lavalink/index");
 const { getPoru } = require("../../helpers/lavalink/players");
 const { searchAcrossSources } = require("../../helpers/lavalink/searchAggregator");
@@ -136,15 +137,9 @@ module.exports = {
           displayName = `${displayName.substring(0, 100 - sourceSuffix.length - 3)}...${sourceSuffix}`;
         }
 
-        // Use "artist title" as the value
-        let value = `${author} ${title}`;
-        if (value.length > 100) {
-          value = value.substring(0, 100);
-        }
-
         return {
           name: displayName,
-          value: value,
+          value: buildTrackAutocompleteValue(track),
         };
       });
 

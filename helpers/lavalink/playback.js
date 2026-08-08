@@ -16,6 +16,7 @@ const {
 } = require("./lyricsFormatter");
 const { getPlayer, getPoru } = require("./players");
 const { addManualTracksToQueue } = require("./queueOrdering");
+const { parseSearchIdentifier } = require("./searchIdentifier");
 const { filterRelevantSearchResults, rankSearchResults } = require("./searchRanking");
 const { getFallbackSources, getSearchPrefix } = require("./searchSources");
 const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
@@ -71,7 +72,8 @@ async function lavalinkResolveTracks(query, source = "deezer") {
   // For URLs (Spotify/YouTube links), let Lavalink handle via providers chain
   // For search queries, use the specified source
   let res = null;
-  const hasSourcePrefix = q.match(/^(dzsearch:|ytsearch:|spsearch:|scsearch:|ytmsearch:)/i);
+  const sourceIdentifier = parseSearchIdentifier(q);
+  const hasSourcePrefix = Boolean(sourceIdentifier);
 
   if (!isUrl && !hasSourcePrefix) {
     // Remove any existing search prefix
@@ -159,10 +161,17 @@ async function lavalinkResolveTracks(query, source = "deezer") {
     }
   }
 
-  // If source search didn't work, it's a URL, or already has a source prefix, resolve normally
+  // If source search didn't work or this is an exact URL/prefixed autocomplete
+  // value, resolve it without letting Poru prepend its default source again.
   if (!res) {
-    const resolveQuery = hasSourcePrefix ? q : isUrl ? q : q;
-    res = await poru.resolve({ query: resolveQuery });
+    if (sourceIdentifier) {
+      res = await poru.resolve({
+        query: sourceIdentifier.query,
+        source: sourceIdentifier.source,
+      });
+    } else {
+      res = await poru.resolve({ query: q });
+    }
   }
 
   const validTracks = Array.isArray(res?.tracks)

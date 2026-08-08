@@ -121,4 +121,38 @@ describe("Search result ranking", () => {
     assert.strictEqual(ranked[0].info.author, "Kuki");
     assert.strictEqual(ranked[0].info.title, "Ciepłe Dranie");
   });
+
+  it("prefers the official Tamagotchi recording over an anonymous exact-title upload", () => {
+    const tracks = [
+      createTrack("TAMAGOTCHI", "😂"),
+      createTrack("Tamagotchi (Remix)", "Kenia Os"),
+      createTrack("Tamagotchi", "TACONAFIDE"),
+      createTrack("Tamagotchi", "TACONAFIDE"),
+      createTrack("Tamagotchi", "TACONAFIDE"),
+      createTrack("Tamagotchi", "TACONAFIDE"),
+    ];
+    tracks[2].info.sourceName = "deezer";
+    tracks[3].info.sourceName = "spotify";
+    tracks[4].info.sourceName = "youtube";
+    tracks[5].info.sourceName = "soundcloud";
+
+    const ranked = rankSearchResults(tracks, "tamagotchi");
+
+    assert.strictEqual(ranked[0].info.author, "TACONAFIDE");
+    assert.strictEqual(ranked[0].info.title, "Tamagotchi");
+  });
+
+  it("penalizes remix and slowed variants when the query asks only for the base title", () => {
+    const ranked = rankSearchResults(
+      [
+        createTrack("Tamagotchi (Remix)", "TACONAFIDE"),
+        createTrack("Tamagotchi (slowed)", "Tuzera"),
+        createTrack("Tamagotchi", "TACONAFIDE"),
+      ],
+      "tamagotchi"
+    );
+
+    assert.strictEqual(ranked[0].info.title, "Tamagotchi");
+    assert.strictEqual(ranked[0].info.author, "TACONAFIDE");
+  });
 });

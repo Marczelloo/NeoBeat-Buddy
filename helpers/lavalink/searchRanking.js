@@ -38,6 +38,27 @@ const VERSION_WORDS = new Set([
   "8d",
 ]);
 
+const VERSION_PENALTIES = Object.freeze({
+  remix: 70,
+  nightcore: 70,
+  slowed: 70,
+  spedup: 70,
+  live: 55,
+  instrumental: 65,
+  karaoke: 80,
+  cover: 70,
+  acoustic: 55,
+  mix: 50,
+  edit: 35,
+  single: 0,
+  version: 0,
+  original: 0,
+  radio: 0,
+  clean: 0,
+  explicit: 0,
+  remaster: 20,
+});
+
 const NON_MUSIC_SEARCH_PATTERNS = [
   /\b(?:tutorial|how to|lesson|tips?|tricks?|review|reaction|reacts?|analysis|explained)\b/i,
   /\b(?:interview|podcast|gameplay|walkthrough|speedrun|stream(?:ed)?\s+sniped|livestream)\b/i,
@@ -53,7 +74,7 @@ function normalizeText(value) {
     // Polish ł), so make keyboard-friendly queries match provider metadata.
     .replace(/[łŁ]/g, "l")
     .toLowerCase()
-    .replace(/^(?:dzsearch|ytsearch|spsearch|ytmsearch):\s*/i, "")
+    .replace(/^(?:dzsearch|ytsearch|spsearch|scsearch|ytmsearch):\s*/i, "")
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/&/g, " and ")
     // Preserve non-Latin artist names so a title-only query is not mistaken
@@ -134,7 +155,25 @@ function getCanonicalTitle(title) {
     .join(" ");
 }
 
-function scoreSearchResult(track, query, index = 0) {
+function getProviderIdentity(track) {
+  const source = normalizeText(track?.info?.sourceName || track?.info?.source || "");
+  return source || "unknown";
+}
+
+function getConsensusKey(track) {
+  const title = normalizeText(track?.info?.title || "");
+  const author = normalizeText(track?.info?.author || "");
+  if (!title || !author) return null;
+  return `${author}|||${title}`;
+}
+
+function getProviderConsensus(track, consensusMap) {
+  const key = getConsensusKey(track);
+  if (!key || !consensusMap) return 0;
+  return consensusMap.get(key)?.size ?? 0;
+}
+
+function scoreSearchResult(track, query, index = 0, { consensusMap } = {}) {
   const title = track?.info?.title || "";
   const author = track?.info?.author || "";
   const normalizedQuery = normalizeText(query);
@@ -163,7 +202,14 @@ function scoreSearchResult(track, query, index = 0) {
     reasons.push("canonical title");
   }
 
-  if (candidateText === normalizedQuery || `${normalizedTitle} ${normalizedAuthor}` === normalizedQuery) {
+  if (
+    queryTokens.length >= 2 &&
+    normalizedAuthor &&
+    normalizedTitle &&
+    normalizedQuery !== normalizedTitle &&
+    normalizedQuery !== normalizedAuthor &&
+    (candidateText === normalizedQuery || `${normalizedTitle} ${normalizedAuthor}` === normalizedQuery)
+  ) {
     score += 180;
     reasons.push("exact artist/title");
   }
@@ -214,12 +260,23 @@ function scoreSearchResult(track, query, index = 0) {
     if (authorCoverage > 0) reasons.push("artist tokens");
   }
 
-  const unwantedVersions = getVersionTokens(title).filter(
-    (token) => !getTokens(query, { keepGeneric: true }).includes(token)
-  );
-  if (unwantedVersions.length && canonicalTitle !== normalizedQuery) {
-    score -= unwantedVersions.length * 18;
+  const requestedVersionTokens = getTokens(query, { keepGeneric: true });
+  const unwantedVersions = getVersionTokens(title).filter((token) => !requestedVersionTokens.includes(token));
+  if (unwantedVersions.length) {
+    const penalty = unwantedVersions.reduce((sum, token) => sum + (VERSION_PENALTIES[token] ?? 25), 0);
+    score -= penalty;
     reasons.push(`version penalty:${unwantedVersions.join(",")}`);
+  }
+
+  if (!normalizedAuthor && queryTokens.length > 0) {
+    score -= 45;
+    reasons.push("unknown uploader");
+  }
+
+  const consensusSources = getProviderConsensus(track, consensusMap);
+  if (consensusSources > 1) {
+    score += (consensusSources - 1) * 32;
+    reasons.push(`provider consensus:${consensusSources}`);
   }
 
   // Lavalink does not expose popularity consistently across all sources. When it does,
@@ -265,8 +322,17 @@ function filterRelevantSearchResults(tracks, query) {
 }
 
 function rankSearchResults(tracks, query, { limit, withScores = false } = {}) {
+  const sourceConsensus = new Map();
+  for (const track of Array.isArray(tracks) ? tracks : []) {
+    const key = getConsensusKey(track);
+    if (!key) continue;
+
+    if (!sourceConsensus.has(key)) sourceConsensus.set(key, new Set());
+    sourceConsensus.get(key).add(getProviderIdentity(track));
+  }
+
   const ranked = (Array.isArray(tracks) ? tracks : [])
-    .map((track, index) => scoreSearchResult(track, query, index))
+    .map((track, index) => scoreSearchResult(track, query, index, { consensusMap: sourceConsensus }))
     .sort((left, right) => {
       if (right.score !== left.score) return right.score - left.score;
       if (right.popularity !== left.popularity) return right.popularity - left.popularity;
@@ -279,8 +345,11 @@ function rankSearchResults(tracks, query, { limit, withScores = false } = {}) {
 
 module.exports = {
   getCanonicalTitle,
+  getConsensusKey,
   filterRelevantSearchResults,
   getPopularity,
+  getProviderConsensus,
+  getProviderIdentity,
   isLikelyNonMusicSearchResult,
   isRelevantSearchResult,
   normalizeText,

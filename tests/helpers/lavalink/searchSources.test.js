@@ -7,6 +7,7 @@ const {
 } = require("../../../helpers/interactions/autocompleteGuard");
 const { buildFallbackQueries } = require("../../../helpers/lavalink/fallbacks");
 const { clearSearchCache, searchAcrossSources } = require("../../../helpers/lavalink/searchAggregator");
+const { parseSearchIdentifier } = require("../../../helpers/lavalink/searchIdentifier");
 const {
   getFallbackSources,
   getFallbackSource,
@@ -91,5 +92,14 @@ describe("Search source selection", () => {
       "ytmsearch",
       "ytsearch",
     ]);
+  });
+
+  it("parses source-pinned autocomplete values without double-prefixing them", () => {
+    assert.deepStrictEqual(parseSearchIdentifier("scsearch: Kuki Ciepłe Dranie"), {
+      source: "scsearch",
+      query: "Kuki Ciepłe Dranie",
+    });
+    assert.strictEqual(parseSearchIdentifier("https://soundcloud.com/kuki/cieple-dranie"), null);
+    assert.strictEqual(parseSearchIdentifier("scsearch:"), null);
   });
 });
