@@ -252,6 +252,8 @@ function NowPlaying({ state, position, onAction, onTab, className = "" }) {
 function CompactPlayer({ state, position }) {
   const { player } = state;
   const track = player.currentTrack;
+  const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
+  const progress = clamp(position, 0, duration);
   const lines = player.lyrics?.lines || [];
   const lyricIndex = lines.reduce((last, line, index) => line.timestamp <= position ? index : last, -1);
   const activeLyric = lines[lyricIndex]?.line || lines[0]?.line || player.lyrics?.text?.split("\n").find(Boolean);
@@ -277,10 +279,12 @@ function CompactPlayer({ state, position }) {
           <Artwork track={track} size="compact" />
         </div>
         <div className="compact-copy">
-          <div className="compact-kicker"><Waveform size={12} weight="bold" aria-hidden="true" /> NOW PLAYING</div>
           <strong title={track?.title || "Nothing is playing"}>{track?.title || "Nothing is playing"}</strong>
           <div className="compact-meta"><span title={track?.author || "Waiting for a track"}>{track?.author || "Waiting for a track"}</span><SourceTag source={track?.source} /></div>
         </div>
+      </div>
+      <div className="compact-progress" role="progressbar" aria-label="Track progress" aria-valuemin="0" aria-valuemax={duration} aria-valuenow={progress}>
+        <span style={{ "--compact-progress": `${(progress / duration) * 100}%` }} />
       </div>
       <div className="compact-flags" aria-label="Player modes">
         <span className={player.autoplay ? "is-on" : ""}>Autoplay {player.autoplay ? "on" : "off"}</span>
@@ -435,43 +439,53 @@ function DrawerToggle({ side, open, count, onClick }) {
   );
 }
 
-function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onView }) {
+function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onView, loading = false }) {
   return (
     <div className="sidebar-content">
       <div className="sidebar-heading">
         <div><span className="sidebar-kicker">YOUR LIBRARY</span><h2>Playlists</h2></div>
-        <button className="icon-button" type="button" onClick={() => onView("playlists")} aria-label="Create or edit playlists" title="Create or edit playlists"><Plus size={18} weight="bold" aria-hidden="true" /></button>
+        <button className="icon-button" type="button" onClick={() => onView("playlists")} disabled={loading} aria-label="Create or edit playlists" title="Create or edit playlists"><Plus size={18} weight="bold" aria-hidden="true" /></button>
       </div>
-      <button className={`library-home ${!selectedPlaylist ? "is-active" : ""}`} type="button" onClick={() => onSelect(null)}>
+      <button className={`library-home ${!selectedPlaylist ? "is-active" : ""}`} type="button" onClick={() => onSelect(null)} disabled={loading}>
         <House size={18} weight={!selectedPlaylist ? "fill" : "regular"} aria-hidden="true" />
         <span>All playlists</span>
       </button>
-      <div className="playlist-nav-list">
+      {loading ? <div className="sidebar-skeletons" aria-label="Loading playlists"><span /><span /><span /></div> : <div className="playlist-nav-list">
         {(playlists || []).map((playlist) => (
           <button className={`playlist-nav-row ${selectedPlaylist === playlist.id ? "is-active" : ""}`} type="button" key={playlist.id} onClick={() => onSelect(playlist.id)}>
             <Artwork track={{ title: playlist.name, artworkUrl: playlist.thumbnail }} size="small" />
             <span><strong>{playlist.name}</strong><small>{playlist.trackCount} tracks</small></span>
           </button>
         ))}
-      </div>
-      <button className="sidebar-footer-action" type="button" onClick={() => onView("playlists")}><Plus size={16} aria-hidden="true" /> New playlist</button>
+      </div>}
+      <button className="sidebar-footer-action" type="button" onClick={() => onView("playlists")} disabled={loading}><Plus size={16} aria-hidden="true" /> New playlist</button>
     </div>
   );
 }
 
-function QueueSidebar({ queue, onAction }) {
+function QueueSidebar({ queue, onAction, loading = false }) {
   return (
     <div className="sidebar-content queue-sidebar-content">
       <div className="sidebar-heading">
-        <div><span className="sidebar-kicker">UP NEXT</span><h2>Queue <b>{queue.length}</b></h2></div>
-        <button className="icon-button" type="button" onClick={() => onAction("clear_queue")} disabled={!queue.length} aria-label="Clear queue" title="Clear queue"><Trash size={16} aria-hidden="true" /></button>
+        <div><span className="sidebar-kicker">UP NEXT</span><h2>Queue <b>{loading ? "…" : queue.length}</b></h2></div>
+        <button className="icon-button" type="button" onClick={() => onAction("clear_queue")} disabled={loading || !queue.length} aria-label="Clear queue" title="Clear queue"><Trash size={16} aria-hidden="true" /></button>
       </div>
-      <QueuePanel queue={queue} onAction={onAction} />
+      {loading ? <div className="queue-skeletons" aria-label="Loading queue"><span /><span /><span /></div> : <QueuePanel queue={queue} onAction={onAction} />}
     </div>
   );
 }
 
-function HomePanel({ onView }) {
+function HomePanel({ onView, loading = false }) {
+  if (loading) {
+    return (
+      <section className="home-panel home-panel-loading panel-surface" aria-busy="true" aria-label="Synchronizing MewBit Activity">
+        <div className="home-orbit" aria-hidden="true"><span /><span /><span /></div>
+        <div className="home-loading-copy"><span /><strong /><strong /><i /><i /><div><b /><b /></div></div>
+        <div className="home-signal" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div>
+      </section>
+    );
+  }
+
   return (
     <section className="home-panel panel-surface">
       <div className="home-orbit" aria-hidden="true"><span /><span /><span /></div>
@@ -577,6 +591,7 @@ function App() {
   const [searchSource, setSearchSource] = useState("auto");
   const [searchResults, setSearchResults] = useState([]);
   const [searchStatus, setSearchStatus] = useState("idle");
+  const [isHydrating, setIsHydrating] = useState(true);
   const syncAt = useRef(Date.now());
   const isCompact = useCompactViewport();
 
@@ -608,6 +623,7 @@ function App() {
         const connectLocalPreview = nextContext.mode === "local" && Boolean(import.meta.env.VITE_ACTIVITY_CONNECT_LOCAL);
         if (nextContext.mode === "local" && !connectLocalPreview) {
           setConnection({ status: "preview", message: nextContext.reason || "Local Activity preview" });
+          setIsHydrating(false);
           return;
         }
 
@@ -624,11 +640,13 @@ function App() {
               showToast(`Live Activity gateway unavailable: ${error.message}`, "error");
             }
           }
+        } finally {
+          if (alive) setIsHydrating(false);
         }
 
         stopSocket = connectActivitySocket({
           ...nextContext,
-          onState: (nextState) => { if (alive) { applyState(nextState); setConnection({ status: "live", message: "Realtime gateway connected" }); } },
+          onState: (nextState) => { if (alive) { applyState(nextState); setConnection({ status: "live", message: "Realtime gateway connected" }); setIsHydrating(false); } },
           onReady: () => { if (alive) setConnection({ status: "live", message: "Realtime gateway connected" }); },
           onError: (error) => { if (alive && nextContext.mode === "discord") setConnection({ status: "preview", message: error.message }); },
         });
@@ -637,6 +655,7 @@ function App() {
         if (alive) {
           setConnection({ status: "error", message: error.message });
           showToast(`Discord Activity connection failed: ${error.message}`, "error");
+          setIsHydrating(false);
         }
       });
 
@@ -779,7 +798,7 @@ function App() {
   const viewState = { ...state, player: { ...state.player, positionMs: position } };
 
   return (
-    <main className={`activity-app ${isCompact ? "is-compact" : ""}`}>
+    <main className={`activity-app ${isCompact ? "is-compact" : ""} ${isHydrating ? "is-hydrating" : ""}`}>
       {isCompact ? <CompactPlayer state={viewState} position={position} /> : <>
         <div className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
           <aside className="sidebar sidebar-left" aria-label="Playlists sidebar">
@@ -789,6 +808,7 @@ function App() {
               selectedPlaylist={selectedPlaylist}
               onSelect={(playlistId) => { setSelectedPlaylist(playlistId); goToView("playlists"); }}
               onView={goToView}
+              loading={isHydrating}
             />
           </aside>
           <section className="main-stage">
@@ -804,7 +824,7 @@ function App() {
               </div>
             </div>
             <div className={`main-content main-view-${activeTab}`}>
-              {activeTab === "home" ? (state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={viewState} position={position} onAction={onAction} onTab={goToView} /> : <HomePanel onView={goToView} />) : null}
+              {activeTab === "home" ? (isHydrating ? <HomePanel loading /> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={viewState} position={position} onAction={onAction} onTab={goToView} /> : <HomePanel onView={goToView} />) : null}
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
               {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} activeSection={soundSection} onAction={onAction} /></section> : null}
               {activeTab === "lyrics" ? <section className="content-panel panel-surface"><LyricsPanel lyrics={state.player.lyrics} position={state.player.positionMs} onAction={onAction} /></section> : null}
@@ -812,8 +832,8 @@ function App() {
             </div>
           </section>
           <aside className="sidebar sidebar-right" aria-label="Queue sidebar">
-            <DrawerToggle side="right" open={rightSidebarOpen} count={state.player.queue.length} onClick={() => setRightSidebarOpen((value) => !value)} />
-            <QueueSidebar queue={state.player.queue} onAction={onAction} />
+            <DrawerToggle side="right" open={rightSidebarOpen} count={isHydrating ? 0 : state.player.queue.length} onClick={() => setRightSidebarOpen((value) => !value)} />
+            <QueueSidebar queue={state.player.queue} onAction={onAction} loading={isHydrating} />
           </aside>
         </div>
         {activeTab === "home" ? null : <PlayerBar state={viewState} position={position} onAction={onAction} onView={goToView} />}
