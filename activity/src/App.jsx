@@ -256,8 +256,10 @@ function CompactPlayer({ state, position }) {
   const progress = clamp(position, 0, duration);
   const lines = player.lyrics?.lines || [];
   const lyricIndex = lines.reduce((last, line, index) => line.timestamp <= position ? index : last, -1);
-  const activeLyric = lines[lyricIndex]?.line || lines[0]?.line || player.lyrics?.text?.split("\n").find(Boolean);
-  const upcomingLyric = lines[lyricIndex + 1]?.line;
+  const currentLyricIndex = lyricIndex >= 0 ? lyricIndex : 0;
+  const activeLyric = lines[currentLyricIndex]?.line || player.lyrics?.text?.split("\n").find(Boolean);
+  const previousLyric = lines[currentLyricIndex - 1]?.line;
+  const upcomingLyric = lines[currentLyricIndex + 1]?.line;
   const hasLyrics = Boolean(activeLyric);
   const statusSeed = `${track?.id || "mewbit"}`.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const statusLine = state.botStatus || COMPACT_STATUS_FALLBACKS[statusSeed % COMPACT_STATUS_FALLBACKS.length];
@@ -265,9 +267,11 @@ function CompactPlayer({ state, position }) {
   if (hasLyrics) {
     return (
       <section className="compact-player compact-lyrics-preview" aria-label="MewBit compact lyrics">
-        <div className="compact-lyrics-kicker"><MusicNotes size={13} weight="fill" aria-hidden="true" /> LIVE LYRICS</div>
-        <p>{activeLyric}</p>
-        {upcomingLyric ? <span>{upcomingLyric}</span> : null}
+        <div className="compact-lyrics-stack" aria-live="polite" aria-atomic="true">
+          <span className={`compact-lyrics-line is-adjacent ${previousLyric ? "" : "is-empty"}`}>{previousLyric || "·"}</span>
+          <p className="compact-lyrics-line is-current" key={`${currentLyricIndex}-${activeLyric}`}>{activeLyric}</p>
+          <span className={`compact-lyrics-line is-adjacent ${upcomingLyric ? "" : "is-empty"}`}>{upcomingLyric || "·"}</span>
+        </div>
       </section>
     );
   }
@@ -378,11 +382,18 @@ function FiltersPanel({ filters, filterPresets, onAction, activeSection = "effec
 function LyricsPanel({ lyrics, position, onAction }) {
   const lines = lyrics?.lines || [];
   const activeLine = lines.reduce((last, line, index) => line.timestamp <= position ? index : last, -1);
+  const activeLineRef = useRef(null);
+
+  useEffect(() => {
+    if (activeLine < 0) return;
+    activeLineRef.current?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+  }, [activeLine]);
+
   return (
     <div className="lyrics-panel">
       <PanelTitle icon={<MusicNotes size={18} aria-hidden="true" />} title="Live lyrics" description={lyrics ? `${lyrics.provider} ${lyrics.synced ? "synced" : "static"}` : "Nothing loaded for this track"} action={<button className="ghost-button" type="button" onClick={() => onAction("refresh_lyrics")}><UploadSimple size={15} aria-hidden="true" /> Refresh</button>} />
       {!lyrics ? <div className="empty-state"><MusicNotes size={38} weight="duotone" aria-hidden="true" /><strong>No lyrics loaded</strong><span>Ask MewBit to check the current track again.</span><button className="secondary-button" type="button" onClick={() => onAction("refresh_lyrics")}>Find lyrics</button></div> : null}
-      {lyrics?.synced && lines.length ? <div className="lyrics-lines">{lines.map((line, index) => <p className={index === activeLine ? "is-current" : index < activeLine ? "is-past" : ""} key={`${line.timestamp}-${index}`}>{line.line}</p>)}</div> : null}
+      {lyrics?.synced && lines.length ? <div className="lyrics-lines">{lines.map((line, index) => <p ref={index === activeLine ? activeLineRef : null} className={index === activeLine ? "is-current" : index < activeLine ? "is-past" : ""} key={`${line.timestamp}-${index}`}>{line.line}</p>)}</div> : null}
       {lyrics && !lyrics.synced ? <pre className="static-lyrics">{lyrics.text || "The provider returned no readable lyrics."}</pre> : null}
     </div>
   );
