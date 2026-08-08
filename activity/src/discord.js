@@ -38,7 +38,7 @@ async function readJsonResponse(response, context) {
   try {
     return body ? JSON.parse(body) : {};
   } catch {
-    throw new Error(`${context} returned non-JSON data (${response.status}). Check that the Activity uses https://mewbit.marczelloo.dev instead of the Vite development URL.`);
+    throw new Error(`${context} returned non-JSON data (${response.status}). Use the production Activity mapping at https://mewbit.marczelloo.dev.`);
   }
 }
 
