@@ -4,6 +4,11 @@ const { playbackState } = require("./state");
 
 const sessionStartTime = new Map();
 const genreCache = new Map();
+const AUTOPLAY_VIBE_WEIGHT = 0.3;
+
+function isAutoplayTrack(track) {
+  return Boolean(track?.userData?.autoplay || track?.info?.autoplayed);
+}
 
 function getTrackMetadata(track) {
   const identifier = track?.info?.identifier;
@@ -41,6 +46,7 @@ function buildSessionProfile(guildId, referenceTrack) {
   );
 
   const recentTracks = [...history.slice(-14), referenceTrack].filter(Boolean);
+  const cooldownTracks = [...history, referenceTrack, ...recentAutoplayTracks].filter(Boolean).slice(-160);
 
   if (recentTracks.length === 0) {
     return {
@@ -62,6 +68,7 @@ function buildSessionProfile(guildId, referenceTrack) {
       recentGenreFamilies: [],
       recentTracks: [],
       recentAutoplayTracks: [],
+      cooldownTracks: [],
     };
   }
 
@@ -77,12 +84,19 @@ function buildSessionProfile(guildId, referenceTrack) {
   const recentGenreFamilies = [];
   let referenceMetadata = { genres: [], features: null, releaseYear: null };
 
+  let profileWeightTotal = 0;
+
   recentTracks.forEach((track, index) => {
     const artist = track.info?.author || "Unknown";
     const duration = track.info?.length || 0;
     const id = track.info?.identifier;
 
-    artistCounts[artist] = (artistCounts[artist] || 0) + 1;
+    // The room's manual selections are the anchor. Autoplay entries still
+    // influence continuity, but cannot slowly teach the recommender to drift
+    // away from what listeners actually selected.
+    const trackWeight = isAutoplayTrack(track) ? AUTOPLAY_VIBE_WEIGHT : 1;
+    profileWeightTotal += trackWeight;
+    artistCounts[artist] = (artistCounts[artist] || 0) + trackWeight;
     totalDuration += duration;
     if (id) identifiers.push(id);
 
@@ -96,7 +110,7 @@ function buildSessionProfile(guildId, referenceTrack) {
     }
 
     cachedGenres.forEach((genre) => {
-      genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+      genreCounts[genre] = (genreCounts[genre] || 0) + trackWeight;
     });
     recentGenreFamilies.push(...getGenreFamilies(cachedGenres));
 
@@ -117,12 +131,12 @@ function buildSessionProfile(guildId, referenceTrack) {
   const topArtists = Object.entries(artistCounts)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 10)
-    .map(([artist, count]) => ({ artist, count, weight: count / recentTracks.length }));
+    .map(([artist, count]) => ({ artist, count, weight: count / profileWeightTotal }));
 
   const topGenres = Object.entries(genreCounts)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 10)
-    .map(([genre, count]) => ({ genre, count, weight: count / recentTracks.length }));
+    .map(([genre, count]) => ({ genre, count, weight: count / profileWeightTotal }));
 
   const avgDuration = totalDuration / recentTracks.length;
 
@@ -192,14 +206,14 @@ function buildSessionProfile(guildId, referenceTrack) {
     .map((t) => t.info?.author)
     .filter(Boolean);
 
-  const autoplayIdentifiers = recentAutoplayTracks.map((track) => track.info?.identifier).filter(Boolean);
+  const cooldownIdentifiers = cooldownTracks.map((track) => track.info?.identifier).filter(Boolean);
 
   return {
     topArtists,
     artistCounts,
     avgDuration,
     totalTracks: recentTracks.length,
-    recentIdentifiers: [...identifiers, ...autoplayIdentifiers].slice(-20),
+    recentIdentifiers: [...new Set(cooldownIdentifiers)].slice(-160),
     lastThreeArtists,
     topGenres,
     genreCounts,
@@ -214,12 +228,14 @@ function buildSessionProfile(guildId, referenceTrack) {
     recentGenreFamilies,
     recentTracks,
     recentAutoplayTracks,
+    cooldownTracks,
   };
 }
 
 module.exports = {
   buildSessionProfile,
   getTrackMetadata,
+  isAutoplayTrack,
   sessionStartTime,
   genreCache,
 };

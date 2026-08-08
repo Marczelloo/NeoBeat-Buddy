@@ -1,6 +1,9 @@
 const MAX_FALLBACK_ATTEMPTS = 1;
 const INACTIVITY_TIMEOUT_MS = Number(process.env.INACTIVITY_TIMEOUT_MS ?? 5 * 60 * 1000);
-const TRACK_HISTORY_LIMIT = Number(process.env.TRACK_HISTORY_LIMIT ?? 20);
+// Keep enough context to prevent a long autoplay session from cycling back to
+// tracks it played an hour ago. This is deliberately separate from the short
+// window used to model the current room vibe.
+const TRACK_HISTORY_LIMIT = Number(process.env.TRACK_HISTORY_LIMIT ?? 80);
 const PROGRESS_UPDATE_INTERVAL_MS = Number(process.env.PROGRESS_UPDATE_INTERVAL_MS ?? 10_000);
 const EQUALIZER_PRESETS = {
   flat: [],

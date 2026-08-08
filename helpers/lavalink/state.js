@@ -5,7 +5,7 @@ const { getTrackIdentity } = require("./trackIdentity");
 const inactivityTimers = new Map();
 const playbackState = new Map();
 const lyricsState = new Map();
-const AUTOPLAY_HISTORY_LIMIT = Number(process.env.AUTOPLAY_HISTORY_LIMIT ?? 20);
+const AUTOPLAY_HISTORY_LIMIT = Number(process.env.AUTOPLAY_HISTORY_LIMIT ?? 80);
 
 const ensurePlaybackState = (guildId) => {
   const state = playbackState.get(guildId) || {};

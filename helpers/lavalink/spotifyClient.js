@@ -336,9 +336,18 @@ async function fetchSpotifyRecommendations(seedTrackId, limit = 10, targetGenres
       }
     }
 
-    // Shuffle and limit
-    const shuffled = tracks.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, limit);
+    // Keep provider candidates deterministic. The caller applies its own
+    // diversity rules after it has genre and continuity information; random
+    // shuffling here made the exact same room jump to a different song.
+    return tracks
+      .sort((left, right) => {
+        const popularityDifference = Number(right.popularity || 0) - Number(left.popularity || 0);
+        if (popularityDifference !== 0) return popularityDifference;
+        return `${left.artists?.[0]?.name || ""} ${left.name || ""}`.localeCompare(
+          `${right.artists?.[0]?.name || ""} ${right.name || ""}`
+        );
+      })
+      .slice(0, limit);
   } catch (err) {
     Log.error("Error getting Spotify recommendations", err);
     return [];

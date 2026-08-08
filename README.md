@@ -987,13 +987,15 @@ docker load -i neo-bot.tar
 | `GENIUS_API_KEY`              | -        | Genius API key for lyrics lookup                      |
 | `SPOTIFY_CLIENT_ID`           | -        | Spotify client ID (optional, for metadata enrichment) |
 | `SPOTIFY_CLIENT_SECRET`       | -        | Spotify client secret                                 |
+| `USE_SPOTIFY_AUTOPLAY`        | `false`  | Opt in to Spotify autoplay candidates (not recommended for development-mode apps) |
+| `USE_SPOTIFY_METADATA`        | `false`  | Opt in to Spotify metadata enrichment when extended API access is available |
 | `DEFAULT_VOLUME`              | `50`     | Default playback volume (0-100)                       |
 | `LOUDNESS_NORMALIZATION`      | `true`   | Apply conservative provider volume compensation      |
 | `LOUDNESS_<SOURCE>_DB`        | varies   | Optional per-source gain override in dB               |
-| `AUTOPLAY_HISTORY_LIMIT`      | `20`     | Recently played/reserved autoplay tracks kept out of recommendations |
+| `AUTOPLAY_HISTORY_LIMIT`      | `80`     | Recently played/reserved autoplay tracks kept out of recommendations |
 | `INACTIVITY_TIMEOUT_MS`       | `300000` | Inactivity timeout in ms (5 minutes)                  |
 | `PROGRESS_UPDATE_INTERVAL_MS` | `10000`  | Player progress update interval (10 seconds)          |
-| `TRACK_HISTORY_LIMIT`         | `20`     | Max tracks to keep in history                         |
+| `TRACK_HISTORY_LIMIT`         | `80`     | Max tracks to keep in history and repeat cooldown     |
 | `FAST_LOGS`                   | `1`      | Enable fast logging (0 to disable, skips caller info) |
 | `LOG_TO_FILE`                 | `1`      | Enable file logging (0 to disable)                    |
 | `LOG_LEVEL`                   | `2`      | Log level (0=none, 1=warn/error, 2=info, 3=debug)     |

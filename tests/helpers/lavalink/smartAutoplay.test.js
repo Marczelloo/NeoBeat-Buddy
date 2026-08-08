@@ -75,21 +75,18 @@ describe("Smart Autoplay System", () => {
       assert.strictEqual(profile.topArtists[1].count, 1);
     });
 
-    it("should track last 20 identifiers to avoid duplicates", () => {
+    it("should keep a long cooldown window to avoid duplicates", () => {
       const history = Array.from({ length: 25 }, (_, i) => createMockTrack(`Song ${i}`, `Artist ${i}`, `id${i}`));
       playbackState.set(GUILD_ID, { history });
 
       const referenceTrack = createMockTrack("Song 26", "Artist 26", "id26");
       const profile = buildSessionProfile(GUILD_ID, referenceTrack);
 
-      // Profile limits to last 15 tracks (14 history + 1 reference)
-      // So we get 15 identifiers, not 20
-      assert.strictEqual(profile.recentIdentifiers.length, 15);
+      assert.strictEqual(profile.recentIdentifiers.length, 26);
       assert.ok(profile.recentIdentifiers.includes("id26")); // Reference included
 
-      // The identifiers should be from the last 15 tracks (id12-id26)
-      assert.ok(profile.recentIdentifiers.includes("id12")); // 14 from history start at id12
-      assert.ok(!profile.recentIdentifiers.includes("id0")); // Old ones excluded
+      assert.ok(profile.recentIdentifiers.includes("id12"));
+      assert.ok(profile.recentIdentifiers.includes("id0"));
     });
 
     it("should calculate average duration correctly", () => {
@@ -305,7 +302,7 @@ describe("Smart Autoplay System", () => {
       assert.ok(profile.recentIdentifiers.includes("id2"));
     });
 
-    it("should maintain identifier uniqueness", () => {
+    it("should deduplicate identifier keys in the cooldown index", () => {
       const history = [
         createMockTrack("Song 1", "Artist A", "id1"),
         createMockTrack("Song 2", "Artist A", "id1"), // Same ID
@@ -315,9 +312,9 @@ describe("Smart Autoplay System", () => {
       const referenceTrack = createMockTrack("Song 3", "Artist B", "id3");
       const profile = buildSessionProfile(GUILD_ID, referenceTrack);
 
-      // Both instances should be in identifiers (no dedup in profile)
+      // A cooldown lookup needs one key per recording, not duplicate entries.
       const id1Count = profile.recentIdentifiers.filter((id) => id === "id1").length;
-      assert.strictEqual(id1Count, 2); // Both instances tracked
+      assert.strictEqual(id1Count, 1);
     });
   });
 

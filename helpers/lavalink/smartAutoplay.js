@@ -1,9 +1,9 @@
 const { getGuildState } = require("../guildState");
 const Log = require("../logs/log");
 const { scoreCandidates, getTimeOfDayFactor } = require("./candidateScoring");
-const { getLastFmSimilarTracks } = require("./lastfmClient");
+const { getLastFmSimilarTracks, getLastFmTrackTags } = require("./lastfmClient");
 const { getPoru } = require("./players");
-const { rankSearchResults } = require("./searchRanking");
+const { filterRelevantSearchResults, rankSearchResults } = require("./searchRanking");
 const { buildSessionProfile, genreCache } = require("./sessionProfile");
 const { getSkipPatterns } = require("./skipLearning");
 const {
@@ -11,6 +11,10 @@ const {
   enrichCandidatesWithSpotifyMetadata,
 } = require("./spotifyRecommendations");
 const { filterValidSongs } = require("./trackValidation");
+
+const USE_SPOTIFY_AUTOPLAY = process.env.USE_SPOTIFY_AUTOPLAY === "true";
+const USE_SPOTIFY_METADATA = process.env.USE_SPOTIFY_METADATA === "true";
+const ALTERNATE_VERSION_PATTERN = /\b(?:remix|live|nightcore|slowed|sped\s*up|speed\s*up|cover|karaoke|instrumental)\b/i;
 
 function getLavalinkNode() {
   return getPoru()?.leastUsedNodes?.[0] || null;
@@ -61,12 +65,46 @@ function mergeCandidates(candidates) {
 
     existing.genres = [...new Set([...(existing.genres || []), ...(candidate.genres || [])])];
     existing.features ||= candidate.features;
+    existing.similarity = Math.max(existing.similarity || 0, candidate.similarity || 0);
     existing.popularity = Math.max(existing.popularity || 0, candidate.popularity || 0);
     existing.releaseYear ||= candidate.releaseYear;
     existing.track ||= candidate.track;
   }
 
   return [...merged.values()];
+}
+
+function normalizeLastFmSimilarity(match, maximumMatch) {
+  const value = Number(match);
+  const max = Number(maximumMatch);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  if (value <= 1) return Math.min(1, value);
+  if (Number.isFinite(max) && max > 1) return Math.min(1, value / max);
+  return Math.min(1, value / 100);
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+  const results = Array(items.length);
+  let cursor = 0;
+  const run = async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+  return results;
+}
+
+function getRelevantPlayableTrack(tracks, query) {
+  const relevant = filterRelevantSearchResults(filterValidSongs(tracks || []), query);
+  const queryRequestsAlternateVersion = ALTERNATE_VERSION_PATTERN.test(query);
+  const originalOnly = queryRequestsAlternateVersion
+    ? relevant
+    : relevant.filter((track) => !ALTERNATE_VERSION_PATTERN.test(track.info?.title || ""));
+  return rankSearchResults(originalOnly, query)[0] || null;
 }
 
 /**
@@ -197,7 +235,8 @@ async function fetchSpotifyCandidates(referenceTrack, guildId, profile) {
           const searchTracks = await loadLavalinkTracks(spotifyQuery);
 
           if (searchTracks.length > 0) {
-            const track = rankSearchResults(searchTracks, `${rec.artist} ${rec.title}`)[0];
+            const track = getRelevantPlayableTrack(searchTracks, `${rec.artist} ${rec.title}`);
+            if (!track) continue;
             candidates.push({
               artist: rec.artist,
               title: rec.title,
@@ -242,12 +281,19 @@ async function fetchLastFmCandidates(referenceTrack, guildId) {
       limit: 12,
     });
 
-    const resolved = await Promise.all(
-      similarTracks.map(async (similar) => {
+    const maximumMatch = Math.max(...similarTracks.map((track) => Number(track.match) || 0), 0);
+
+    // Tags add useful genre evidence but Last.fm is a shared service. Eight
+    // strong neighbours with a small worker pool are enough for a queue slot
+    // and keep the request pattern respectful under multiple guilds.
+    const resolved = await mapWithConcurrency(similarTracks.slice(0, 8), 2, async (similar) => {
         try {
-          const tracks = await loadLavalinkTracks(`ytsearch:${similar.artist} ${similar.title}`);
-          const track = rankSearchResults(tracks, `${similar.artist} ${similar.title}`)[0];
+          const query = `${similar.artist} ${similar.title}`;
+          const tracks = await loadLavalinkTracks(`ytsearch:${query}`);
+          const track = getRelevantPlayableTrack(tracks, query);
           if (!track) return null;
+
+          const genres = await getLastFmTrackTags({ artist: similar.artist, title: similar.title, limit: 8 });
 
           return {
             artist: similar.artist,
@@ -256,8 +302,12 @@ async function fetchLastFmCandidates(referenceTrack, guildId) {
             duration: track.info?.length,
             source: "lastfm_similar",
             track,
-            genres: [],
-            popularity: similar.match * 100,
+            genres,
+            // This is a collaborative-similarity signal, not catalog
+            // popularity. Keeping it separate prevents a great match from
+            // being penalized as an overplayed track.
+            similarity: normalizeLastFmSimilarity(similar.match, maximumMatch),
+            popularity: 0,
             releaseYear: null,
             features: null,
             score: 0,
@@ -265,8 +315,7 @@ async function fetchLastFmCandidates(referenceTrack, guildId) {
         } catch {
           return null;
         }
-      })
-    );
+      });
 
     candidates.push(...resolved.filter(Boolean));
     Log.info("Last.fm similar candidates collected", "", `guild=${guildId}`, `count=${candidates.length}`);
@@ -452,23 +501,20 @@ async function collectCandidates(referenceTrack, guildId, profile) {
   const { title, author, identifier } = referenceTrack.info;
   const { cleanTitle, searchArtist } = cleanTrackInfo(title, author);
 
-  const [deezerResult, spotifyResult, lastFmResult, youtubeMixResult, youtubeSearchResult, soundCloudResult] = await Promise.allSettled([
-    fetchDeezerCandidates(guildId, cleanTitle, searchArtist),
-    fetchSpotifyCandidates(referenceTrack, guildId, profile),
-    fetchLastFmCandidates(referenceTrack, guildId),
-    fetchYouTubeMixCandidates(identifier, guildId),
-    fetchYouTubeSearchCandidates(cleanTitle, searchArtist, guildId),
-    fetchSoundCloudCandidates(searchArtist, guildId),
-  ]);
+  // Only sources that provide an actual related/radio set may drive autoplay.
+  // Broad artist searches were the source of most "fallback picked something
+  // completely different" incidents, so they are intentionally not used here.
+  const candidateSources = [
+    ["deezer", () => fetchDeezerCandidates(guildId, cleanTitle, searchArtist)],
+    ["lastfm", () => fetchLastFmCandidates(referenceTrack, guildId)],
+    ["youtubeMix", () => fetchYouTubeMixCandidates(identifier, guildId)],
+  ];
+  if (USE_SPOTIFY_AUTOPLAY) {
+    candidateSources.push(["spotify", () => fetchSpotifyCandidates(referenceTrack, guildId, profile)]);
+  }
 
-  const allCandidates = [
-    deezerResult,
-    spotifyResult,
-    lastFmResult,
-    youtubeMixResult,
-    youtubeSearchResult,
-    soundCloudResult,
-  ].flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+  const sourceResults = await Promise.allSettled(candidateSources.map(([, load]) => load()));
+  const allCandidates = sourceResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
   const deduplicatedCandidates = mergeCandidates(allCandidates);
 
   Log.info(
@@ -479,21 +525,6 @@ async function collectCandidates(referenceTrack, guildId, profile) {
     `unique=${deduplicatedCandidates.length}`,
     `sources=${[...new Set(allCandidates.map((candidate) => candidate.source))].join(",") || "none"}`
   );
-
-  // Top artist search remains a last-resort escape hatch if every provider
-  // failed, but normal autoplay now compares all free providers together.
-  if (deduplicatedCandidates.length === 0 && profile.topArtists.length > 0) {
-    const topArtistCandidates = await fetchTopArtistCandidates(profile, guildId);
-    deduplicatedCandidates.push(...topArtistCandidates);
-
-    Log.info(
-      "📊 After Top Artist",
-      "",
-      `guild=${guildId}`,
-      `topArtistCount=${topArtistCandidates.length}`,
-      `total=${deduplicatedCandidates.length}`
-    );
-  }
 
   return deduplicatedCandidates;
 }
@@ -573,17 +604,21 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
 
   Log.info("Starting smart autoplay", "", `guild=${guildId}`, `reference=${referenceTrack.info.title}`);
 
-  // Spotify metadata is optional, but when available it gives the first
-  // session transition real audio features instead of making the first choice
-  // genre-blind. The metadata helper is cached and never blocks playback if
-  // credentials or the API are unavailable.
+  // Last.fm tags are the default genre anchor because the Spotify endpoints
+  // needed for audio metadata are unavailable to most development-mode apps.
   const referenceMetadata = {
     artist: referenceTrack.info.author,
     title: referenceTrack.info.title,
     genres: referenceTrack.userData?.genres || [],
     features: referenceTrack.userData?.features || null,
   };
-  await enrichCandidatesWithSpotifyMetadata([referenceMetadata], 1);
+  const lastFmTags = await getLastFmTrackTags({
+    artist: referenceTrack.info.author,
+    title: referenceTrack.info.title,
+    limit: 10,
+  });
+  if (lastFmTags.length > 0) referenceMetadata.genres = lastFmTags;
+  if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata([referenceMetadata], 1);
   if (referenceMetadata.genres?.length || referenceMetadata.features) {
     referenceTrack.userData = {
       ...(referenceTrack.userData || {}),
@@ -630,7 +665,7 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
 
   Log.info("Candidates collected", "", `guild=${guildId}`, `total=${candidates.length}`);
 
-  await enrichCandidatesWithSpotifyMetadata(candidates);
+  if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata(candidates, candidates.length);
 
   const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
 

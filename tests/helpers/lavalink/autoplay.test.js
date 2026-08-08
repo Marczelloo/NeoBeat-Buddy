@@ -61,8 +61,7 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+8(deezer)"));
-        assert.ok(scored[0].score >= 58); // Base 50 + source 8
+        assert.ok(scored[0].scoringDetails.includes("source:+5(deezer)"));
       });
 
       it("should give Spotify recommendations a small quality tie-break", () => {
@@ -72,7 +71,7 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+6(spotify)"));
+        assert.ok(scored[0].scoringDetails.includes("source:+3(spotify)"));
       });
 
       it("should give YouTube Mix a small discovery tie-break", () => {
@@ -82,30 +81,30 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+3(yt-mix)"));
+        assert.ok(scored[0].scoringDetails.includes("source:+5(yt-mix)"));
       });
 
-      it("should give YouTube Search a small +2 tie-break", () => {
+      it("does not reward broad YouTube searches as a recommendation source", () => {
         const candidates = [createMockCandidate("Song", "Artist", "id1", "youtube_search")];
         const profile = createMinimalProfile();
         const skipPatterns = { skippedArtists: {}, skippedGenres: {} };
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+2(yt-search)"));
+        assert.ok(!scored[0].scoringDetails.some((detail) => detail.includes("yt-search")));
       });
 
-      it("should give Top Artist Search a small +1 tie-break", () => {
+      it("does not reward a broad top-artist fallback", () => {
         const candidates = [createMockCandidate("Song", "Artist", "id1", "top_artist_search")];
         const profile = createMinimalProfile();
         const skipPatterns = { skippedArtists: {}, skippedGenres: {} };
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("source:+1(top-artist)"));
+        assert.ok(!scored[0].scoringDetails.some((detail) => detail.includes("top-artist")));
       });
 
-      it("should rank Deezer > Spotify > YouTube Mix > YouTube Search", () => {
+      it("ranks trusted relationship sources ahead of broad searches", () => {
         const candidates = [
           createMockCandidate("Song 1", "Artist", "id1", "youtube_search"),
           createMockCandidate("Song 2", "Artist", "id2", "deezer_recommendations"),
@@ -117,10 +116,11 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        // Verify order: Deezer, Spotify, YouTube Mix, YouTube Search
+        // Verify order: Deezer, YouTube Mix, Spotify. Broad search receives
+        // no source bonus and is no longer collected by smartAutoplay.
         assert.strictEqual(scored[0].source, "deezer_recommendations");
-        assert.strictEqual(scored[1].source, "spotify_recommendations");
-        assert.strictEqual(scored[2].source, "youtube_mix");
+        assert.strictEqual(scored[1].source, "youtube_mix");
+        assert.strictEqual(scored[2].source, "spotify_recommendations");
         assert.strictEqual(scored[3].source, "youtube_search");
       });
     });
@@ -232,7 +232,7 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
     });
 
     describe("Artist Diversity", () => {
-      it("should give +20 for new artist", () => {
+      it("gives a small tie-breaker for a new artist", () => {
         const candidates = [createMockCandidate("Song", "New Artist", "id1", "deezer_recommendations")];
         const profile = createMinimalProfile({
           topArtists: [
@@ -245,7 +245,7 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("diversity:+20(new-artist)"));
+        assert.ok(scored[0].scoringDetails.includes("diversity:+6(new-artist)"));
       });
 
       it("should give -40 for consecutive same artist", () => {
@@ -402,7 +402,7 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
     });
 
     describe("Popularity Weighting", () => {
-      it("should give +10 for popularity 50-85", () => {
+      it("uses catalog popularity only as a small confidence tie-breaker", () => {
         const candidates = [
           createMockCandidate("Song", "Artist", "id1", "spotify_recommendations", {
             popularity: 70,
@@ -413,10 +413,10 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("popularity:+10"));
+        assert.ok(scored[0].scoringDetails.includes("popularity:+5"));
       });
 
-      it("should give -5 for obscure tracks (popularity < 25)", () => {
+      it("applies only a small penalty to low-confidence catalog entries", () => {
         const candidates = [
           createMockCandidate("Song", "Artist", "id1", "spotify_recommendations", {
             popularity: 15,
@@ -427,10 +427,10 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("popularity:-5(obscure)"));
+        assert.ok(scored[0].scoringDetails.includes("popularity:-2(low-confidence)"));
       });
 
-      it("should give -3 for overplayed tracks (popularity > 95)", () => {
+      it("does not penalize a well-known catalog entry as overplayed", () => {
         const candidates = [
           createMockCandidate("Song", "Artist", "id1", "spotify_recommendations", {
             popularity: 98,
@@ -441,7 +441,7 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        assert.ok(scored[0].scoringDetails.includes("popularity:-3(overplayed)"));
+        assert.ok(!scored[0].scoringDetails.some((detail) => detail.includes("overplayed")));
       });
     });
 

@@ -1,23 +1,32 @@
 const Log = require("../logs/log");
 
-async function getLastFmSimilarTracks({ artist, title, limit = 10 } = {}) {
+const tagCache = new Map();
+const TAG_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+
+function getCacheKey(artist, title) {
+  return `${String(artist || "").trim().toLowerCase()}|${String(title || "").trim().toLowerCase()}`;
+}
+
+async function callLastFm(params) {
   const apiKey = process.env.LASTFM_API_KEY;
-  if (!apiKey || !artist || !title) return [];
+  if (!apiKey) return null;
+
+  const query = new URLSearchParams({ ...params, api_key: apiKey, format: "json", autocorrect: "1" });
+  const response = await fetch(`https://ws.audioscrobbler.com/2.0/?${query}`);
+  if (!response.ok) return null;
+  return response.json();
+}
+
+async function getLastFmSimilarTracks({ artist, title, limit = 10 } = {}) {
+  if (!process.env.LASTFM_API_KEY || !artist || !title) return [];
 
   try {
-    const params = new URLSearchParams({
+    const data = await callLastFm({
       method: "track.getsimilar",
       artist,
       track: title,
-      api_key: apiKey,
-      format: "json",
       limit: String(limit),
-      autocorrect: "1",
     });
-    const response = await fetch(`https://ws.audioscrobbler.com/2.0/?${params}`);
-    if (!response.ok) return [];
-
-    const data = await response.json();
     return (data?.similartracks?.track || [])
       .filter((track) => track?.name && track?.artist?.name)
       .map((track) => ({
@@ -31,4 +40,38 @@ async function getLastFmSimilarTracks({ artist, title, limit = 10 } = {}) {
   }
 }
 
-module.exports = { getLastFmSimilarTracks };
+/**
+ * Gets the community tags attached to one exact recording. Tags are cached
+ * because autoplay asks for the same reference tracks repeatedly while it
+ * prefetches the next entry in a room.
+ */
+async function getLastFmTrackTags({ artist, title, limit = 8 } = {}) {
+  if (!process.env.LASTFM_API_KEY || !artist || !title) return [];
+
+  const cacheKey = getCacheKey(artist, title);
+  const cached = tagCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < TAG_CACHE_TTL_MS) return cached.tags;
+
+  try {
+    const data = await callLastFm({
+      method: "track.gettoptags",
+      artist,
+      track: title,
+      limit: String(limit),
+    });
+    const tags = (data?.toptags?.tag || [])
+      .filter((tag) => tag?.name)
+      .sort((left, right) => Number(right.count || 0) - Number(left.count || 0))
+      .slice(0, limit)
+      .map((tag) => String(tag.name).trim())
+      .filter(Boolean);
+
+    tagCache.set(cacheKey, { timestamp: Date.now(), tags });
+    return tags;
+  } catch (error) {
+    Log.debug("Last.fm tag lookup failed", error.message);
+    return [];
+  }
+}
+
+module.exports = { getLastFmSimilarTracks, getLastFmTrackTags };

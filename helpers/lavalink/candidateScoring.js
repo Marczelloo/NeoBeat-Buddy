@@ -17,6 +17,11 @@ function getTimeOfDayFactor() {
 }
 
 const hasNumber = (value) => Number.isFinite(value);
+function normalizeSimilarity(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return Math.max(0, Math.min(1, numeric > 1 ? numeric / 100 : numeric));
+}
 
 /**
  * Scores candidate tracks using 12-factor algorithm
@@ -42,6 +47,19 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     const referenceFamilies = profile.referenceGenreFamilies || [];
     const referenceGenres = profile.referenceGenres || [];
     candidate.genreFamilies = candidateFamilies;
+
+    // A loose provider search is never allowed to become the escape hatch
+    // that turns an empty recommendation pool into a completely unrelated
+    // song. Direct similarity, metadata, or audio features are required when
+    // the room already has a known genre anchor.
+    const hasReliableSignal =
+      normalizeSimilarity(candidate.similarity) > 0 || candidateFamilies.length > 0 || Boolean(candidate.features);
+    if (referenceFamilies.length > 0 && candidate.isFallback && !hasReliableSignal) {
+      score -= 1000;
+      candidate.hardRejected = true;
+      candidate.rejectionReason = "fallback-without-vibe-signal";
+      scoringDetails.push("fallback:-1000(no-vibe-signal)");
+    }
 
     // The last track is the strongest signal. Do not allow a known genre-family
     // jump such as rap -> metal just because the source has a high quality bonus.
@@ -110,33 +128,32 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       }
     }
 
-    // Factor 3: Source quality is only a small tie-breaker. The source must
-    // never overpower a strong vibe, genre, or transition match.
+    // Factor 3: Similarity source quality. Direct collaborative similarity is
+    // much more useful than provider result order, but is still bounded so it
+    // cannot overpower a hard genre or duplicate rejection.
+    const similarity = normalizeSimilarity(candidate.similarity);
+    if (similarity > 0) {
+      const similarityScore = Math.round(similarity * 30);
+      score += similarityScore;
+      scoringDetails.push(`similarity:+${similarityScore}`);
+    }
+
     if (candidate.source === "deezer_recommendations") {
-      score += 8;
-      scoringDetails.push("source:+8(deezer)");
+      score += 5;
+      scoringDetails.push("source:+5(deezer)");
     } else if (candidate.source === "spotify_recommendations") {
-      score += 6;
-      scoringDetails.push("source:+6(spotify)");
+      score += 3;
+      scoringDetails.push("source:+3(spotify)");
     } else if (candidate.source === "spotify") {
       // Legacy support
-      score += 6;
-      scoringDetails.push("source:+6(spotify)");
-    } else if (candidate.source === "youtube_mix") {
       score += 3;
-      scoringDetails.push("source:+3(yt-mix)");
-    } else if (candidate.source === "youtube_search") {
-      score += 2;
-      scoringDetails.push("source:+2(yt-search)");
-    } else if (candidate.source === "top_artist_search") {
-      score += 1;
-      scoringDetails.push("source:+1(top-artist)");
+      scoringDetails.push("source:+3(spotify)");
+    } else if (candidate.source === "youtube_mix") {
+      score += 5;
+      scoringDetails.push("source:+5(yt-mix)");
     } else if (candidate.source === "lastfm_similar") {
-      score += 4;
-      scoringDetails.push("source:+4(lastfm)");
-    } else if (candidate.source === "soundcloud_search") {
-      score += 2;
-      scoringDetails.push("source:+2(soundcloud)");
+      score += 8;
+      scoringDetails.push("source:+8(lastfm)");
     }
 
     // Factor 4: Genre matching
@@ -244,17 +261,15 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       }
     }
 
-    // Factor 7: Popularity weighting
+    // Factor 7: Catalog popularity is only a confidence tie-breaker. Last.fm
+    // similarity is stored separately and must never be mistaken for it.
     if (candidate.popularity > 0) {
       if (candidate.popularity >= 50 && candidate.popularity <= 85) {
-        score += 10;
-        scoringDetails.push("popularity:+10");
+        score += 5;
+        scoringDetails.push("popularity:+5");
       } else if (candidate.popularity < 25) {
-        score -= 5;
-        scoringDetails.push("popularity:-5(obscure)");
-      } else if (candidate.popularity > 95) {
-        score -= 3;
-        scoringDetails.push("popularity:-3(overplayed)");
+        score -= 2;
+        scoringDetails.push("popularity:-2(low-confidence)");
       }
     }
 
@@ -407,9 +422,10 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
         scoringDetails.push("diversity:-10(top-frequent)");
       }
     } else {
-      // New artist - bonus
-      score += 20;
-      scoringDetails.push("diversity:+20(new-artist)");
+      // New artists are welcome only as a tie-breaker. A large bonus here was
+      // the main reason a merely novel performer could beat a better match.
+      score += 6;
+      scoringDetails.push("diversity:+6(new-artist)");
     }
 
     // Factor 11: Skip learning
@@ -432,7 +448,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     }
 
     // Factor 12: Duplicate prevention (identifier-based)
-    const isDuplicateById = candidate.identifier && profile.recentIdentifiers.includes(candidate.identifier);
+    const isDuplicateById = candidate.identifier && (profile.recentIdentifiers || []).includes(candidate.identifier);
     if (isDuplicateById) {
       score -= 1000;
       candidate.hardRejected = true;
@@ -443,7 +459,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     // Provider identifiers differ for the same recording. Compare a normalized
     // artist/title identity as well, including tracks reserved by an in-flight
     // or already queued autoplay recommendation.
-    const recentTracks = [...(profile.recentTracks || []), ...(profile.recentAutoplayTracks || [])];
+    const recentTracks = profile.cooldownTracks || [...(profile.recentTracks || []), ...(profile.recentAutoplayTracks || [])];
     const isDuplicateByTitle = !isDuplicateById && hasTrackIdentity(recentTracks, candidate, { includeIdentifier: false });
 
     if (isDuplicateByTitle) {
@@ -457,7 +473,12 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     candidate.scoringDetails = scoringDetails;
   });
 
-  candidates.sort((a, b) => b.score - a.score);
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const similarityDifference = normalizeSimilarity(b.similarity) - normalizeSimilarity(a.similarity);
+    if (similarityDifference !== 0) return similarityDifference;
+    return `${a.artist || ""} ${a.title || ""}`.localeCompare(`${b.artist || ""} ${b.title || ""}`);
+  });
 
   // Add variety among top candidates
   const topScore = candidates.length > 0 ? candidates[0].score : 0;
