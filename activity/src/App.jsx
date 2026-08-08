@@ -9,7 +9,6 @@ import {
   Cloud,
   DotsSixVertical,
   Faders,
-  Headphones,
   Heart,
   House,
   ListDashes,
@@ -117,43 +116,6 @@ function PanelTitle({ icon, title, description, action }) {
       </div>
       {action}
     </div>
-  );
-}
-
-function StatusChip({ connection }) {
-  const isLive = connection.status === "live";
-  return (
-    <div className={`status-chip status-${connection.status}`}>
-      <span className="status-dot" aria-hidden="true" />
-      <span>{isLive ? "Live sync" : connection.status === "preview" ? "Local preview" : "Connecting"}</span>
-    </div>
-  );
-}
-
-function TopBar({ state, context, connection }) {
-  return (
-    <header className="topbar">
-      <div className="brand-lockup">
-        <div className="brand-mark"><MusicNotes size={21} weight="fill" aria-hidden="true" /></div>
-        <div>
-          <strong>MewBit</strong>
-          <span>shared listening room</span>
-        </div>
-      </div>
-      <div className="room-context">
-        <div className="room-icon"><Headphones size={18} weight="duotone" aria-hidden="true" /></div>
-        <div>
-          <strong>{state.guild.name}</strong>
-          <span>{state.guild.voiceChannelName || "Waiting for a voice channel"}</span>
-        </div>
-      </div>
-      <div className="topbar-actions">
-        <StatusChip connection={connection} />
-        <div className="user-chip" title={context.user?.username || "Listener"}>
-          <span>{String(context.user?.username || "Listener").slice(0, 1).toUpperCase()}</span>
-        </div>
-      </div>
-    </header>
   );
 }
 
@@ -465,6 +427,22 @@ function GlobalSearch({ query, setQuery, source, setSource, onSearch, onFocus })
   );
 }
 
+function DrawerToggle({ side, open, count, onClick }) {
+  const isLeft = side === "left";
+  return (
+    <button
+      className={`drawer-toggle drawer-toggle-${side} ${open ? "is-open" : ""}`}
+      type="button"
+      onClick={onClick}
+      aria-label={isLeft ? "Toggle playlists" : "Toggle queue"}
+      title={isLeft ? "Playlists" : "Queue"}
+    >
+      {isLeft ? <VinylRecord size={17} aria-hidden="true" /> : <ListDashes size={17} aria-hidden="true" />}
+      {!isLeft ? <b>{count}</b> : null}
+    </button>
+  );
+}
+
 function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onView }) {
   return (
     <div className="sidebar-content">
@@ -539,11 +517,11 @@ function PlayerBar({ state, position, onAction, onView, isExpanded, onToggleExpa
       </button>
       <div className="player-bar-center">
         <div className="bar-controls">
-          <IconButton label="Play previous track" onClick={() => onAction("previous")} disabled={!track}><Rewind size={17} weight="bold" aria-hidden="true" /></IconButton>
+          <IconButton label="Play previous track" onClick={() => onAction("previous")} disabled={!track}><Rewind size={17} weight="regular" aria-hidden="true" /></IconButton>
           <button className="bar-play" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")} disabled={!track}>{isPlaying ? <Pause size={18} weight="fill" aria-hidden="true" /> : <Play size={18} weight="fill" aria-hidden="true" />}</button>
-          <IconButton label="Skip track" onClick={() => onAction("skip")} disabled={!track}><SkipForward size={17} weight="bold" aria-hidden="true" /></IconButton>
-          <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")} disabled={!track}><Shuffle size={16} aria-hidden="true" /></IconButton>
-          <IconButton label="Open lyrics" onClick={() => onView("lyrics")} disabled={!track}><MusicNotes size={16} aria-hidden="true" /></IconButton>
+          <IconButton label="Skip track" onClick={() => onAction("skip")} disabled={!track}><SkipForward size={17} weight="regular" aria-hidden="true" /></IconButton>
+          <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")} disabled={!track}><Shuffle size={16} weight="regular" aria-hidden="true" /></IconButton>
+          <IconButton label="Open lyrics" onClick={() => onView("lyrics")} disabled={!track}><MusicNotes size={16} weight="regular" aria-hidden="true" /></IconButton>
         </div>
         <div className="bar-progress">
           <span>{formatTime(seekValue)}</span>
@@ -784,9 +762,9 @@ function App() {
   return (
     <main className={`activity-app ${isCompact ? "is-compact" : ""}`}>
       {isCompact ? <CompactPlayer state={viewState} position={position} onAction={onAction} connection={connection} /> : <>
-        <TopBar state={state} context={context} connection={connection} />
         <div className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
           <aside className="sidebar sidebar-left" aria-label="Playlists sidebar">
+            <DrawerToggle side="left" open={leftSidebarOpen} onClick={() => setLeftSidebarOpen((value) => !value)} />
             <PlaylistSidebar
               playlists={state.playlists}
               selectedPlaylist={selectedPlaylist}
@@ -797,14 +775,11 @@ function App() {
           <section className="main-stage">
             <div className="stage-toolbar">
               <div className="stage-navigation" aria-label="Activity navigation">
-                <button className={activeTab === "home" ? "is-active" : ""} type="button" onClick={() => goToView("home")}><House size={17} weight={activeTab === "home" ? "fill" : "regular"} aria-hidden="true" /> Home</button>
-                <button className={leftSidebarOpen ? "is-active" : ""} type="button" onClick={() => setLeftSidebarOpen((value) => !value)}><VinylRecord size={17} aria-hidden="true" /> Library</button>
-                <button className={rightSidebarOpen ? "is-active" : ""} type="button" onClick={() => setRightSidebarOpen((value) => !value)}><ListDashes size={17} aria-hidden="true" /> Queue <b>{state.player.queue.length}</b></button>
+                <IconButton label="Home" className={activeTab === "home" ? "is-active" : ""} onClick={() => goToView("home")}><House size={17} weight={activeTab === "home" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
               </div>
               <GlobalSearch {...searchProps} onFocus={() => goToView("search")} />
               <div className="stage-actions" aria-label="Player tools">
-                <button className={activeTab === "filters" ? "is-active" : ""} type="button" onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /> Sound</button>
-                <button className={activeTab === "lyrics" ? "is-active" : ""} type="button" onClick={() => goToView("lyrics")}><MusicNotes size={17} aria-hidden="true" /> Lyrics</button>
+                <IconButton label="Sound settings" className={activeTab === "filters" ? "is-active" : ""} onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /></IconButton>
               </div>
             </div>
             <div className={`main-content main-view-${activeTab}`}>
@@ -816,10 +791,11 @@ function App() {
             </div>
           </section>
           <aside className="sidebar sidebar-right" aria-label="Queue sidebar">
+            <DrawerToggle side="right" open={rightSidebarOpen} count={state.player.queue.length} onClick={() => setRightSidebarOpen((value) => !value)} />
             <QueueSidebar queue={state.player.queue} onAction={onAction} />
           </aside>
         </div>
-        <PlayerBar state={viewState} position={position} onAction={onAction} onView={goToView} isExpanded={playerBarExpanded} onToggleExpanded={() => setPlayerBarExpanded((value) => !value)} />
+        {activeTab === "home" ? null : <PlayerBar state={viewState} position={position} onAction={onAction} onView={goToView} isExpanded={playerBarExpanded} onToggleExpanded={() => setPlayerBarExpanded((value) => !value)} />}
       </>}
       {toast ? <div className={`toast toast-${toast.type}`} role="status"><span>{toast.type === "error" ? <WarningCircle size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}</span>{toast.message}<button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification"><X size={16} aria-hidden="true" /></button></div> : null}
     </main>
