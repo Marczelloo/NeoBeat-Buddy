@@ -1,4 +1,5 @@
 const Log = require("../logs/log");
+const { normalizeGenreTags } = require("./genreUtils");
 const { genreCache } = require("./sessionProfile");
 
 const skipHistory = new Map();
@@ -46,7 +47,10 @@ function recordSkip(guildId, track, reason = "manual") {
   }
 
   const skips = skipHistory.get(guildId);
-  const genres = track.userData?.genres || genreCache.get(track.info?.identifier)?.genres || [];
+  const genres = normalizeGenreTags(track.userData?.genres || genreCache.get(track.info?.identifier)?.genres || [], {
+    artist: track.userData?.autoplayReference?.artist || track.info?.author,
+    title: track.userData?.autoplayReference?.title || track.info?.title,
+  });
 
   skips.push({
     artist: track.info?.author,

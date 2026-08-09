@@ -1,20 +1,35 @@
 const { getGuildState } = require("../guildState");
 const Log = require("../logs/log");
 const { scoreCandidates, getTimeOfDayFactor } = require("./candidateScoring");
+const { areGenreFamiliesCompatible, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { getLastFmSimilarTracks, getLastFmTrackTags } = require("./lastfmClient");
 const { getPoru } = require("./players");
-const { filterRelevantSearchResults, rankSearchResults } = require("./searchRanking");
+const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 const { buildSessionProfile, genreCache } = require("./sessionProfile");
 const { getSkipPatterns } = require("./skipLearning");
 const {
   getSpotifyBasedSuggestions,
   enrichCandidatesWithSpotifyMetadata,
 } = require("./spotifyRecommendations");
+const { cleanTrackMetadata, getBaseTitle, getVariantKinds, isUnrequestedAlternateVersion } = require("./trackNormalization");
 const { filterValidSongs } = require("./trackValidation");
 
 const USE_SPOTIFY_AUTOPLAY = process.env.USE_SPOTIFY_AUTOPLAY === "true";
 const USE_SPOTIFY_METADATA = process.env.USE_SPOTIFY_METADATA === "true";
-const ALTERNATE_VERSION_PATTERN = /\b(?:remix|live|nightcore|slowed|sped\s*up|speed\s*up|cover|karaoke|instrumental)\b/i;
+const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
+const CONTROL_CHARACTER_PATTERN = new RegExp(
+  `[${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]`,
+  "g"
+);
+
+function formatLogValue(value, maxLength = 160) {
+  return String(value || "")
+    .replace(ANSI_ESCAPE_PATTERN, "")
+    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
 
 function getLavalinkNode() {
   return getPoru()?.leastUsedNodes?.[0] || null;
@@ -55,15 +70,25 @@ function mergeCandidates(candidates) {
 
   for (const candidate of candidates) {
     if (!candidate?.title || !candidate?.artist) continue;
+    // Autonomous recommendations must start from canonical recordings. A user
+    // can explicitly request a version through normal search, but DJ mode
+    // should not silently turn a radio track into a remix/live/acoustic cut.
+    if (getVariantKinds(candidate.title).length) continue;
 
     const key = candidateKey(candidate);
     const existing = merged.get(key);
     if (!existing) {
-      merged.set(key, { ...candidate, genres: [...(candidate.genres || [])] });
+      merged.set(key, {
+        ...candidate,
+        genres: normalizeGenreTags(candidate.genres, { artist: candidate.artist, title: candidate.title }),
+      });
       continue;
     }
 
-    existing.genres = [...new Set([...(existing.genres || []), ...(candidate.genres || [])])];
+    existing.genres = normalizeGenreTags([...(existing.genres || []), ...(candidate.genres || [])], {
+      artist: existing.artist,
+      title: existing.title,
+    });
     existing.features ||= candidate.features;
     existing.similarity = Math.max(existing.similarity || 0, candidate.similarity || 0);
     existing.popularity = Math.max(existing.popularity || 0, candidate.popularity || 0);
@@ -99,12 +124,8 @@ async function mapWithConcurrency(items, limit, worker) {
 }
 
 function getRelevantPlayableTrack(tracks, query) {
-  const relevant = filterRelevantSearchResults(filterValidSongs(tracks || []), query);
-  const queryRequestsAlternateVersion = ALTERNATE_VERSION_PATTERN.test(query);
-  const originalOnly = queryRequestsAlternateVersion
-    ? relevant
-    : relevant.filter((track) => !ALTERNATE_VERSION_PATTERN.test(track.info?.title || ""));
-  return rankSearchResults(originalOnly, query)[0] || null;
+  const playable = filterPlayableSearchResults(filterValidSongs(tracks || []), query);
+  return rankSearchResults(playable, query)[0] || null;
 }
 
 /**
@@ -114,27 +135,48 @@ function getRelevantPlayableTrack(tracks, query) {
  * @returns {Object} Cleaned title and artist
  */
 function cleanTrackInfo(title, author) {
-  let cleanTitle = title;
-  let searchArtist = author;
+  return cleanTrackMetadata(title, author);
+}
 
-  // Check if title contains " - " which usually separates artist from title
-  if (title.includes(" - ")) {
-    const parts = title.split(" - ");
-    if (parts.length >= 2) {
-      searchArtist = parts[0].trim();
-      cleanTitle = parts.slice(1).join(" - ").trim();
-    }
+function getAutoplayReference(track) {
+  const canonical = track?.userData?.autoplayReference;
+  return cleanTrackInfo(canonical?.title || track?.info?.title, canonical?.artist || track?.info?.author);
+}
+
+function applyCandidateMetadata(track, candidate) {
+  track.userData = track.userData || {};
+  const canonical = cleanTrackInfo(candidate.title, candidate.artist);
+
+  if (canonical.cleanTitle && canonical.searchArtist) {
+    track.userData.autoplayReference = {
+      title: canonical.cleanTitle,
+      artist: canonical.searchArtist,
+    };
   }
+  const normalizedGenres = normalizeGenreTags(candidate.genres, { artist: candidate.artist, title: candidate.title });
+  if (normalizedGenres.length) track.userData.genres = normalizedGenres;
+  if (candidate.features) track.userData.features = candidate.features;
+  if (candidate.releaseYear) track.userData.releaseYear = candidate.releaseYear;
 
-  // Remove common YouTube suffixes
-  cleanTitle = cleanTitle
-    .replace(/\(official\s*(video|audio|music\s*video|mv|lyric\s*video)?\)/gi, "")
-    .replace(/\[official\s*(video|audio|music\s*video|mv|lyric\s*video)?\]/gi, "")
-    .replace(/\s*-?\s*(official|lyric|lyrics|video|audio|hq|hd|4k|8k|visualizer)\s*$/gi, "")
-    .replace(/\s*\|\s*.*$/gi, "") // Remove " | Something" suffixes
-    .trim();
+  return track;
+}
 
-  return { cleanTitle, searchArtist };
+async function resolveCanonicalReference(cleanTitle, searchArtist, guildId) {
+  try {
+    const query = `${searchArtist} ${cleanTitle}`.trim();
+    const tracks = await loadLavalinkTracks(`dzsearch:${query}`);
+    const track = getRelevantPlayableTrack(tracks, query);
+    if (!track?.info) return null;
+
+    const canonical = cleanTrackInfo(track.info.title, track.info.author);
+    if (!canonical.cleanTitle || !canonical.searchArtist) return null;
+
+    Log.debug("Canonical autoplay reference resolved", "", `guild=${guildId}`, `artist=${canonical.searchArtist}`, `title=${canonical.cleanTitle}`);
+    return canonical;
+  } catch (error) {
+    Log.debug("Canonical autoplay reference lookup failed", error.message, `guild=${guildId}`);
+    return null;
+  }
 }
 
 /**
@@ -271,13 +313,13 @@ async function fetchSpotifyCandidates(referenceTrack, guildId, profile) {
   return candidates;
 }
 
-async function fetchLastFmCandidates(referenceTrack, guildId) {
+async function fetchLastFmCandidates(reference, guildId) {
   const candidates = [];
 
   try {
     const similarTracks = await getLastFmSimilarTracks({
-      artist: referenceTrack.info?.author,
-      title: referenceTrack.info?.title,
+      artist: reference.searchArtist,
+      title: reference.cleanTitle,
       limit: 12,
     });
 
@@ -323,6 +365,50 @@ async function fetchLastFmCandidates(referenceTrack, guildId) {
     Log.debug("Last.fm autoplay candidates failed", error.message);
   }
 
+  return candidates;
+}
+
+function selectTagEnrichmentTargets(candidates, limit = 9) {
+  const buckets = new Map();
+  for (const candidate of candidates) {
+    if (candidate.source === "lastfm_similar" || candidate.genres?.length || !candidate.artist || !candidate.title) continue;
+    const source = candidate.source || "unknown";
+    if (!buckets.has(source)) buckets.set(source, []);
+    buckets.get(source).push(candidate);
+  }
+
+  const targets = [];
+  while (targets.length < limit) {
+    let added = false;
+    for (const bucket of buckets.values()) {
+      const candidate = bucket.shift();
+      if (!candidate) continue;
+      targets.push(candidate);
+      added = true;
+      if (targets.length === limit) break;
+    }
+    if (!added) break;
+  }
+  return targets;
+}
+
+async function enrichCandidatesWithLastFmTags(candidates, guildId, limit = 9) {
+  const targets = selectTagEnrichmentTargets(candidates, limit);
+
+  if (!targets.length) return candidates;
+
+  await mapWithConcurrency(targets, 2, async (candidate) => {
+    const tags = await getLastFmTrackTags({ artist: candidate.artist, title: candidate.title, limit: 8 });
+    if (tags.length) candidate.genres = tags;
+  });
+
+  Log.info(
+    "Last.fm candidate tags enriched",
+    "",
+    `guild=${guildId}`,
+    `requested=${targets.length}`,
+    `tagged=${targets.filter((candidate) => candidate.genres?.length).length}`
+  );
   return candidates;
 }
 
@@ -376,6 +462,9 @@ async function fetchYouTubeMixCandidates(identifier, guildId) {
  * @param {string} guildId - Guild identifier
  * @returns {Promise<Array>} Array of candidate tracks from YouTube search
  */
+// Kept for future explicit user-requested search flows; broad provider search
+// is deliberately excluded from automatic DJ fallback selection.
+// eslint-disable-next-line no-unused-vars
 async function fetchYouTubeSearchCandidates(cleanTitle, searchArtist, guildId) {
   const candidates = [];
   const poru = getPoru();
@@ -413,6 +502,7 @@ async function fetchYouTubeSearchCandidates(cleanTitle, searchArtist, guildId) {
   return candidates;
 }
 
+// eslint-disable-next-line no-unused-vars
 async function fetchSoundCloudCandidates(searchArtist, guildId) {
   const candidates = [];
 
@@ -450,6 +540,7 @@ async function fetchSoundCloudCandidates(searchArtist, guildId) {
  * @param {string} guildId - Guild identifier
  * @returns {Promise<Array>} Array of candidate tracks from top artist search
  */
+// eslint-disable-next-line no-unused-vars
 async function fetchTopArtistCandidates(profile, guildId) {
   const candidates = [];
   const poru = getPoru();
@@ -497,16 +588,16 @@ async function fetchTopArtistCandidates(profile, guildId) {
  * @param {Object} profile - Session profile from buildSessionProfile
  * @returns {Promise<Array>} Array of candidate tracks
  */
-async function collectCandidates(referenceTrack, guildId, profile) {
-  const { title, author, identifier } = referenceTrack.info;
-  const { cleanTitle, searchArtist } = cleanTrackInfo(title, author);
+async function collectCandidates(referenceTrack, guildId, profile, reference) {
+  const { identifier } = referenceTrack.info;
+  const { cleanTitle, searchArtist } = reference;
 
   // Only sources that provide an actual related/radio set may drive autoplay.
   // Broad artist searches were the source of most "fallback picked something
   // completely different" incidents, so they are intentionally not used here.
   const candidateSources = [
     ["deezer", () => fetchDeezerCandidates(guildId, cleanTitle, searchArtist)],
-    ["lastfm", () => fetchLastFmCandidates(referenceTrack, guildId)],
+    ["lastfm", () => fetchLastFmCandidates(reference, guildId)],
     ["youtubeMix", () => fetchYouTubeMixCandidates(identifier, guildId)],
   ];
   if (USE_SPOTIFY_AUTOPLAY) {
@@ -515,7 +606,7 @@ async function collectCandidates(referenceTrack, guildId, profile) {
 
   const sourceResults = await Promise.allSettled(candidateSources.map(([, load]) => load()));
   const allCandidates = sourceResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
-  const deduplicatedCandidates = mergeCandidates(allCandidates);
+  const deduplicatedCandidates = await enrichCandidatesWithLastFmTags(mergeCandidates(allCandidates), guildId);
 
   Log.info(
     "📊 Candidate collection complete",
@@ -536,40 +627,32 @@ async function collectCandidates(referenceTrack, guildId, profile) {
  * @returns {Promise<Object|null>} Poru track object or null
  */
 async function resolveToPlayable(candidate, guildId) {
+  if (getVariantKinds(candidate?.title).length) {
+    Log.debug("Skipping alternate-version autoplay candidate", "", `guild=${guildId}`, `title=${formatLogValue(candidate.title)}`);
+    return null;
+  }
+
   if (candidate.track) {
-    candidate.track.userData = candidate.track.userData || {};
-    if (candidate.genres && candidate.genres.length > 0) {
-      candidate.track.userData.genres = candidate.genres;
+    const query = `${candidate.artist} ${getBaseTitle(candidate.title)}`.trim();
+    if (isUnrequestedAlternateVersion(candidate.track.info?.title, query)) {
+      Log.debug("Skipping alternate-version autoplay resolution", "", `guild=${guildId}`, `resolved=${formatLogValue(candidate.track.info?.title)}`);
+      return null;
     }
-    if (candidate.features) {
-      candidate.track.userData.features = candidate.features;
-    }
-    if (candidate.releaseYear) {
-      candidate.track.userData.releaseYear = candidate.releaseYear;
-    }
-    return candidate.track;
+    return applyCandidateMetadata(candidate.track, candidate);
   }
 
   const poru = getPoru();
-  const searchQuery = `${candidate.artist} ${candidate.title}`;
+  const searchQuery = `${candidate.artist} ${getBaseTitle(candidate.title)}`;
 
   try {
     const searchRes = await poru.resolve({ query: `ytsearch:${searchQuery}` });
     const validTracks = filterValidSongs(searchRes.tracks || []);
 
     if (validTracks.length > 0) {
-      const track = rankSearchResults(validTracks, searchQuery)[0];
+      const track = getRelevantPlayableTrack(validTracks, searchQuery);
+      if (!track) return null;
 
-      track.userData = track.userData || {};
-      if (candidate.genres && candidate.genres.length > 0) {
-        track.userData.genres = candidate.genres;
-      }
-      if (candidate.features) {
-        track.userData.features = candidate.features;
-      }
-      if (candidate.releaseYear) {
-        track.userData.releaseYear = candidate.releaseYear;
-      }
+      applyCandidateMetadata(track, candidate);
 
       if (track.info?.identifier) {
         genreCache.set(track.info.identifier, {
@@ -583,17 +666,190 @@ async function resolveToPlayable(candidate, guildId) {
         "Resolved candidate to playable track",
         "",
         `guild=${guildId}`,
-        `query=${searchQuery}`,
+        `query=${formatLogValue(searchQuery)}`,
         `genres=${candidate.genres?.join(", ") || "unknown"}`
       );
 
       return track;
     }
   } catch (err) {
-    Log.error("Failed to resolve candidate", err, `guild=${guildId}`, `query=${searchQuery}`);
+    Log.error("Failed to resolve candidate", err, `guild=${guildId}`, `query=${formatLogValue(searchQuery)}`);
   }
 
   return null;
+}
+
+function partitionRankedCandidates(rankedCandidates) {
+  const safe = [];
+  const deferred = [];
+
+  for (const candidate of rankedCandidates) {
+    if (candidate.hardRejected || candidate.score < 10) continue;
+    (candidate.deferred ? deferred : safe).push(candidate);
+  }
+
+  return { safe, deferred };
+}
+
+function hasSessionVibeAnchor(profile = {}) {
+  return Boolean(
+    profile.referenceGenreFamilies?.length ||
+      profile.referenceGenres?.length ||
+      profile.referenceFeatures ||
+      profile.topGenres?.length ||
+      profile.avgFeatures
+  );
+}
+
+/**
+ * YouTube Mix is a useful radio signal for obscure or meme uploads which have
+ * no catalog metadata at all. It is deliberately not a general escape hatch:
+ * only direct Mix tracks rejected exclusively for missing metadata can enter
+ * this pool, and only when the room itself has no usable vibe anchor.
+ */
+function getMetadataFreeYouTubeMixFallbackCandidates(rankedCandidates, profile) {
+  if (hasSessionVibeAnchor(profile)) return [];
+
+  return rankedCandidates.filter(
+    (candidate) =>
+      candidate.source === "youtube_mix" &&
+      candidate.track &&
+      !candidate.deferred &&
+      candidate.rejectionReason === "unverified-provider-candidate" &&
+      getVariantKinds(candidate.title).length === 0
+  );
+}
+
+async function resolveMetadataFreeYouTubeMixFallback(candidates, profile, skipPatterns, guildId) {
+  if (!candidates.length || hasSessionVibeAnchor(profile)) return null;
+
+  const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
+  const mixCandidates = getMetadataFreeYouTubeMixFallbackCandidates(rankedCandidates, profile);
+  if (!mixCandidates.length) return null;
+
+  Log.warning(
+    "Autoplay using metadata-free YouTube Mix fallback",
+    "",
+    `guild=${guildId}`,
+    `candidates=${mixCandidates.length}`,
+    "reason=no-session-vibe-metadata"
+  );
+
+  for (const candidate of mixCandidates) {
+    const playableTrack = await resolveToPlayable(candidate, guildId);
+    if (!playableTrack) continue;
+
+    Log.info(
+      "Smart autoplay track selected from metadata-free YouTube Mix",
+      "",
+      `guild=${guildId}`,
+      `track=${playableTrack.info?.title}`,
+      `artist=${playableTrack.info?.author}`,
+      `canonical=${candidate.artist} - ${candidate.title}`,
+      `source=${candidate.source}`
+    );
+    return playableTrack;
+  }
+
+  Log.warning("Metadata-free YouTube Mix fallback exhausted", "", `guild=${guildId}`, `candidates=${mixCandidates.length}`);
+  return null;
+}
+
+async function resolveRankedCandidates(rankedCandidates, guildId, context = "primary", { deferredOnly = false } = {}) {
+  const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
+
+  const pools = deferredOnly ? [["artist-streak emergency", deferred]] : [["safe", safe]];
+  for (const [pool, candidates] of pools) {
+    for (const candidate of candidates) {
+      const playableTrack = await resolveToPlayable(candidate, guildId);
+      if (!playableTrack) continue;
+
+      if (pool !== "safe") {
+        Log.warning(
+          "Autoplay used deferred same-artist candidate",
+          "",
+          `guild=${guildId}`,
+          `track=${candidate.artist} - ${candidate.title}`,
+          `reason=${candidate.deferredReason || "artist-streak"}`
+        );
+      }
+
+      Log.info(
+        "Smart autoplay track selected",
+        "",
+        `guild=${guildId}`,
+        `track=${playableTrack.info?.title}`,
+        `artist=${playableTrack.info?.author}`,
+        `canonical=${candidate.artist} - ${candidate.title}`,
+        `genres=${candidate.genres?.join(", ") || "unknown"}`,
+        `tempo=${candidate.features?.tempo ? Math.round(candidate.features.tempo) : "unknown"}BPM`,
+        `energy=${candidate.features?.energy ? candidate.features.energy.toFixed(2) : "unknown"}`,
+        `score=${candidate.score}`,
+        `source=${candidate.source}`,
+        `context=${context}`
+      );
+
+      return playableTrack;
+    }
+  }
+
+  return null;
+}
+
+function getStableFallbackAnchor(profile, referenceTrack) {
+  const current = getAutoplayReference(referenceTrack);
+  const previousTracks = (profile.recentTracks || []).slice(0, -1).reverse();
+  const sessionFamilies = getGenreFamilies((profile.topGenres || []).map((genre) => genre.genre));
+
+  return previousTracks.find((track) => {
+    const reference = getAutoplayReference(track);
+    const anchorGenres = track?.userData?.genres || [];
+    const hasMetadata = Boolean(anchorGenres.length || track?.userData?.features);
+    const compatibleWithSession =
+      !sessionFamilies.length || areGenreFamiliesCompatible(sessionFamilies, getGenreFamilies(anchorGenres)) !== false;
+    const isSameTrack =
+      reference.cleanTitle.toLowerCase() === current.cleanTitle.toLowerCase() &&
+      reference.searchArtist.toLowerCase() === current.searchArtist.toLowerCase();
+
+    return hasMetadata && compatibleWithSession && !isSameTrack && reference.cleanTitle && reference.searchArtist;
+  }) || null;
+}
+
+async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guildId, context, resolutionOptions) {
+  if (!candidates.length) return null;
+  if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata(candidates, candidates.length);
+
+  const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
+  const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
+
+  for (const candidate of deferred) {
+    Log.info(
+      "Autoplay deferred repeated artist",
+      "",
+      `guild=${guildId}`,
+      `track=${candidate.artist} - ${candidate.title}`,
+      `reason=${candidate.deferredReason || "artist-streak"}`,
+      `context=${context}`
+    );
+  }
+
+  Log.info(
+    "Top candidates scored",
+    "",
+    `guild=${guildId}`,
+    `winner=${rankedCandidates[0]?.artist} - ${rankedCandidates[0]?.title} (${rankedCandidates[0]?.score})`,
+    `safe=${safe.length}`,
+    `deferred=${deferred.length}`,
+    `scoring=${rankedCandidates[0]?.scoringDetails?.join(", ") || "none"}`
+  );
+  Log.debug(
+    "Runner-ups",
+    "",
+    `#2=${rankedCandidates[1]?.artist} - ${rankedCandidates[1]?.title} (${rankedCandidates[1]?.score})`,
+    `#3=${rankedCandidates[2]?.artist} - ${rankedCandidates[2]?.title} (${rankedCandidates[2]?.score})`
+  );
+
+  return resolveRankedCandidates(rankedCandidates, guildId, context, resolutionOptions);
 }
 
 async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
@@ -606,26 +862,36 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
 
   // Last.fm tags are the default genre anchor because the Spotify endpoints
   // needed for audio metadata are unavailable to most development-mode apps.
+  let reference = getAutoplayReference(referenceTrack);
+  let referenceTags = await getLastFmTrackTags({
+    artist: reference.searchArtist,
+    title: reference.cleanTitle,
+    limit: 10,
+  });
+  if (!referenceTags.length) {
+    const canonicalReference = await resolveCanonicalReference(reference.cleanTitle, reference.searchArtist, guildId);
+    if (canonicalReference) {
+      reference = canonicalReference;
+      referenceTags = await getLastFmTrackTags({ artist: reference.searchArtist, title: reference.cleanTitle, limit: 10 });
+    }
+  }
+
   const referenceMetadata = {
-    artist: referenceTrack.info.author,
-    title: referenceTrack.info.title,
+    artist: reference.searchArtist,
+    title: reference.cleanTitle,
     genres: referenceTrack.userData?.genres || [],
     features: referenceTrack.userData?.features || null,
   };
-  const lastFmTags = await getLastFmTrackTags({
-    artist: referenceTrack.info.author,
-    title: referenceTrack.info.title,
-    limit: 10,
-  });
-  if (lastFmTags.length > 0) referenceMetadata.genres = lastFmTags;
+  if (referenceTags.length > 0) referenceMetadata.genres = referenceTags;
   if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata([referenceMetadata], 1);
+  referenceTrack.userData = {
+    ...(referenceTrack.userData || {}),
+    autoplayReference: { title: reference.cleanTitle, artist: reference.searchArtist },
+    genres: referenceMetadata.genres,
+    features: referenceMetadata.features,
+    releaseYear: referenceMetadata.releaseYear,
+  };
   if (referenceMetadata.genres?.length || referenceMetadata.features) {
-    referenceTrack.userData = {
-      ...(referenceTrack.userData || {}),
-      genres: referenceMetadata.genres,
-      features: referenceMetadata.features,
-      releaseYear: referenceMetadata.releaseYear,
-    };
     genreCache.set(referenceTrack.info.identifier, {
       genres: referenceMetadata.genres,
       features: referenceMetadata.features,
@@ -656,70 +922,40 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
 
   const skipPatterns = getSkipPatterns(guildId);
 
-  const candidates = await collectCandidates(referenceTrack, guildId, profile);
-
-  if (candidates.length === 0) {
-    Log.warning("No candidates found for smart autoplay", "", `guild=${guildId}`);
-    return null;
-  }
+  const candidates = await collectCandidates(referenceTrack, guildId, profile, reference);
 
   Log.info("Candidates collected", "", `guild=${guildId}`, `total=${candidates.length}`);
+  const playableTrack = await scoreAndResolveCandidates(candidates, profile, skipPatterns, guildId, "reference");
+  if (playableTrack) return playableTrack;
 
-  if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata(candidates, candidates.length);
+  // Obscure uploads (especially meme music) can be absent from Last.fm and
+  // audio-feature catalogs. In that fully metadata-free case, YouTube's own
+  // Mix is the closest available radio signal. This stays before broad
+  // fallbacks and never bypasses duplicate, variant, or artist-streak guards.
+  const mixFallbackTrack = await resolveMetadataFreeYouTubeMixFallback(candidates, profile, skipPatterns, guildId);
+  if (mixFallbackTrack) return mixFallbackTrack;
 
-  const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
-
-  Log.info(
-    "Top candidates scored",
-    "",
-    `guild=${guildId}`,
-    `winner=${rankedCandidates[0]?.artist} - ${rankedCandidates[0]?.title} (${rankedCandidates[0]?.score})`,
-    `scoring=${rankedCandidates[0]?.scoringDetails?.join(", ") || "none"}`
-  );
-
-  Log.debug(
-    "Runner-ups",
-    "",
-    `#2=${rankedCandidates[1]?.artist} - ${rankedCandidates[1]?.title} (${rankedCandidates[1]?.score})`,
-    `#3=${rankedCandidates[2]?.artist} - ${rankedCandidates[2]?.title} (${rankedCandidates[2]?.score})`
-  );
-
-  for (const candidate of rankedCandidates) {
-
-    if (candidate.hardRejected) {
-      Log.debug(
-        "Skipping hard-rejected autoplay candidate",
-        "",
-        `guild=${guildId}`,
-        `track=${candidate.artist} - ${candidate.title}`,
-        `reason=${candidate.rejectionReason || "incompatible vibe"}`
-      );
-      continue;
-    }
-
-    if (candidate.score < 10) {
-      continue;
-    }
-
-    const playableTrack = await resolveToPlayable(candidate, guildId);
-
-    if (playableTrack) {
-      Log.info(
-        "Smart autoplay track selected",
-        "",
-        `guild=${guildId}`,
-        `track=${playableTrack.info?.title}`,
-        `artist=${playableTrack.info?.author}`,
-        `genres=${candidate.genres?.join(", ") || "unknown"}`,
-        `tempo=${candidate.features?.tempo ? Math.round(candidate.features.tempo) : "unknown"}BPM`,
-        `energy=${candidate.features?.energy ? candidate.features.energy.toFixed(2) : "unknown"}`,
-        `score=${candidate.score}`,
-        `source=${candidate.source}`
-      );
-
-      return playableTrack;
-    }
+  const fallbackAnchor = getStableFallbackAnchor(profile, referenceTrack);
+  if (fallbackAnchor) {
+    const fallbackReference = getAutoplayReference(fallbackAnchor);
+    Log.warning(
+      "Autoplay retrying from stable session anchor",
+      "",
+      `guild=${guildId}`,
+      `failedReference=${reference.searchArtist} - ${reference.cleanTitle}`,
+      `anchor=${fallbackReference.searchArtist} - ${fallbackReference.cleanTitle}`
+    );
+    const fallbackCandidates = await collectCandidates(fallbackAnchor, guildId, profile, fallbackReference);
+    const fallbackTrack = await scoreAndResolveCandidates(fallbackCandidates, profile, skipPatterns, guildId, "stable-anchor-fallback");
+    if (fallbackTrack) return fallbackTrack;
   }
+
+  // A same-artist third track may keep a room alive, but only after every
+  // safe candidate from both the current and stable-anchor pools failed.
+  const emergencyTrack = await scoreAndResolveCandidates(candidates, profile, skipPatterns, guildId, "artist-streak-emergency", {
+    deferredOnly: true,
+  });
+  if (emergencyTrack) return emergencyTrack;
 
   Log.warning("Failed to resolve any candidate to playable track", "", `guild=${guildId}`);
   return null;
@@ -727,4 +963,17 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
 
 module.exports = {
   fetchSmartAutoplayTrack,
+  cleanTrackInfo,
+  getAutoplayReference,
+  applyCandidateMetadata,
+  selectTagEnrichmentTargets,
+  partitionRankedCandidates,
+  hasSessionVibeAnchor,
+  getMetadataFreeYouTubeMixFallbackCandidates,
+  resolveMetadataFreeYouTubeMixFallback,
+  resolveRankedCandidates,
+  getStableFallbackAnchor,
+  enrichCandidatesWithLastFmTags,
+  getRelevantPlayableTrack,
+  resolveToPlayable,
 };

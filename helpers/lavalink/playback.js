@@ -17,7 +17,7 @@ const {
 const { getPlayer, getPoru } = require("./players");
 const { addManualTracksToQueue } = require("./queueOrdering");
 const { parseSearchIdentifier } = require("./searchIdentifier");
-const { filterRelevantSearchResults, rankSearchResults } = require("./searchRanking");
+const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 const { getFallbackSources, getSearchPrefix } = require("./searchSources");
 const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
 const {
@@ -106,7 +106,7 @@ async function lavalinkResolveTracks(query, source = "deezer") {
         });
         const searchData = await searchResponse.json();
 
-        const relevantSearchTracks = filterRelevantSearchResults(searchData?.data, searchQuery);
+        const relevantSearchTracks = filterPlayableSearchResults(searchData?.data, searchQuery);
 
         if (searchData?.loadType === "search" && relevantSearchTracks.length > 0) {
           Log.info(
@@ -137,7 +137,7 @@ async function lavalinkResolveTracks(query, source = "deezer") {
             });
             const fallbackData = await fallbackResponse.json();
 
-            const relevantFallbackTracks = filterRelevantSearchResults(fallbackData?.data, searchQuery);
+            const relevantFallbackTracks = filterPlayableSearchResults(fallbackData?.data, searchQuery);
 
             if (fallbackData?.loadType === "search" && relevantFallbackTracks.length > 0) {
               Log.info(
@@ -201,7 +201,11 @@ async function lavalinkResolveTracks(query, source = "deezer") {
     nowPlaying = tracksToAdd[selectedIndex] ?? nowPlaying;
   } else {
     if (!isUrl && (res.loadType === "search" || !res.loadType)) {
-      const ranked = rankSearchResults(validTracks, q, { withScores: true });
+      const playableMatches = filterPlayableSearchResults(validTracks, q);
+      if (!playableMatches.length) {
+        throw new Error("No base-version match found. Include a version such as remix or acoustic if that is what you want.");
+      }
+      const ranked = rankSearchResults(playableMatches, q, { withScores: true });
       const bestMatch = ranked[0];
 
       if (bestMatch) {

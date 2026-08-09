@@ -14,29 +14,13 @@ const GENERIC_SEARCH_WORDS = new Set([
   "music",
 ]);
 
-const VERSION_WORDS = new Set([
-  "acoustic",
-  "album",
-  "cover",
-  "clean",
-  "dirty",
-  "edit",
-  "explicit",
-  "live",
-  "mix",
-  "nightcore",
-  "original",
-  "radio",
-  "remaster",
-  "remix",
-  "single",
-  "spedup",
-  "slowed",
-  "karaoke",
-  "instrumental",
-  "version",
-  "8d",
-]);
+const {
+  getBaseTitle,
+  getVariantKinds,
+  isUnrequestedAlternateVersion,
+  normalizeComparableText,
+  queryRequestsVariant,
+} = require("./trackNormalization");
 
 const VERSION_PENALTIES = Object.freeze({
   remix: 70,
@@ -67,21 +51,7 @@ const NON_MUSIC_SEARCH_PATTERNS = [
 ];
 
 function normalizeText(value) {
-  return String(value || "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    // NFKD does not decompose every letter used in song titles (notably
-    // Polish ł), so make keyboard-friendly queries match provider metadata.
-    .replace(/[łŁ]/g, "l")
-    .toLowerCase()
-    .replace(/^(?:dzsearch|ytsearch|spsearch|scsearch|ytmsearch):\s*/i, "")
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/&/g, " and ")
-    // Preserve non-Latin artist names so a title-only query is not mistaken
-    // for an exact artist/title match when the artist is written in Cyrillic.
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeComparableText(value);
 }
 
 function getTokens(value, { keepGeneric = false } = {}) {
@@ -146,13 +116,11 @@ function splitExplicitQuery(query) {
 }
 
 function getVersionTokens(title) {
-  return getUniqueTokens(title, { keepGeneric: true }).filter((token) => VERSION_WORDS.has(token));
+  return getVariantKinds(title);
 }
 
 function getCanonicalTitle(title) {
-  return getUniqueTokens(title, { keepGeneric: true })
-    .filter((token) => !VERSION_WORDS.has(token))
-    .join(" ");
+  return getBaseTitle(title);
 }
 
 function getProviderIdentity(track) {
@@ -260,8 +228,7 @@ function scoreSearchResult(track, query, index = 0, { consensusMap } = {}) {
     if (authorCoverage > 0) reasons.push("artist tokens");
   }
 
-  const requestedVersionTokens = getTokens(query, { keepGeneric: true });
-  const unwantedVersions = getVersionTokens(title).filter((token) => !requestedVersionTokens.includes(token));
+  const unwantedVersions = getVersionTokens(title).filter((kind) => !queryRequestsVariant(query, title) || !getVersionTokens(query).includes(kind));
   if (unwantedVersions.length) {
     const penalty = unwantedVersions.reduce((sum, token) => sum + (VERSION_PENALTIES[token] ?? 25), 0);
     score -= penalty;
@@ -321,6 +288,15 @@ function filterRelevantSearchResults(tracks, query) {
   return (Array.isArray(tracks) ? tracks : []).filter((track) => isRelevantSearchResult(track, query));
 }
 
+// Relevance is deliberately separate from playability: callers that are about
+// to start playback must never use an acoustic/live/remix upload as the
+// implicit substitute for a base-version search.
+function filterPlayableSearchResults(tracks, query) {
+  return filterRelevantSearchResults(tracks, query).filter(
+    (track) => !isUnrequestedAlternateVersion(track?.info?.title, query)
+  );
+}
+
 function rankSearchResults(tracks, query, { limit, withScores = false } = {}) {
   const sourceConsensus = new Map();
   for (const track of Array.isArray(tracks) ? tracks : []) {
@@ -347,6 +323,7 @@ module.exports = {
   getCanonicalTitle,
   getConsensusKey,
   filterRelevantSearchResults,
+  filterPlayableSearchResults,
   getPopularity,
   getProviderConsensus,
   getProviderIdentity,

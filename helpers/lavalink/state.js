@@ -44,6 +44,15 @@ const cloneTrack = (track) => {
   };
 };
 
+// Poru 5.3 clears player.currentTrack before emitting trackEnd on the normal
+// queue-advance path, so the event's track argument can be null. The copy kept
+// in playback state at trackStart is the authoritative fallback in that case.
+const resolveEndedTrack = (eventTrack, currentStateTrack) => {
+  if (eventTrack?.track || eventTrack?.info) return eventTrack;
+  if (currentStateTrack?.track || currentStateTrack?.info) return currentStateTrack;
+  return null;
+};
+
 const pushTrackHistory = (guildId, track) => {
   if (!track.track) return;
 
@@ -70,6 +79,7 @@ module.exports = {
   equalizerState,
   ensurePlaybackState,
   cloneTrack,
+  resolveEndedTrack,
   pushTrackHistory,
   rememberAutoplayTrack,
   setLyricsState,

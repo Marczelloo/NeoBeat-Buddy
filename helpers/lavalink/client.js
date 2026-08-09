@@ -15,6 +15,7 @@ const { fetchLyrics } = require("./lyricsClient");
 const {
   ensurePlaybackState,
   cloneTrack,
+  resolveEndedTrack,
   pushTrackHistory,
   playbackState,
   setLyricsState,
@@ -221,17 +222,19 @@ function createPoru(client) {
     }
 
     const state = ensurePlaybackState(player.guildId);
+    const endedTrack = resolveEndedTrack(track, state.currentTrack);
     const reasonCode = typeof reason === "string" ? reason : reason?.reason ?? null;
+    const isLoadFailure = reasonCode === "loadFailed" || reasonCode === "load_failed";
 
-    if (track?.track && reasonCode !== "replaced" && reasonCode !== "load_failed") {
-      pushTrackHistory(player.guildId, track);
+    if (endedTrack?.track && reasonCode !== "replaced" && !isLoadFailure) {
+      pushTrackHistory(player.guildId, endedTrack);
 
       const updatedState = playbackState.get(player.guildId);
       Log.debug(
         "Track added to history (trackEnd)",
         "",
         `guild=${player.guildId}`,
-        `track=${describeTrack(track)}`,
+        `track=${describeTrack(endedTrack)}`,
         `historyLength=${updatedState?.history?.length || 0}`,
         `recentHistory=${(updatedState?.history || [])
           .slice(-3)
@@ -242,7 +245,7 @@ function createPoru(client) {
 
     // Clean reason logging - only log the reason string, not the entire object
     const cleanReason = typeof reason === "string" ? reason : reason?.reason || "unknown";
-    const trackInfo = track?.info || {};
+    const trackInfo = endedTrack?.info || {};
     const trackTitle = trackInfo.title || "Unknown";
 
     // Determine reason emoji and label
@@ -293,10 +296,10 @@ function createPoru(client) {
     }
 
     try {
-      statsStore.finishTrackSession(player.guildId, track, reasonCode);
+      statsStore.finishTrackSession(player.guildId, endedTrack, reasonCode);
 
       // Record track failure in health monitoring
-      if (reasonCode === "load_failed") {
+      if (isLoadFailure) {
         const health = require("../monitoring/health");
         health.recordTrackFailed();
       }

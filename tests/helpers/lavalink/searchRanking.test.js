@@ -3,6 +3,7 @@ const { describe, it } = require("node:test");
 
 const {
   filterRelevantSearchResults,
+  filterPlayableSearchResults,
   getPopularity,
   rankSearchResults,
   scoreSearchResult,
@@ -154,5 +155,23 @@ describe("Search result ranking", () => {
 
     assert.strictEqual(ranked[0].info.title, "Tamagotchi");
     assert.strictEqual(ranked[0].info.author, "TACONAFIDE");
+  });
+
+  it("excludes alternate-only results at the playback boundary", () => {
+    const acoustic = createTrack("Pink Pony Club (Acoustic)", "Chappell Roan");
+    assert.deepStrictEqual(filterPlayableSearchResults([acoustic], "Pink Pony Club"), []);
+    assert.deepStrictEqual(filterPlayableSearchResults([acoustic], "Pink Pony Club acoustic"), [acoustic]);
+  });
+
+  it("prefers an explicitly requested acoustic version over the base recording", () => {
+    const ranked = rankSearchResults(
+      [
+        createTrack("Pink Pony Club", "Chappell Roan"),
+        createTrack("Pink Pony Club (Acoustic)", "Chappell Roan"),
+      ],
+      "Chappell Roan Pink Pony Club acoustic"
+    );
+
+    assert.strictEqual(ranked[0].info.title, "Pink Pony Club (Acoustic)");
   });
 });

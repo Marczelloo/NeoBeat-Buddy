@@ -36,6 +36,7 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
       popularity: options.popularity || 50,
       releaseYear: options.releaseYear || 2023,
       features: options.features || null,
+      similarity: options.similarity || 0,
       score: 0,
       scoringDetails: [],
     };
@@ -106,10 +107,10 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
       it("ranks trusted relationship sources ahead of broad searches", () => {
         const candidates = [
-          createMockCandidate("Song 1", "Artist", "id1", "youtube_search"),
-          createMockCandidate("Song 2", "Artist", "id2", "deezer_recommendations"),
-          createMockCandidate("Song 3", "Artist", "id3", "youtube_mix"),
-          createMockCandidate("Song 4", "Artist", "id4", "spotify_recommendations"),
+          createMockCandidate("Song 1", "Artist", "id1", "youtube_search", { similarity: 0.5 }),
+          createMockCandidate("Song 2", "Artist", "id2", "deezer_recommendations", { similarity: 0.5 }),
+          createMockCandidate("Song 3", "Artist", "id3", "youtube_mix", { similarity: 0.5 }),
+          createMockCandidate("Song 4", "Artist", "id4", "spotify_recommendations", { similarity: 0.5 }),
         ];
         const profile = createMinimalProfile();
         const skipPatterns = { skippedArtists: {}, skippedGenres: {} };
@@ -148,10 +149,10 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
         assert.ok(scored[0].score > 90); // Base + source + genre
       });
 
-      it("should penalize -25 for genre drift when no genres match", () => {
+      it("should penalize -25 for an incompatible genre drift", () => {
         const candidates = [
           createMockCandidate("Song", "Artist", "id1", "deezer_recommendations", {
-            genres: ["electronic", "techno"],
+            genres: ["reggae", "dancehall"],
           }),
         ];
         const profile = createMinimalProfile({
@@ -356,7 +357,7 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
       it("should reject the same recording across providers and autoplay reservations", () => {
         const candidates = [
           createMockCandidate("Hit 'Em Up (Official Audio)", "2Pac", "soundcloud-version", "soundcloud_search"),
-          createMockCandidate("Fresh Track", "New Artist", "fresh-id", "youtube_search"),
+          createMockCandidate("Fresh Track", "New Artist", "fresh-id", "youtube_search", { similarity: 0.5 }),
         ];
         const profile = createMinimalProfile({
           recentIdentifiers: ["old-youtube-id"],

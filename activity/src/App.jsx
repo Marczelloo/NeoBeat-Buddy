@@ -9,6 +9,7 @@ import {
   Faders,
   Heart,
   House,
+  LinkSimple,
   ListDashes,
   MagnifyingGlass,
   MusicNotes,
@@ -34,6 +35,7 @@ import {
 } from "@phosphor-icons/react";
 import { setupDiscord } from "./discord.js";
 import { connectActivitySocket, fetchActivityState, searchActivity, sendActivityAction } from "./api.js";
+import { parseMusicLink } from "./musicLink.js";
 import { createMockState, mockSearchResults } from "./mockState.js";
 
 const BAND_LABELS = ["60", "120", "250", "500", "1k", "2k", "4k", "8k", "16k", "31k", "63k", "125k", "250k", "500k", "1m"];
@@ -78,7 +80,7 @@ function useCompactViewport() {
 }
 
 function sourceLabel(source) {
-  return ({ deezer: "Deezer", youtube: "YouTube", spotify: "Spotify", soundcloud: "SoundCloud", auto: "YouTube first" })[source] || source || "Unknown";
+  return ({ deezer: "Deezer", youtube: "YouTube", spotify: "Spotify", soundcloud: "SoundCloud", auto: "YouTube first", direct: "Direct link" })[source] || source || "Unknown";
 }
 
 function IconButton({ label, children, className = "", ...props }) {
@@ -345,6 +347,9 @@ function QueuePanel({ queue, onAction }) {
 }
 
 function SearchPanel({ query, setQuery, source, setSource, results, status, onSearch, onAction, showSearchBar = true }) {
+  const directLink = parseMusicLink(query);
+  const directSource = directLink?.source === "direct" ? "auto" : directLink?.source;
+
   return (
     <div className="search-panel">
       {showSearchBar ? <div className="search-bar-row">
@@ -354,11 +359,23 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
         </select>
         <button className="primary-button" type="button" onClick={onSearch}><MagnifyingGlass size={17} weight="bold" aria-hidden="true" /> Search</button>
       </div> : null}
-      <div className="search-caption"><span>{status === "searching" ? "Searching the selected source" : status === "error" ? "Search needs attention" : "One source at a time — YouTube first in automatic mode"}</span><span className="source-coverage"><Cloud size={15} aria-hidden="true" /> YouTube → SoundCloud → Deezer → Spotify</span></div>
+      <div className="search-caption"><span>{directLink ? "Direct link detected — the source picker is ignored" : status === "searching" ? "Searching the selected source" : status === "error" ? "Search needs attention" : "One source at a time — YouTube first in automatic mode"}</span><span className="source-coverage"><Cloud size={15} aria-hidden="true" /> YouTube → SoundCloud → Deezer → Spotify</span></div>
       {status === "searching" ? <div className="skeleton-list" aria-label="Loading search results"><span /><span /><span /></div> : null}
       {status === "error" ? <div className="inline-error"><WarningCircle size={18} aria-hidden="true" /> Search is temporarily unavailable. Check the Lavalink connection.</div> : null}
-      {status === "empty" ? <div className="empty-state compact"><MagnifyingGlass size={30} weight="duotone" aria-hidden="true" /><strong>No close matches</strong><span>Try the artist name, a direct URL, or another source.</span></div> : null}
-      {status !== "searching" && results.length > 0 ? <div className="search-results">{results.map((track) => (
+      {directLink ? <section className="direct-link-card" aria-label="Direct music link ready">
+        <div className="direct-link-icon"><LinkSimple size={22} weight="bold" aria-hidden="true" /></div>
+        <div className="direct-link-copy">
+          <strong>Ready to play this link</strong>
+          <span><SourceTag source={directLink.source} /> Original provider resolution — no search substitute.</span>
+          <code title={directLink.url}>{directLink.url}</code>
+        </div>
+        <div className="direct-link-actions">
+          <button className="result-action" type="button" onClick={() => onAction("play", { query: directLink.url, source: directSource, playNow: true })}><Play size={16} weight="fill" aria-hidden="true" /> Play now</button>
+          <button className="secondary-button" type="button" onClick={() => onAction("play", { query: directLink.url, source: directSource })}><Plus size={16} weight="bold" aria-hidden="true" /> Add to queue</button>
+        </div>
+      </section> : null}
+      {!directLink && status === "empty" ? <div className="empty-state compact"><MagnifyingGlass size={30} weight="duotone" aria-hidden="true" /><strong>No close matches</strong><span>Try the artist name, a direct URL, or another source.</span></div> : null}
+      {!directLink && status !== "searching" && results.length > 0 ? <div className="search-results">{results.map((track) => (
         <div className="result-row" key={track.id}>
           <Artwork track={track} size="small" />
           <div className="result-copy"><strong>{track.title}</strong><span>{track.author}</span><div><SourceTag source={track.source} /> <span className="result-duration">{formatTime(track.durationMs)}</span></div></div>
@@ -519,6 +536,54 @@ function HomePanel({ onView, loading = false }) {
   );
 }
 
+function ActivityLoader({ message, leaving }) {
+  return (
+    <section
+      className={`activity-loader ${leaving ? "is-leaving" : ""}`}
+      aria-label="MewBit is connecting to the listening room"
+      aria-live="polite"
+      aria-busy="true"
+    >
+        <div className="loader-ambient loader-ambient-cyan" aria-hidden="true" />
+        <div className="loader-ambient loader-ambient-magenta" aria-hidden="true" />
+        <div className="loader-content">
+          <div className="loader-signal" aria-hidden="true">
+            <div className="loader-signal-echo loader-signal-echo-back" />
+            <div className="loader-signal-echo loader-signal-echo-mid" />
+            <div className="loader-signal-panel">
+              <div className="loader-signal-heading">
+                <Waveform size={15} weight="bold" />
+                <span>ROOM SIGNAL</span>
+              </div>
+              <div className="loader-spectrum">
+                {Array.from({ length: 13 }, (_, index) => <i key={index} style={{ "--bar-index": index }} />)}
+              </div>
+              <div className="loader-scan" />
+              <div className="loader-signal-footer">
+                <span>MEWBIT</span>
+                <div><i /><i /><i /></div>
+              </div>
+            </div>
+            <div className="loader-packets"><i /><i /><i /></div>
+          </div>
+        <div className="loader-copy">
+          <span className="loader-kicker"><i /> MEWBIT LINK</span>
+          <h1>Tuning into the room</h1>
+          <p>{message || "Synchronizing player state"}</p>
+        </div>
+        <div className="loader-progress" role="progressbar" aria-label="Connecting">
+          <span />
+        </div>
+        <div className="loader-steps" aria-hidden="true">
+          <span>Discord</span><i />
+          <span>Gateway</span><i />
+          <span>Player</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function PlayerBar({ state, position, onAction, onView }) {
   const { player } = state;
   const track = player.currentTrack;
@@ -608,7 +673,10 @@ function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [searchStatus, setSearchStatus] = useState("idle");
   const [isHydrating, setIsHydrating] = useState(true);
+  const [showLoader, setShowLoader] = useState(true);
   const syncAt = useRef(Date.now());
+  const hydrationStartedAt = useRef(Date.now());
+  const hydrationTimer = useRef(null);
   const isCompact = useCompactViewport();
 
   const goToView = useCallback((view) => {
@@ -627,6 +695,18 @@ function App() {
     setState(nextState);
   }, []);
 
+  const finishHydration = useCallback(() => {
+    const remaining = Math.max(0, 720 - (Date.now() - hydrationStartedAt.current));
+    window.clearTimeout(hydrationTimer.current);
+    hydrationTimer.current = window.setTimeout(() => setIsHydrating(false), remaining);
+  }, []);
+
+  useEffect(() => {
+    if (isHydrating) return undefined;
+    const timer = window.setTimeout(() => setShowLoader(false), 320);
+    return () => window.clearTimeout(timer);
+  }, [isHydrating]);
+
   useEffect(() => {
     let stopSocket = null;
     let alive = true;
@@ -639,7 +719,7 @@ function App() {
         const connectLocalPreview = nextContext.mode === "local" && Boolean(import.meta.env.VITE_ACTIVITY_CONNECT_LOCAL);
         if (nextContext.mode === "local" && !connectLocalPreview) {
           setConnection({ status: "preview", message: nextContext.reason || "Local Activity preview" });
-          setIsHydrating(false);
+          finishHydration();
           return;
         }
 
@@ -657,12 +737,12 @@ function App() {
             }
           }
         } finally {
-          if (alive) setIsHydrating(false);
+          if (alive) finishHydration();
         }
 
         stopSocket = connectActivitySocket({
           ...nextContext,
-          onState: (nextState) => { if (alive) { applyState(nextState); setConnection({ status: "live", message: "Realtime gateway connected" }); setIsHydrating(false); } },
+          onState: (nextState) => { if (alive) { applyState(nextState); setConnection({ status: "live", message: "Realtime gateway connected" }); finishHydration(); } },
           onReady: () => { if (alive) setConnection({ status: "live", message: "Realtime gateway connected" }); },
           onError: (error) => { if (alive && nextContext.mode === "discord") setConnection({ status: "preview", message: error.message }); },
         });
@@ -671,13 +751,13 @@ function App() {
         if (alive) {
           setConnection({ status: "error", message: error.message });
           showToast(`Discord Activity connection failed: ${error.message}`, "error");
-          setIsHydrating(false);
+          finishHydration();
         }
       });
 
     const timer = window.setInterval(() => setClock(Date.now()), 250);
-    return () => { alive = false; stopSocket?.(); window.clearInterval(timer); };
-  }, [applyState, showToast]);
+    return () => { alive = false; stopSocket?.(); window.clearInterval(timer); window.clearTimeout(hydrationTimer.current); };
+  }, [applyState, finishHydration, showToast]);
 
   const position = useMemo(() => {
     const player = state.player;
@@ -780,6 +860,11 @@ function App() {
   const runSearch = useCallback(async () => {
     const query = searchQuery.trim();
     if (query.length < 2) { setSearchResults([]); setSearchStatus("idle"); return; }
+    if (parseMusicLink(query)) {
+      setSearchResults([]);
+      setSearchStatus("direct");
+      return;
+    }
     setSearchStatus("searching");
     try {
       if (context.mode === "local" && !import.meta.env.VITE_ACTIVITY_CONNECT_LOCAL) {
@@ -820,6 +905,7 @@ function App() {
 
   return (
     <main className={`activity-app ${isCompact ? "is-compact" : ""} ${isHydrating ? "is-hydrating" : ""}`}>
+      {showLoader ? <ActivityLoader message={connection.message} leaving={!isHydrating} /> : null}
       {isCompact ? <CompactPlayer state={viewState} position={position} /> : <>
         <div className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
           <aside className="sidebar sidebar-left" aria-label="Playlists sidebar">

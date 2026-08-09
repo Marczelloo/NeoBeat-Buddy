@@ -358,7 +358,7 @@ If you're listening to rock:
 
 **When enabled**, autoplay starts preparing the next track when one or fewer tracks remain in the queue, then uses the queue-end handler only as a fallback. This keeps the listening session moving with curated recommendations that match your genre preferences, tempo flow, mood, and energy levels.
 
-**Note:** Deezer credentials are required for the best autoplay experience with genre consistency. Without Deezer, the bot falls back to YouTube Mix recommendations (no genre awareness). Spotify credentials are optional but recommended — they provide rich metadata (genres, audio features, popularity) for better scoring, but playback will still work without them.
+**Note:** Deezer credentials are required for the best autoplay experience with genre consistency. For obscure uploads with no Last.fm tags, audio features, or usable session metadata, MewBit can use direct **YouTube Mix** radio candidates as a tightly controlled last fallback. It never uses broad YouTube search for this path and still blocks duplicates, alternate versions, and repeated-artist streaks. Spotify credentials are optional and provide richer metadata (genres, audio features, popularity) when extended API access is available.
 
 ---
 

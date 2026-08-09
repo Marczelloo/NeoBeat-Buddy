@@ -1,7 +1,7 @@
 const { inspect } = require("util");
 const Log = require("../logs/log");
 const { MAX_FALLBACK_ATTEMPTS } = require("./constants");
-const { rankSearchResults } = require("./searchRanking");
+const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 
 const describeTrack = (track) => {
   if (!track) return "unknown";
@@ -68,7 +68,7 @@ async function tryQueueFallbackTrack(player, failedTrack) {
     try {
       const response = await poru.resolve({ query, source });
       const validTracks = (response?.tracks || []).filter((t) => t?.track && t?.info);
-      const fallbackTrack = rankSearchResults(validTracks, query)[0];
+      const fallbackTrack = rankSearchResults(filterPlayableSearchResults(validTracks, query), query)[0];
       if (!fallbackTrack) continue;
 
       const fallbackInfo = copyRequesterMetadata(info, fallbackTrack.info || (fallbackTrack.info = {}));

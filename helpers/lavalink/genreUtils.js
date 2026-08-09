@@ -29,20 +29,65 @@ const COMPATIBLE_FAMILIES = new Set([
   "latin:reggae",
 ]);
 
+const GENRE_ALIASES = [
+  [/\br\s*(?:and|n)\s*b\b|\brnb\b/gi, "rnb"],
+  [/\bhip[\s-]?hop\b/gi, "hiphop"],
+  [/\bsynth[\s-]?pop\b/gi, "synthpop"],
+  [/\belectro[\s-]?pop\b/gi, "electropop"],
+  [/\bdrum\s*(?:and|n)\s*bass\b/gi, "dnb"],
+  [/\bk[\s-]?pop\b/gi, "kpop"],
+  [/\bj[\s-]?pop\b/gi, "jpop"],
+];
+
+const NON_MUSIC_TAG_PATTERN = /^(?:\d{4}s?|\d{2}s|\d{4}\s+music|seen\s+live|favorite(?:s)?|favourites?|my\s+(?:favorites?|favourites?|music|shit)|female\s+vocalists?|male\s+vocalists?|under\s+\d+\s+listeners|awesome|love|loved|beautiful|cool|best|good|bad|spotify|last\s*fm|scrobble(?:d)?|heard\s+on|playlist|indie\s+playlist|english|polish|american|british|german|french|swedish|canadian)$/i;
+
 function normalizeGenre(genre) {
-  return String(genre || "")
+  let normalized = String(genre || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[łŁ]/g, "l")
     .toLowerCase()
     .replace(/[’']/g, "")
     .replace(/&/g, " and ")
+    .replace(/[._/]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+  for (const [pattern, replacement] of GENRE_ALIASES) {
+    normalized = normalized.replace(pattern, replacement);
+  }
+
+  return normalized.replace(/\s+/g, " ").trim();
+}
+
+function isContextTag(genre, context = {}) {
+  const tag = normalizeGenre(genre);
+  if (!tag) return false;
+
+  const contextValues = [context.artist, context.title]
+    .map(normalizeGenre)
+    .filter((value) => value.length >= 4);
+
+  return contextValues.some((value) => tag === value || (tag.length >= 6 && value.includes(tag)) || (value.length >= 6 && tag.includes(value)));
+}
+
+function normalizeGenreTags(genres = [], context = {}) {
+  const unique = new Set();
+
+  for (const genre of Array.isArray(genres) ? genres : []) {
+    const normalized = normalizeGenre(genre);
+    if (!normalized || NON_MUSIC_TAG_PATTERN.test(normalized) || isContextTag(normalized, context)) continue;
+    unique.add(normalized);
+  }
+
+  return [...unique];
 }
 
 function getGenreFamilies(genres = []) {
   const families = new Set();
 
-  for (const genre of genres) {
-    const normalized = normalizeGenre(genre);
+  for (const genre of normalizeGenreTags(genres)) {
+    const normalized = genre;
     for (const [family, pattern] of FAMILY_RULES) {
       if (pattern.test(normalized)) families.add(family);
     }
@@ -65,8 +110,8 @@ function areGenreFamiliesCompatible(left = [], right = []) {
 }
 
 function findGenreOverlap(left = [], right = []) {
-  const normalizedLeft = left.map(normalizeGenre).filter(Boolean);
-  const normalizedRight = right.map(normalizeGenre).filter(Boolean);
+  const normalizedLeft = normalizeGenreTags(left);
+  const normalizedRight = normalizeGenreTags(right);
 
   return normalizedLeft.filter((genre) =>
     normalizedRight.some((other) => genre === other || genre.includes(other) || other.includes(genre))
@@ -75,6 +120,7 @@ function findGenreOverlap(left = [], right = []) {
 
 module.exports = {
   normalizeGenre,
+  normalizeGenreTags,
   getGenreFamilies,
   areGenreFamiliesCompatible,
   findGenreOverlap,

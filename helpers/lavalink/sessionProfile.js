@@ -1,5 +1,5 @@
 const Log = require("../logs/log");
-const { getGenreFamilies } = require("./genreUtils");
+const { getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { playbackState } = require("./state");
 
 const sessionStartTime = new Map();
@@ -14,9 +14,12 @@ function getTrackMetadata(track) {
   const identifier = track?.info?.identifier;
   const direct = track?.userData || {};
   const cached = genreCache.get(identifier) || {};
+  const artist = direct.autoplayReference?.artist || track?.info?.author;
+  const title = direct.autoplayReference?.title || track?.info?.title;
+  const rawGenres = Array.isArray(direct.genres) && direct.genres.length > 0 ? direct.genres : cached.genres || [];
 
   return {
-    genres: Array.isArray(direct.genres) && direct.genres.length > 0 ? direct.genres : cached.genres || [],
+    genres: normalizeGenreTags(rawGenres, { artist, title }),
     features: direct.features || cached.features || null,
     releaseYear: direct.releaseYear || cached.releaseYear || null,
   };
@@ -87,7 +90,7 @@ function buildSessionProfile(guildId, referenceTrack) {
   let profileWeightTotal = 0;
 
   recentTracks.forEach((track, index) => {
-    const artist = track.info?.author || "Unknown";
+    const artist = track.userData?.autoplayReference?.artist || track.info?.author || "Unknown";
     const duration = track.info?.length || 0;
     const id = track.info?.identifier;
 
@@ -203,7 +206,7 @@ function buildSessionProfile(guildId, referenceTrack) {
   // Track last 3 artists to prevent consecutive plays
   const lastThreeArtists = recentTracks
     .slice(-3)
-    .map((t) => t.info?.author)
+    .map((t) => t.userData?.autoplayReference?.artist || t.info?.author)
     .filter(Boolean);
 
   const cooldownIdentifiers = cooldownTracks.map((track) => track.info?.identifier).filter(Boolean);

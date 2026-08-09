@@ -1,10 +1,11 @@
 const Log = require("../logs/log");
+const { normalizeGenreTags } = require("./genreUtils");
 
 const tagCache = new Map();
 const TAG_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
-function getCacheKey(artist, title) {
-  return `${String(artist || "").trim().toLowerCase()}|${String(title || "").trim().toLowerCase()}`;
+function getCacheKey(artist, title, limit) {
+  return `${String(artist || "").trim().toLowerCase()}|${String(title || "").trim().toLowerCase()}|${Number(limit) || 0}`;
 }
 
 async function callLastFm(params) {
@@ -48,7 +49,7 @@ async function getLastFmSimilarTracks({ artist, title, limit = 10 } = {}) {
 async function getLastFmTrackTags({ artist, title, limit = 8 } = {}) {
   if (!process.env.LASTFM_API_KEY || !artist || !title) return [];
 
-  const cacheKey = getCacheKey(artist, title);
+  const cacheKey = getCacheKey(artist, title, limit);
   const cached = tagCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < TAG_CACHE_TTL_MS) return cached.tags;
 
@@ -57,21 +58,29 @@ async function getLastFmTrackTags({ artist, title, limit = 8 } = {}) {
       method: "track.gettoptags",
       artist,
       track: title,
-      limit: String(limit),
+      // Pull a wider raw pool before dropping non-musical community labels;
+      // otherwise a top-eight response full of "seen live" style tags can
+      // erase every usable genre signal.
+      limit: String(Math.max(Number(limit) * 3, 24)),
     });
     const tags = (data?.toptags?.tag || [])
       .filter((tag) => tag?.name)
       .sort((left, right) => Number(right.count || 0) - Number(left.count || 0))
-      .slice(0, limit)
       .map((tag) => String(tag.name).trim())
       .filter(Boolean);
 
-    tagCache.set(cacheKey, { timestamp: Date.now(), tags });
-    return tags;
+    const normalizedTags = normalizeGenreTags(tags, { artist, title }).slice(0, limit);
+
+    tagCache.set(cacheKey, { timestamp: Date.now(), tags: normalizedTags });
+    return normalizedTags;
   } catch (error) {
     Log.debug("Last.fm tag lookup failed", error.message);
     return [];
   }
 }
 
-module.exports = { getLastFmSimilarTracks, getLastFmTrackTags };
+function clearLastFmTagCache() {
+  tagCache.clear();
+}
+
+module.exports = { getLastFmSimilarTracks, getLastFmTrackTags, clearLastFmTagCache };

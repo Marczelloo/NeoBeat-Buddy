@@ -1,7 +1,8 @@
 const Log = require("../logs/log");
-const { areGenreFamiliesCompatible, findGenreOverlap, getGenreFamilies } = require("./genreUtils");
+const { areGenreFamiliesCompatible, findGenreOverlap, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { sessionStartTime } = require("./sessionProfile");
 const { hasTrackIdentity } = require("./trackIdentity");
+const { cleanArtistName, normalizeComparableText } = require("./trackNormalization");
 
 /**
  * Gets time-of-day factor for energy preferences
@@ -23,6 +24,48 @@ function normalizeSimilarity(value) {
   return Math.max(0, Math.min(1, numeric > 1 ? numeric / 100 : numeric));
 }
 
+function normalizeArtist(value) {
+  return normalizeComparableText(cleanArtistName(value)).replace(/\s+/g, "");
+}
+
+function getArtistWeight(artistCounts, artist) {
+  const candidateKey = normalizeArtist(artist);
+  return Object.entries(artistCounts || {}).reduce(
+    (weight, [knownArtist, knownWeight]) => weight + (normalizeArtist(knownArtist) === candidateKey ? Number(knownWeight) || 0 : 0),
+    0
+  );
+}
+
+function getCandidateVibeTrust(candidate, profile, candidateFamilies, referenceFamilies, referenceGenres) {
+  const similarity = normalizeSimilarity(candidate.similarity);
+  let trust = similarity * 100;
+
+  if (areGenreFamiliesCompatible(referenceFamilies, candidateFamilies) === true) trust = Math.max(trust, 45);
+  if (findGenreOverlap(referenceGenres, candidate.genres || []).length > 0) trust = Math.max(trust, 55);
+
+  const referenceFeatures = profile.referenceFeatures;
+  if (candidate.features && referenceFeatures) {
+    const comparable = ["tempo", "energy", "valence"].filter(
+      (field) => hasNumber(candidate.features[field]) && hasNumber(referenceFeatures[field])
+    );
+    if (comparable.length) trust = Math.max(trust, 70);
+  }
+
+  return trust;
+}
+
+function getProfileGenres(topGenres = []) {
+  const weights = new Map();
+
+  for (const entry of topGenres) {
+    const [genre] = normalizeGenreTags([entry?.genre]);
+    if (!genre) continue;
+    weights.set(genre, Math.max(weights.get(genre) || 0, Number(entry?.weight) || 0));
+  }
+
+  return [...weights.entries()].map(([genre, weight]) => ({ genre, weight }));
+}
+
 /**
  * Scores candidate tracks using 12-factor algorithm
  * @param {Array} candidates - Candidate tracks to score
@@ -40,25 +83,29 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
 
   candidates.forEach((candidate) => {
     let score = 50;
+    let genreBonus = 0;
     const scoringDetails = [];
     candidate.hardRejected = false;
+    candidate.deferred = false;
+    candidate.deferredReason = null;
 
-    const candidateFamilies = getGenreFamilies(candidate.genres || []);
+    candidate.genres = normalizeGenreTags(candidate.genres, { artist: candidate.artist, title: candidate.title });
+    const candidateFamilies = getGenreFamilies(candidate.genres);
     const referenceFamilies = profile.referenceGenreFamilies || [];
-    const referenceGenres = profile.referenceGenres || [];
+    const referenceGenres = normalizeGenreTags(profile.referenceGenres || []);
     candidate.genreFamilies = candidateFamilies;
 
     // A loose provider search is never allowed to become the escape hatch
     // that turns an empty recommendation pool into a completely unrelated
-    // song. Direct similarity, metadata, or audio features are required when
-    // the room already has a known genre anchor.
+    // song. Direct similarity, metadata, or audio features are required for
+    // every automatic pick, including sessions whose reference has no tags.
     const hasReliableSignal =
       normalizeSimilarity(candidate.similarity) > 0 || candidateFamilies.length > 0 || Boolean(candidate.features);
-    if (referenceFamilies.length > 0 && candidate.isFallback && !hasReliableSignal) {
+    if (!hasReliableSignal) {
       score -= 1000;
       candidate.hardRejected = true;
-      candidate.rejectionReason = "fallback-without-vibe-signal";
-      scoringDetails.push("fallback:-1000(no-vibe-signal)");
+      candidate.rejectionReason = candidate.isFallback ? "fallback-without-vibe-signal" : "unverified-provider-candidate";
+      scoringDetails.push(`${candidate.isFallback ? "fallback" : "provider"}:-1000(no-vibe-signal)`);
     }
 
     // The last track is the strongest signal. Do not allow a known genre-family
@@ -70,14 +117,14 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       candidate.rejectionReason = "incompatible-genre-family";
       scoringDetails.push("transition:-90(genre-drift)");
     } else if (transitionCompatibility === true) {
-      score += 12;
-      scoringDetails.push("transition:+12(compatible-vibe)");
+      genreBonus += 12;
+      scoringDetails.push("transition:compatible-vibe");
     }
 
     const exactReferenceOverlap = findGenreOverlap(referenceGenres, candidate.genres || []);
     if (exactReferenceOverlap.length > 0) {
-      score += 8;
-      scoringDetails.push("transition:+8(shared-subgenre)");
+      genreBonus += 8;
+      scoringDetails.push("transition:shared-subgenre");
     }
 
     // Softly discourage leaving the dominant session family while still
@@ -100,13 +147,15 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       }, {});
       const repeatedFamilies = candidateFamilies.filter((family) => (recentFamilyCounts[family] || 0) >= 3);
       if (repeatedFamilies.length === candidateFamilies.length) {
-        score -= 10;
-        scoringDetails.push("genreVariety:-10(repeated-family)");
+        const highestRepeat = Math.max(...repeatedFamilies.map((family) => recentFamilyCounts[family] || 0));
+        const penalty = highestRepeat >= 6 ? 22 : 14;
+        score -= penalty;
+        scoringDetails.push(`genreVariety:-${penalty}(repeated-family)`);
       }
     }
 
     // Factor 1: Artist familiarity
-    const artistWeight = profile.artistCounts[candidate.artist] || 0;
+    const artistWeight = getArtistWeight(profile.artistCounts, candidate.artist);
     const artistScore = artistWeight * 5;
     score += artistScore;
     if (artistScore > 0) scoringDetails.push(`artist:+${artistScore}`);
@@ -133,7 +182,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     // cannot overpower a hard genre or duplicate rejection.
     const similarity = normalizeSimilarity(candidate.similarity);
     if (similarity > 0) {
-      const similarityScore = Math.round(similarity * 30);
+      const similarityScore = Math.round(similarity * 40);
       score += similarityScore;
       scoringDetails.push(`similarity:+${similarityScore}`);
     }
@@ -156,36 +205,42 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       scoringDetails.push("source:+8(lastfm)");
     }
 
-    // Factor 4: Genre matching
-    if (candidate.genres && candidate.genres.length > 0 && profile.topGenres.length > 0) {
-      let genreMatchScore = 0;
+    // Factor 4: Genre matching. Community tags are noisy and frequently
+    // repetitive, so their influence is deliberately capped below direct
+    // similarity and audio-feature continuity.
+    const profileGenres = getProfileGenres(profile.topGenres);
+    const profileFamilies = getGenreFamilies(profileGenres.map((entry) => entry.genre));
+    if (candidate.genres.length > 0 && profileGenres.length > 0) {
+      const sharedTags = findGenreOverlap(profileGenres.map((entry) => entry.genre), candidate.genres);
+      const sharesFamily = candidateFamilies.some((family) => profileFamilies.includes(family));
+      const sharesCompatibleFamily = areGenreFamiliesCompatible(profileFamilies, candidateFamilies) === true;
+      const strongestTagWeight = sharedTags.reduce(
+        (weight, genre) => Math.max(weight, profileGenres.find((entry) => entry.genre === genre)?.weight || 0),
+        0
+      );
+      const genreMatchScore =
+        (sharedTags.length ? 10 + Math.round(strongestTagWeight * 8) : 0) +
+        (sharesFamily ? 8 : sharesCompatibleFamily ? 4 : 0);
 
-      candidate.genres.forEach((candidateGenre) => {
-        const genreProfile = profile.topGenres.find((g) => g.genre === candidateGenre);
+      genreBonus += genreMatchScore;
+      if (genreMatchScore > 0) scoringDetails.push("genre:profile-match");
 
-        if (genreProfile) {
-          genreMatchScore += 30 * genreProfile.weight;
-        } else {
-          const partialMatch = profile.topGenres.find((g) => {
-            return candidateGenre.includes(g.genre) || g.genre.includes(candidateGenre);
-          });
-
-          if (partialMatch) {
-            genreMatchScore += 15 * partialMatch.weight;
-          }
-        }
-      });
-
-      score += genreMatchScore;
-      if (genreMatchScore > 0) scoringDetails.push(`genre:+${Math.floor(genreMatchScore)}`);
-
-      if (genreMatchScore === 0 && profile.topGenres.length >= 3) {
+      if (genreMatchScore === 0 && profileFamilies.length >= 2) {
         score -= 25;
         scoringDetails.push("genreDrift:-25");
       }
-    } else if (profile.topGenres.length >= 3) {
+    } else if (profileFamilies.length >= 2) {
       score -= 10;
       scoringDetails.push("noGenre:-10");
+    }
+
+    // Every positive genre-derived signal shares one budget. This keeps a
+    // generic tag such as "pop" from outweighing direct Last.fm similarity or
+    // audio-feature continuity simply because it appears at multiple stages.
+    if (genreBonus > 0) {
+      const cappedGenreBonus = Math.min(28, genreBonus);
+      score += cappedGenreBonus;
+      scoringDetails.push(`genre:+${cappedGenreBonus}(total-capped)`);
     }
 
     // Factor 5: Tempo/BPM consistency
@@ -317,96 +372,66 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       }
     }
 
-    // Factor 10: Smart artist diversity (context-aware)
-    // Calculate "vibe match score" - how well does this track match the sonic profile?
-    let vibeMatchScore = 0;
-    let vibeFactorsChecked = 0;
-
-    // Genre contribution to vibe match
-    if (candidate.genres && candidate.genres.length > 0 && profile.topGenres.length > 0) {
-      const hasGenreMatch = candidate.genres.some((candidateGenre) => {
-        return profile.topGenres.some(
-          (g) => g.genre === candidateGenre || candidateGenre.includes(g.genre) || g.genre.includes(candidateGenre)
-        );
-      });
-      if (hasGenreMatch) vibeMatchScore += 25;
-      vibeFactorsChecked++;
-    }
-
-    // Tempo contribution to vibe match
-    if (candidate.features?.tempo && profile.avgTempo) {
-      const tempoDiff = Math.abs(candidate.features.tempo - profile.avgTempo);
-      if (tempoDiff < 20) {
-        vibeMatchScore += 25;
-      } else if (tempoDiff < 40) {
-        vibeMatchScore += 15;
-      }
-      vibeFactorsChecked++;
-    }
-
-    // Energy contribution to vibe match
-    if (candidate.features?.energy !== undefined && profile.avgFeatures?.energy !== undefined) {
-      const energyDiff = Math.abs(candidate.features.energy - profile.avgFeatures.energy);
-      if (energyDiff < 0.2) {
-        vibeMatchScore += 25;
-      } else if (energyDiff < 0.35) {
-        vibeMatchScore += 15;
-      }
-      vibeFactorsChecked++;
-    }
-
-    // Mood contribution to vibe match
-    if (candidate.features?.valence !== undefined && profile.avgFeatures?.valence !== undefined) {
-      const valenceDiff = Math.abs(candidate.features.valence - profile.avgFeatures.valence);
-      if (valenceDiff < 0.2) {
-        vibeMatchScore += 25;
-      } else if (valenceDiff < 0.35) {
-        vibeMatchScore += 15;
-      }
-      vibeFactorsChecked++;
-    }
-
-    // Normalize vibe score (0-100 scale)
-    const normalizedVibeScore = vibeFactorsChecked > 0 ? vibeMatchScore / vibeFactorsChecked : 0;
+    // Factor 10: Artist diversity is deliberately soft. A trusted, strongly
+    // related follow-up by the same artist is better than an unrelated "new"
+    // artist, while exact recordings remain blocked by duplicate prevention.
+    const vibeTrust = getCandidateVibeTrust(candidate, profile, candidateFamilies, referenceFamilies, referenceGenres);
+    const candidateArtistKey = normalizeArtist(candidate.artist);
 
     // Check artist recency
-    const topArtistPosition = profile.topArtists.findIndex((a) => a.artist === candidate.artist);
+    const topArtistPosition = profile.topArtists.findIndex((a) => normalizeArtist(a.artist) === candidateArtistKey);
     const isInTop3 = topArtistPosition >= 0 && topArtistPosition < 3;
     const isInTop1 = topArtistPosition === 0;
 
     // Check if artist was played in last 3 tracks (prevents consecutive plays)
     const lastThreeArtists = profile.lastThreeArtists || [];
-    const appearsInLastThree = lastThreeArtists.includes(candidate.artist);
+    const recentArtistKeys = lastThreeArtists.map(normalizeArtist).filter(Boolean);
+    const recentAppearances = recentArtistKeys.filter((artist) => artist === candidateArtistKey).length;
+    const appearsInLastThree = recentAppearances > 0;
     const isLastArtist =
-      lastThreeArtists.length > 0 && lastThreeArtists[lastThreeArtists.length - 1] === candidate.artist;
+      recentArtistKeys.length > 0 && recentArtistKeys[recentArtistKeys.length - 1] === candidateArtistKey;
+    const isTrustedContinuation = vibeTrust >= 75;
+    let consecutiveArtistStreak = 0;
+    for (let index = recentArtistKeys.length - 1; index >= 0; index -= 1) {
+      if (recentArtistKeys[index] !== candidateArtistKey) break;
+      consecutiveArtistStreak += 1;
+    }
 
     if (isLastArtist) {
-      // Same artist as last track - heavy penalty even with good vibe match
-      score -= 40;
-      scoringDetails.push("diversity:-40(consecutive)");
+      const penalty = isTrustedContinuation ? (recentAppearances >= 2 ? 22 : 10) : 40;
+      score -= penalty;
+      scoringDetails.push(`diversity:-${penalty}(consecutive${isTrustedContinuation ? "-trusted" : ""})`);
+      // Keep a strong same-artist continuation available as an emergency
+      // fallback, but do not let it beat a viable different artist once two
+      // consecutive tracks by that artist have already played.
+      if (consecutiveArtistStreak >= 2) {
+        candidate.deferred = true;
+        candidate.deferredReason = `artist-streak-${consecutiveArtistStreak + 1}`;
+        scoringDetails.push(`diversity:defer(${candidate.deferredReason})`);
+      }
     } else if (appearsInLastThree) {
-      // Artist appeared in last 3 tracks - apply vibe-based penalty
-      if (normalizedVibeScore >= 80) {
-        score -= 8;
-        scoringDetails.push("diversity:-8(recent-good-vibe)");
-      } else if (normalizedVibeScore >= 60) {
-        score -= 18;
-        scoringDetails.push("diversity:-18(recent-ok-vibe)");
+      // A trusted relationship can safely revisit an artist after one song.
+      if (vibeTrust >= 85) {
+        score -= recentAppearances >= 2 ? 14 : 4;
+        scoringDetails.push(`diversity:-${recentAppearances >= 2 ? 14 : 4}(recent-trusted)`);
+      } else if (vibeTrust >= 60) {
+        score -= 12;
+        scoringDetails.push("diversity:-12(recent-good-vibe)");
       } else {
-        score -= 30;
-        scoringDetails.push("diversity:-30(recent-bad-vibe)");
+        score -= 22;
+        scoringDetails.push("diversity:-22(recent-bad-vibe)");
       }
     } else if (isInTop3) {
       // Artist is in top 3 overall but not in last 3 tracks - apply dynamic penalty based on vibe match
-      if (normalizedVibeScore >= 80) {
+      if (vibeTrust >= 80) {
         // Excellent vibe match - allow same artist with minimal penalty
         score -= 5;
         scoringDetails.push("diversity:-5(vibe-match)");
-      } else if (normalizedVibeScore >= 60) {
+      } else if (vibeTrust >= 60) {
         // Good vibe match - moderate penalty
         score -= 12;
         scoringDetails.push("diversity:-12(similar-vibe)");
-      } else if (normalizedVibeScore >= 40) {
+      } else if (vibeTrust >= 40) {
         // Weak vibe match - higher penalty
         score -= 20;
         scoringDetails.push("diversity:-20(weak-vibe)");
@@ -436,9 +461,14 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       scoringDetails.push(`skipArtist:-${skipPenalty}`);
     }
 
-    if (candidate.genres && candidate.genres.length > 0) {
+    if (candidate.genres.length > 0) {
+      const normalizedSkippedGenres = Object.entries(skipPatterns.skippedGenres || {}).reduce((counts, [genre, count]) => {
+        const [normalized] = normalizeGenreTags([genre]);
+        if (normalized) counts[normalized] = (counts[normalized] || 0) + (Number(count) || 0);
+        return counts;
+      }, {});
       candidate.genres.forEach((genre) => {
-        const genreSkipCount = skipPatterns.skippedGenres[genre] || 0;
+        const genreSkipCount = normalizedSkippedGenres[genre] || 0;
         if (genreSkipCount > 0) {
           const genreSkipPenalty = genreSkipCount * 15;
           score -= genreSkipPenalty;
@@ -508,4 +538,6 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
 module.exports = {
   scoreCandidates,
   getTimeOfDayFactor,
+  normalizeArtist,
+  getCandidateVibeTrust,
 };

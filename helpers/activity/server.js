@@ -29,7 +29,7 @@ const { fetchLyrics } = require("../lavalink/lyricsClient");
 const { getInterpolatedPosition, stopLyricsSession } = require("../lavalink/lyricsFormatter");
 const { getPoru } = require("../lavalink/players");
 const { searchSingleSource } = require("../lavalink/searchAggregator");
-const { filterRelevantSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
+const { filterPlayableSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
 const { getLyricsState, setLyricsState } = require("../lavalink/state");
 const Log = require("../logs/log");
 const playlistStore = require("../playlists/store");
@@ -337,7 +337,7 @@ function toSource(value) {
 }
 
 function serializeActivitySearchResults(tracks, query) {
-  return rankSearchResults(tracks, query, { limit: 48 }).map((track) => {
+  return rankSearchResults(filterPlayableSearchResults(tracks, query), query, { limit: 48 }).map((track) => {
     const serialized = serializeTrack(track);
     return {
       ...serialized,
@@ -482,14 +482,14 @@ async function searchActivityTracks(query, preferredSource) {
     const tracks = await searchSingleSource(poru, limitText(query, 200), source);
     if (!firstNonEmpty.length && tracks.length) firstNonEmpty = tracks;
 
-    const relevant = filterRelevantSearchResults(tracks, query);
+    const relevant = filterPlayableSearchResults(tracks, query);
     if (relevant.length) return serializeActivitySearchResults(relevant, query);
   }
 
   // An explicitly selected provider should still be allowed to show its best
   // available matches. Auto mode reaches this only after every fallback has
   // failed to produce a real match.
-  return serializeActivitySearchResults(firstNonEmpty, query);
+  return serializeActivitySearchResults(filterPlayableSearchResults(firstNonEmpty, query), query);
 }
 
 function sendSocket(socket, payload) {
