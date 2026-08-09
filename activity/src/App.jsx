@@ -54,6 +54,58 @@ function formatTime(milliseconds) {
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+function useBufferedSlider(externalValue, { acknowledgementTolerance = 0, optimisticLockMs = 5000 } = {}) {
+  const [value, setValue] = useState(externalValue);
+  const valueRef = useRef(externalValue);
+  const isAdjustingRef = useRef(false);
+  const pendingValueRef = useRef(null);
+  const pendingUntilRef = useRef(0);
+
+  useEffect(() => {
+    if (isAdjustingRef.current) return;
+
+    const pendingValue = pendingValueRef.current;
+    if (pendingValue !== null) {
+      if (Math.abs(externalValue - pendingValue) <= acknowledgementTolerance) {
+        pendingValueRef.current = null;
+      } else if (Date.now() < pendingUntilRef.current) {
+        valueRef.current = pendingValue;
+        setValue(pendingValue);
+        return;
+      } else {
+        pendingValueRef.current = null;
+      }
+    }
+
+    valueRef.current = externalValue;
+    setValue(externalValue);
+  }, [acknowledgementTolerance, externalValue]);
+
+  const begin = useCallback(() => {
+    isAdjustingRef.current = true;
+  }, []);
+
+  const update = useCallback((nextValue) => {
+    const numericValue = Number(nextValue);
+    if (!Number.isFinite(numericValue)) return valueRef.current;
+    isAdjustingRef.current = true;
+    pendingValueRef.current = null;
+    valueRef.current = numericValue;
+    setValue(numericValue);
+    return numericValue;
+  }, []);
+
+  const commit = useCallback((nextValue) => {
+    const committedValue = nextValue === undefined ? valueRef.current : update(nextValue);
+    isAdjustingRef.current = false;
+    pendingValueRef.current = committedValue;
+    pendingUntilRef.current = Date.now() + optimisticLockMs;
+    return committedValue;
+  }, [optimisticLockMs, update]);
+
+  return { value, begin, update, commit };
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -150,6 +202,13 @@ function PanelTitle({ icon, title, description, action }) {
 
 function PlayerControls({ player, volume, onAction, onTab }) {
   const isPlaying = player.playing && !player.paused;
+  const volumeSlider = useBufferedSlider(volume);
+  const previewVolume = (nextValue) => {
+    const nextVolume = volumeSlider.update(nextValue);
+    onAction("volume-preview", { volume: nextVolume });
+  };
+  const commitVolume = (nextValue) => onAction("volume", { volume: volumeSlider.commit(nextValue) });
+
   return (
     <div className="player-control-deck">
       <div className="player-control-side player-control-left">
@@ -182,24 +241,29 @@ function PlayerControls({ player, volume, onAction, onTab }) {
         <IconButton label="Open lyrics" onClick={() => onTab("lyrics")}>
           <MusicNotes size={19} weight="regular" aria-hidden="true" />
         </IconButton>
-        <IconButton label={volume === 0 ? "Unmute" : "Mute"} onClick={() => onAction("volume", { volume: volume === 0 ? 52 : 0 })}>
-          {volume === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
+        <IconButton label={volumeSlider.value === 0 ? "Unmute" : "Mute"} onClick={() => onAction("volume", { volume: volumeSlider.value === 0 ? 52 : 0 })}>
+          {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
         </IconButton>
         <input
           className="range range-volume"
           type="range"
           min="0"
           max="100"
-          value={volume}
+          value={volumeSlider.value}
           aria-label="Player volume"
-          style={{ "--range-progress": `${volume}%` }}
-          onChange={(event) => onAction("volume-preview", { volume: Number(event.target.value) })}
-          onPointerUp={(event) => onAction("volume", { volume: Number(event.currentTarget.value) })}
+          style={{ "--range-progress": `${volumeSlider.value}%` }}
+          onPointerDown={volumeSlider.begin}
+          onPointerCancel={(event) => commitVolume(event.currentTarget.value)}
+          onChange={(event) => previewVolume(event.target.value)}
+          onPointerUp={(event) => commitVolume(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin();
+          }}
           onKeyUp={(event) => {
-            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") onAction("volume", { volume: Number(event.currentTarget.value) });
+            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value);
           }}
         />
-        <span className="volume-number">{Math.round(volume)}</span>
+        <span className="volume-number">{Math.round(volumeSlider.value)}</span>
       </div>
     </div>
   );
@@ -210,11 +274,8 @@ function NowPlaying({ state, position, onAction, onTab, className = "" }) {
   const track = player.currentTrack;
   const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
   const progress = clamp(position, 0, duration);
-  const [seekValue, setSeekValue] = useState(progress);
-
-  useEffect(() => setSeekValue(progress), [progress]);
-
-  const commitSeek = () => onAction("seek", { positionMs: Number(seekValue) });
+  const seekSlider = useBufferedSlider(progress, { acknowledgementTolerance: 1500, optimisticLockMs: 1800 });
+  const commitSeek = (nextValue) => onAction("seek", { positionMs: seekSlider.commit(nextValue) });
   const volume = clamp(Number(player.volume || 0), 0, 100);
 
   return (
@@ -240,16 +301,21 @@ function NowPlaying({ state, position, onAction, onTab, className = "" }) {
           type="range"
           min="0"
           max={duration}
-          value={seekValue}
+          value={seekSlider.value}
           aria-label="Seek through current track"
-          style={{ "--range-progress": `${(progress / duration) * 100}%` }}
-          onChange={(event) => setSeekValue(Number(event.target.value))}
-          onPointerUp={commitSeek}
+          style={{ "--range-progress": `${(seekSlider.value / duration) * 100}%` }}
+          onPointerDown={seekSlider.begin}
+          onPointerCancel={(event) => commitSeek(event.currentTarget.value)}
+          onChange={(event) => seekSlider.update(event.target.value)}
+          onPointerUp={(event) => commitSeek(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") seekSlider.begin();
+          }}
           onKeyUp={(event) => {
             if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitSeek();
           }}
         />
-        <div className="time-row"><span>{formatTime(seekValue)}</span><span>{formatTime(duration)}</span></div>
+        <div className="time-row"><span>{formatTime(seekSlider.value)}</span><span>{formatTime(duration)}</span></div>
       </div>
       <PlayerControls player={player} volume={volume} onAction={onAction} onTab={onTab} />
     </section>
@@ -390,13 +456,61 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
 function FiltersPanel({ filters, filterPresets, onAction, activeSection = "effects" }) {
   const values = useMemo(() => Array.from({ length: 15 }, (_, index) => filters.equalizer?.find((band) => band.band === index)?.gain ?? 0), [filters.equalizer]);
   const [bands, setBands] = useState(values);
-  useEffect(() => setBands(values), [values]);
+  const bandsRef = useRef(values);
+  const isAdjustingRef = useRef(false);
+  const pendingBandsRef = useRef(null);
+  const pendingBandsUntilRef = useRef(0);
 
-  const commitBands = () => onAction("equalizer", { bands: bands.map((gain, band) => ({ band, gain })) });
+  useEffect(() => {
+    if (isAdjustingRef.current) return;
+
+    const pendingBands = pendingBandsRef.current;
+    if (pendingBands) {
+      const acknowledged = pendingBands.every((gain, index) => Math.abs((values[index] || 0) - gain) < 0.0001);
+      if (acknowledged) {
+        pendingBandsRef.current = null;
+      } else if (Date.now() < pendingBandsUntilRef.current) {
+        bandsRef.current = pendingBands;
+        setBands(pendingBands);
+        return;
+      } else {
+        pendingBandsRef.current = null;
+      }
+    }
+
+    bandsRef.current = values;
+    setBands(values);
+  }, [values]);
+
+  const updateBand = (index, nextGain) => {
+    isAdjustingRef.current = true;
+    pendingBandsRef.current = null;
+    const nextBands = bandsRef.current.map((gain, band) => (band === index ? Number(nextGain) : gain));
+    bandsRef.current = nextBands;
+    setBands(nextBands);
+  };
+
+  const resetBands = () => {
+    const flatBands = Array(15).fill(0);
+    isAdjustingRef.current = false;
+    pendingBandsRef.current = flatBands;
+    pendingBandsUntilRef.current = Date.now() + 5000;
+    bandsRef.current = flatBands;
+    setBands(flatBands);
+    onAction("equalizer", { bands: [] });
+  };
+
+  const commitBands = () => {
+    isAdjustingRef.current = false;
+    const committedBands = [...bandsRef.current];
+    pendingBandsRef.current = committedBands;
+    pendingBandsUntilRef.current = Date.now() + 5000;
+    onAction("equalizer", { bands: committedBands.map((gain, band) => ({ band, gain })) });
+  };
   return (
     <div className="filters-panel">
       {activeSection === "effects" ? <div className="filter-section"><div className="filter-label-row"><div><strong>Fun filters</strong><span>One-click Lavalink effects</span></div><button className="ghost-button" type="button" onClick={() => onAction("filter", { preset: "off" })}>Reset</button></div><div className="filter-grid">{(filterPresets || []).map((preset) => <button type="button" key={preset} className={`filter-tile ${filters.effectPreset === preset ? "is-selected" : ""}`} onClick={() => onAction("filter", { preset })}><Faders size={17} aria-hidden="true" /><span>{preset}</span>{filters.effectPreset === preset ? <Check size={15} weight="bold" aria-hidden="true" /> : null}</button>)}</div></div> : null}
-      {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><button className="ghost-button" type="button" onClick={() => { setBands(Array(15).fill(0)); onAction("equalizer", { bands: [] }); }}>Flat</button></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><span className="eq-band-label">{BAND_LABELS[index]}</span><span className="eq-slider-control"><input type="range" min="-0.25" max="1" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band, ${formatEqGain(gain)} gain`} onChange={(event) => setBands((current) => current.map((value, band) => band === index ? Number(event.target.value) : value))} onPointerUp={commitBands} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /></span><span className="eq-band-value">{formatEqGain(gain)}</span></label>)}</div></div> : null}
+      {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><button className="ghost-button" type="button" onClick={resetBands}>Flat</button></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><span className="eq-band-label">{BAND_LABELS[index]}</span><span className="eq-slider-control"><input type="range" min="-0.25" max="1" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band, ${formatEqGain(gain)} gain`} onPointerDown={() => { isAdjustingRef.current = true; }} onPointerCancel={commitBands} onChange={(event) => updateBand(index, event.target.value)} onPointerUp={commitBands} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") isAdjustingRef.current = true; }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /></span><span className="eq-band-value">{formatEqGain(gain)}</span></label>)}</div></div> : null}
     </div>
   );
 }
@@ -589,13 +703,18 @@ function PlayerBar({ state, position, onAction, onView }) {
   const track = player.currentTrack;
   const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
   const progress = clamp(position, 0, duration);
-  const [seekValue, setSeekValue] = useState(progress);
   const volume = clamp(Number(player.volume || 0), 0, 100);
   const isPlaying = player.playing && !player.paused;
+  const seekSlider = useBufferedSlider(progress, { acknowledgementTolerance: 1500, optimisticLockMs: 1800 });
+  const volumeSlider = useBufferedSlider(volume);
 
-  useEffect(() => setSeekValue(progress), [progress]);
+  const commitSeek = (nextValue) => onAction("seek", { positionMs: seekSlider.commit(nextValue) });
+  const previewVolume = (nextValue) => {
+    const nextVolume = volumeSlider.update(nextValue);
+    onAction("volume-preview", { volume: nextVolume });
+  };
+  const commitVolume = (nextValue) => onAction("volume", { volume: volumeSlider.commit(nextValue) });
 
-  const commitSeek = () => onAction("seek", { positionMs: Number(seekValue) });
   return (
     <footer className="player-bar">
       <div className="player-bar-leading">
@@ -617,16 +736,16 @@ function PlayerBar({ state, position, onAction, onView }) {
           <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")} disabled={!track}><Shuffle size={16} weight="regular" aria-hidden="true" /></IconButton>
         </div>
         <div className="bar-progress">
-          <span>{formatTime(seekValue)}</span>
-          <input className="range range-progress" type="range" min="0" max={duration} value={seekValue} aria-label="Seek through current track" style={{ "--range-progress": `${(progress / duration) * 100}%` }} onChange={(event) => setSeekValue(Number(event.target.value))} onPointerUp={commitSeek} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitSeek(); }} disabled={!track} />
+          <span>{formatTime(seekSlider.value)}</span>
+          <input className="range range-progress" type="range" min="0" max={duration} value={seekSlider.value} aria-label="Seek through current track" style={{ "--range-progress": `${(seekSlider.value / duration) * 100}%` }} onPointerDown={seekSlider.begin} onPointerCancel={(event) => commitSeek(event.currentTarget.value)} onChange={(event) => seekSlider.update(event.target.value)} onPointerUp={(event) => commitSeek(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") seekSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitSeek(); }} disabled={!track} />
           <span>{formatTime(duration)}</span>
         </div>
       </div>
       <div className="player-bar-actions">
         {track ? <SourceTag source={track.source} /> : null}
         <IconButton label="Open lyrics" onClick={() => onView("lyrics")} disabled={!track}><MusicNotes size={16} weight="regular" aria-hidden="true" /></IconButton>
-        <IconButton label={volume === 0 ? "Unmute" : "Mute"} onClick={() => onAction("volume", { volume: volume === 0 ? 52 : 0 })}><SpeakerHigh size={17} weight={volume === 0 ? "regular" : "fill"} aria-hidden="true" /></IconButton>
-        <input className="range range-volume bar-volume" type="range" min="0" max="100" value={volume} aria-label="Player volume" style={{ "--range-progress": `${volume}%` }} onChange={(event) => onAction("volume-preview", { volume: Number(event.target.value) })} onPointerUp={(event) => onAction("volume", { volume: Number(event.currentTarget.value) })} />
+        <IconButton label={volumeSlider.value === 0 ? "Unmute" : "Mute"} onClick={() => onAction("volume", { volume: volumeSlider.value === 0 ? 52 : 0 })}><SpeakerHigh size={17} weight={volumeSlider.value === 0 ? "regular" : "fill"} aria-hidden="true" /></IconButton>
+        <input className="range range-volume bar-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
       </div>
     </footer>
   );
