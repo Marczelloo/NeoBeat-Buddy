@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
+const { getHighResolutionArtworkUrl } = require("./artwork");
 const { BRAND, brandFooter } = require("./brand");
 const { formatDuration } = require("./utils");
 
@@ -146,7 +147,7 @@ module.exports = {
       .setTitle(trackInfo.title)
       .setURL(trackInfo.uri)
       .setDescription(trackInfo.author ? `*${trackInfo.author}*` : null)
-      .setThumbnail(trackInfo.artworkUrl ?? trackInfo.image ?? "https://i.imgur.com/3g7nmJC.png")
+      .setThumbnail(getHighResolutionArtworkUrl(trackInfo.artworkUrl ?? trackInfo.thumbnail ?? trackInfo.image) ?? "https://i.imgur.com/3g7nmJC.png")
       .addFields({ name: "\u200b", value: details })
       .setFooter({ text: brandFooter("Queue system") })
       .setTimestamp();

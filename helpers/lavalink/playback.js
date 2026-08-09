@@ -17,6 +17,7 @@ const {
 const { getPlayer, getPoru } = require("./players");
 const { addManualTracksToQueue } = require("./queueOrdering");
 const { parseSearchIdentifier } = require("./searchIdentifier");
+const { buildSearchQueries } = require("./searchQueryVariants");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 const { getFallbackSources, getSearchPrefix } = require("./searchSources");
 const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
@@ -64,6 +65,27 @@ async function ensurePlayer(guildId, voiceId, textId) {
   return player;
 }
 
+async function loadProviderSearchResults(node, sourcePrefix, query) {
+  const settled = await Promise.allSettled(
+    buildSearchQueries(query).map(async (candidateQuery) => {
+      const searchUrl = `http://${node.options.host}:${
+        node.options.port
+      }/v4/loadtracks?identifier=${encodeURIComponent(`${sourcePrefix}:${candidateQuery}`)}`;
+      const response = await fetch(searchUrl, { headers: { Authorization: node.options.password } });
+      return response.json();
+    })
+  );
+  const responses = settled
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => result.value);
+
+  return {
+    loadType: responses.find((data) => data?.loadType === "search")?.loadType ?? responses[0]?.loadType,
+    playlistInfo: responses.find((data) => data?.playlistInfo)?.playlistInfo,
+    tracks: responses.flatMap((data) => (Array.isArray(data?.data) ? data.data : [])),
+  };
+}
+
 async function lavalinkResolveTracks(query, source = "deezer") {
   const poru = getPoru();
   let q = String(query || "").trim();
@@ -98,15 +120,8 @@ async function lavalinkResolveTracks(query, source = "deezer") {
       Log.info(`🔍 ${sourceName} search`, `query=${searchQuery}`);
       const node = poru.leastUsedNodes[0];
       if (node) {
-        const searchUrl = `http://${node.options.host}:${
-          node.options.port
-        }/v4/loadtracks?identifier=${encodeURIComponent(`${sourcePrefix}:${searchQuery}`)}`;
-        const searchResponse = await fetch(searchUrl, {
-          headers: { Authorization: node.options.password },
-        });
-        const searchData = await searchResponse.json();
-
-        const relevantSearchTracks = filterPlayableSearchResults(searchData?.data, searchQuery);
+        const searchData = await loadProviderSearchResults(node, sourcePrefix, searchQuery);
+        const relevantSearchTracks = filterPlayableSearchResults(searchData.tracks, searchQuery);
 
         if (searchData?.loadType === "search" && relevantSearchTracks.length > 0) {
           Log.info(
@@ -129,15 +144,8 @@ async function lavalinkResolveTracks(query, source = "deezer") {
 
           for (const fallbackSource of getFallbackSources(source).filter((candidate) => candidate !== primarySource)) {
             const fallbackPrefix = getSearchPrefix(fallbackSource);
-            const fallbackUrl = `http://${node.options.host}:${
-              node.options.port
-            }/v4/loadtracks?identifier=${encodeURIComponent(`${fallbackPrefix}:${searchQuery}`)}`;
-            const fallbackResponse = await fetch(fallbackUrl, {
-              headers: { Authorization: node.options.password },
-            });
-            const fallbackData = await fallbackResponse.json();
-
-            const relevantFallbackTracks = filterPlayableSearchResults(fallbackData?.data, searchQuery);
+            const fallbackData = await loadProviderSearchResults(node, fallbackPrefix, searchQuery);
+            const relevantFallbackTracks = filterPlayableSearchResults(fallbackData.tracks, searchQuery);
 
             if (fallbackData?.loadType === "search" && relevantFallbackTracks.length > 0) {
               Log.info(

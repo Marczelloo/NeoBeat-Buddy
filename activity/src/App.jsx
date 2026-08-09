@@ -160,13 +160,14 @@ function resolveArtworkUrl(artworkUrl) {
 }
 
 function Artwork({ track, size = "large" }) {
-  const [broken, setBroken] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const artworkUrl = track?.artworkUrl;
-  const resolvedArtworkUrl = resolveArtworkUrl(artworkUrl);
+  const artworkCandidates = [...new Set([artworkUrl, track?.artworkFallbackUrl].filter(Boolean))];
+  const resolvedArtworkUrl = resolveArtworkUrl(artworkCandidates[attempt]);
 
-  useEffect(() => setBroken(false), [artworkUrl]);
+  useEffect(() => setAttempt(0), [artworkUrl, track?.artworkFallbackUrl]);
 
-  if (!resolvedArtworkUrl || broken) {
+  if (!resolvedArtworkUrl) {
     return (
       <div className={`artwork artwork-${size} artwork-fallback`} aria-label="No artwork available">
         <MusicNotes size={size === "large" ? 56 : 26} weight="duotone" aria-hidden="true" />
@@ -180,7 +181,7 @@ function Artwork({ track, size = "large" }) {
       className={`artwork artwork-${size}`}
       src={resolvedArtworkUrl}
       alt={`${track.title} artwork`}
-      onError={() => setBroken(true)}
+      onError={() => setAttempt((current) => current + 1)}
     />
   );
 }

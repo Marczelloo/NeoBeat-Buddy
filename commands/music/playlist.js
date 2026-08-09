@@ -5,7 +5,7 @@ const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards")
 const { createPoru, getPlayer } = require("../../helpers/lavalink");
 const { addManualTracksToQueue } = require("../../helpers/lavalink/queueOrdering");
 const { searchAcrossSources } = require("../../helpers/lavalink/searchAggregator");
-const { rankSearchResults } = require("../../helpers/lavalink/searchRanking");
+const { filterPlayableSearchResults, rankSearchResults } = require("../../helpers/lavalink/searchRanking");
 const { generateShareCode, importFromCode, shareWithUser } = require("../../helpers/playlists/sharing");
 const {
   createPlaylist,
@@ -288,7 +288,7 @@ module.exports = {
           return interaction.respond([]);
         }
 
-        const rankedTracks = rankSearchResults(resolved, query, { limit: 25 });
+        const rankedTracks = rankSearchResults(filterPlayableSearchResults(resolved, query), query, { limit: 25 });
         const options = rankedTracks.map((track) => ({
           name: `${track.info.title} - ${track.info.author}`.substring(0, 100),
           value: track.info.uri || track.info.title,

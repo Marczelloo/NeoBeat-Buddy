@@ -4,6 +4,7 @@ const SOURCE_LABELS = Object.freeze({
   spotify: "Spotify",
   youtube: "YouTube",
 });
+const { getArtworkUrls } = require("../artwork");
 
 function normalizeSource(source) {
   const value = String(source || "unknown").toLowerCase();
@@ -24,6 +25,7 @@ function serializeTrack(track, index = null) {
 
   const info = track.info || {};
   const source = normalizeSource(info.sourceName || info.source || info.uri);
+  const artwork = getArtworkUrls(info.artworkUrl || info.thumbnail || info.image);
 
   return {
     id: getTrackId(track),
@@ -31,7 +33,8 @@ function serializeTrack(track, index = null) {
     title: String(info.title || "Unknown track"),
     author: String(info.author || "Unknown artist"),
     durationMs: Number(info.length) || 0,
-    artworkUrl: info.artworkUrl || info.thumbnail || null,
+    artworkUrl: artwork.primary,
+    artworkFallbackUrl: artwork.fallback,
     uri: info.uri || null,
     source,
     sourceLabel: SOURCE_LABELS[source] || source,

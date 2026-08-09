@@ -1,3 +1,4 @@
+const { getHighResolutionArtworkUrl } = require("../artwork");
 const { createPoru } = require("../lavalink");
 const { createPlaylist } = require("./store");
 
@@ -68,11 +69,11 @@ async function importPlaylistFromUrl(client, userId, guildId, url, options = {})
     // Extract thumbnail from first track or playlist info
     let thumbnail = null;
     if (resolved.playlistInfo?.artworkUrl) {
-      thumbnail = resolved.playlistInfo.artworkUrl;
+      thumbnail = getHighResolutionArtworkUrl(resolved.playlistInfo.artworkUrl);
     } else if (resolved.tracks[0]?.info?.artworkUrl) {
-      thumbnail = resolved.tracks[0].info.artworkUrl;
+      thumbnail = getHighResolutionArtworkUrl(resolved.tracks[0].info.artworkUrl);
     } else if (resolved.tracks[0]?.info?.image) {
-      thumbnail = resolved.tracks[0].info.image;
+      thumbnail = getHighResolutionArtworkUrl(resolved.tracks[0].info.image);
     }
 
     // Create playlist

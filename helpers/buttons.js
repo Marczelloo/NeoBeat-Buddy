@@ -1,4 +1,5 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags } = require("discord.js");
+const { getHighResolutionArtworkUrl } = require("./artwork");
 const skipVotes = require("./dj/skipVotes");
 const djStore = require("./dj/store");
 const { playerEmbed, errorEmbed } = require("./embeds");
@@ -415,7 +416,7 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
 
   if (player.currentTrack) {
     const info = player.currentTrack.info || {};
-    const artwork = info.artworkUrl ?? info.image ?? "https://i.imgur.com/3g7nmJC.png";
+    const artwork = getHighResolutionArtworkUrl(info.artworkUrl ?? info.thumbnail ?? info.image) ?? "https://i.imgur.com/3g7nmJC.png";
     const elapsedMs = positionOverride ?? player.position ?? 0;
     const durationLabel = info.isStream ? "Live" : formatDuration(info.length ?? 0);
     const positionLabel = info.isStream ? "Live" : formatDuration(elapsedMs);

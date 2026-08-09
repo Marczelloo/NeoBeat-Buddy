@@ -178,7 +178,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 @keyframes signal { from { transform: scaleY(0.6); opacity: 0.58; } to { transform: scaleY(1.1); opacity: 1; } }
 .track-copy { min-width: 0; padding-bottom: 4px; }
 .track-source-line { gap: 9px; color: var(--muted); font: 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.track-copy h1 { max-width: 520px; margin: 13px 0 7px; font-size: clamp(30px, 4.3vw, 54px); line-height: 0.98; letter-spacing: -0.045em; text-wrap: balance; }
+.track-copy h1 { max-width: min(100%, 520px); margin: 13px 0 7px; font-size: clamp(26px, 3.6vw, 48px); line-height: 1; letter-spacing: -0.04em; overflow-wrap: anywhere; hyphens: auto; text-wrap: balance; }
 .track-copy p { margin: 0; color: var(--muted-strong); font-size: 18px; text-wrap: pretty; }
 .track-meta { gap: 12px; margin-top: 20px; color: var(--muted); font: 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .track-meta span + span::before { content: "•"; margin-right: 12px; color: var(--line); }
@@ -498,7 +498,7 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
   .now-playing { padding: 18px; }
   .now-playing-main { grid-template-columns: 1fr; gap: 18px; margin-top: 28px; margin-bottom: 24px; align-items: start; }
   .cover-wrap { width: min(62vw, 300px); }
-  .track-copy h1 { font-size: clamp(30px, 10vw, 46px); }
+  .track-copy h1 { font-size: clamp(28px, 9vw, 44px); }
   .transport-controls { flex-wrap: wrap; }
   .control-divider { display: none; }
   .workspace-body { padding: 17px; }

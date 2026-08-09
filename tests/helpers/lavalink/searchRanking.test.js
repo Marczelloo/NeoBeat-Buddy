@@ -110,6 +110,19 @@ describe("Search result ranking", () => {
     assert.deepStrictEqual(filtered.map((track) => track.info.author), ["Kuki"]);
   });
 
+  it("keeps a close spelling match while rejecting unrelated results", () => {
+    const tracks = [
+      createTrack("Tamagotchi", "TACONAFIDE"),
+      createTrack("Completely Different", "Another Artist"),
+    ];
+
+    const filtered = filterRelevantSearchResults(tracks, "tamagoczi");
+    const ranked = rankSearchResults(filtered, "tamagoczi");
+
+    assert.deepStrictEqual(filtered.map((track) => track.info.title), ["Tamagotchi"]);
+    assert.strictEqual(ranked[0].info.author, "TACONAFIDE");
+  });
+
   it("prefers the original Kuki recording over a remix", () => {
     const tracks = [
       createTrack("Ciepłe Dranie", "Kuki"),

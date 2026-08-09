@@ -84,14 +84,25 @@ describe("Search source selection", () => {
 
     await searchAcrossSources(poru, "8 kobiet", { preferredSource: "deezer" });
 
-    assert.ok(calls.every((call) => call.query === "8 kobiet"));
-    assert.deepStrictEqual(calls.map((call) => call.source).sort(), [
-      "dzsearch",
-      "scsearch",
-      "spsearch",
-      "ytmsearch",
-      "ytsearch",
-    ]);
+    assert.ok(calls.some((call) => call.query === "8 kobiet"));
+    for (const source of ["dzsearch", "scsearch", "spsearch", "ytmsearch", "ytsearch"]) {
+      assert.ok(calls.some((call) => call.source === source));
+    }
+  });
+
+  it("queries likely accented variants so accent-sensitive catalogs remain searchable", async () => {
+    clearSearchCache();
+    const calls = [];
+    const poru = {
+      resolve: async (options) => {
+        calls.push(options);
+        return { tracks: [] };
+      },
+    };
+
+    await searchAcrossSources(poru, "kuki cieple dranie", { preferredSource: "youtube" });
+
+    assert.ok(calls.some((call) => call.query === "kuki ciepłe dranie"));
   });
 
   it("keeps single-provider Activity searches isolated to the chosen provider", async () => {
@@ -107,7 +118,8 @@ describe("Search source selection", () => {
     const tracks = await searchSingleSource(poru, "kuki cieple dranie", "soundcloud");
 
     assert.strictEqual(tracks.length, 1);
-    assert.deepStrictEqual(calls.map((call) => call.source), ["scsearch"]);
+    assert.ok(calls.length >= 1);
+    assert.ok(calls.every((call) => call.source === "scsearch"));
   });
 
   it("parses source-pinned autocomplete values without double-prefixing them", () => {

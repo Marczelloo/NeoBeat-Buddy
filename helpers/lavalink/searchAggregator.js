@@ -1,3 +1,4 @@
+const { buildSearchQueries } = require("./searchQueryVariants");
 const { getSearchPrefix } = require("./searchSources");
 
 const CACHE_TTL_MS = 15_000;
@@ -23,17 +24,43 @@ function normalizeCacheQuery(query) {
     .replace(/\s+/g, " ");
 }
 
+function getTrackSearchKey(track) {
+  const encoded = track?.encoded || track?.track;
+  if (typeof encoded === "string" && encoded) return `encoded:${encoded}`;
+
+  const uri = track?.info?.uri;
+  if (typeof uri === "string" && uri) return `uri:${uri}`;
+
+  return `text:${String(track?.info?.author || "").toLowerCase().trim()}|${String(track?.info?.title || "")
+    .toLowerCase()
+    .trim()}`;
+}
+
+function deduplicateTracks(tracks) {
+  const seen = new Set();
+  return tracks.filter((track) => {
+    const key = getTrackSearchKey(track);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 async function searchSource(poru, query, source) {
   const prefixes = SEARCH_VARIANTS[source] || [getSearchPrefix(source)];
+  const queries = buildSearchQueries(query);
   const settled = await Promise.allSettled(
     // Poru prepends its default platform when a source is not passed. Put
     // the Lavalink search prefix in `source`, otherwise `dzsearch:foo` turns
     // into a real request for `ytsearch:dzsearch:foo`.
-    prefixes.map((prefix) => poru.resolve({ query, source: prefix }))
+    prefixes.flatMap((prefix) => queries.map((searchQuery) => poru.resolve({ query: searchQuery, source: prefix })))
   );
 
-  return settled
-    .flatMap((result) => (result.status === "fulfilled" && Array.isArray(result.value?.tracks) ? result.value.tracks : []))
+  return deduplicateTracks(
+    settled.flatMap((result) =>
+      result.status === "fulfilled" && Array.isArray(result.value?.tracks) ? result.value.tracks : []
+    )
+  )
     .slice(0, MAX_RESULTS_PER_SOURCE);
 }
 

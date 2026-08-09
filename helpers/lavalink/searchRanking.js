@@ -73,6 +73,64 @@ function getCoverage(needleTokens, candidateTokens) {
   return matches / needleTokens.length;
 }
 
+function levenshteinDistance(left, right) {
+  if (left === right) return 0;
+  if (!left) return right.length;
+  if (!right) return left.length;
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1)
+      );
+    }
+    previous = current;
+  }
+
+  return previous[right.length];
+}
+
+function getTokenSimilarity(left, right) {
+  if (left === right) return 1;
+  if (left.length < 4 || right.length < 4) return 0;
+
+  const longest = Math.max(left.length, right.length);
+  const similarity = 1 - levenshteinDistance(left, right) / longest;
+  // Keep fuzzy matching deliberately strict: it is for a small typo, not a
+  // licence to accept an unrelated title in autocomplete.
+  return similarity >= 0.78 ? similarity : 0;
+}
+
+function getFuzzyCoverage(needleTokens, candidateTokens) {
+  if (!needleTokens.length) return 0;
+
+  const remaining = [...candidateTokens];
+  let total = 0;
+
+  for (const needle of needleTokens) {
+    let bestIndex = -1;
+    let bestSimilarity = 0;
+
+    for (let index = 0; index < remaining.length; index += 1) {
+      const similarity = getTokenSimilarity(needle, remaining[index]);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestIndex = index;
+      }
+    }
+
+    if (bestIndex === -1) continue;
+    total += bestSimilarity;
+    remaining.splice(bestIndex, 1);
+  }
+
+  return total / needleTokens.length;
+}
+
 function getPopularity(track) {
   const popularityCandidates = [
     [track?.popularity, false],
@@ -200,6 +258,9 @@ function scoreSearchResult(track, query, index = 0, { consensusMap } = {}) {
     const titleCoverage = getCoverage(queryTokens, titleTokens);
     const authorCoverage = getCoverage(queryTokens, authorTokens);
     const combinedCoverage = getCoverage(queryTokens, [...authorTokens, ...titleTokens]);
+    const fuzzyTitleCoverage = getFuzzyCoverage(queryTokens, titleTokens);
+    const fuzzyAuthorCoverage = getFuzzyCoverage(queryTokens, authorTokens);
+    const fuzzyCombinedCoverage = getFuzzyCoverage(queryTokens, [...authorTokens, ...titleTokens]);
     const authorSet = new Set(authorTokens);
     const titleTokensAfterArtist = queryTokens.filter((token) => !authorSet.has(token));
     const titleAfterArtistCoverage = getCoverage(titleTokensAfterArtist, titleTokens);
@@ -207,6 +268,17 @@ function scoreSearchResult(track, query, index = 0, { consensusMap } = {}) {
     score += titleCoverage * 135;
     score += authorCoverage * 80;
     score += combinedCoverage * 95;
+
+    // Exact token coverage remains the primary signal. Fuzzy coverage only
+    // fills the gap introduced by a small typo, so it cannot outrank a
+    // precise artist/title match.
+    const fuzzyTitleBonus = Math.max(0, fuzzyTitleCoverage - titleCoverage);
+    const fuzzyAuthorBonus = Math.max(0, fuzzyAuthorCoverage - authorCoverage);
+    const fuzzyCombinedBonus = Math.max(0, fuzzyCombinedCoverage - combinedCoverage);
+    score += fuzzyTitleBonus * 82;
+    score += fuzzyAuthorBonus * 48;
+    score += fuzzyCombinedBonus * 58;
+    if (fuzzyTitleBonus > 0 || fuzzyAuthorBonus > 0 || fuzzyCombinedBonus > 0) reasons.push("fuzzy match");
 
     // For a query such as "kuki cieple dranie", prefer the candidate whose
     // metadata splits into artist=Kuki and title=Ciepłe Dranie. This prevents
@@ -276,12 +348,14 @@ function isRelevantSearchResult(track, query) {
 
   const candidateTokens = getUniqueTokens(`${track.info.author || ""} ${track.info.title || ""}`);
   const coverage = getCoverage(queryTokens, candidateTokens);
+  const fuzzyCoverage = getFuzzyCoverage(queryTokens, candidateTokens);
 
-  if (queryTokens.length === 1) return coverage === 1;
+  if (queryTokens.length === 1) return coverage === 1 || fuzzyCoverage >= 0.8;
 
   // A multi-word music query should be represented by all meaningful words.
   // This removes YouTube clips that merely contain one word such as "hit".
-  return coverage >= (queryTokens.length >= 3 ? 1 : 0.75);
+  const requiredCoverage = queryTokens.length >= 3 ? 1 : 0.75;
+  return coverage >= requiredCoverage || fuzzyCoverage >= Math.max(0.8, requiredCoverage);
 }
 
 function filterRelevantSearchResults(tracks, query) {
@@ -324,6 +398,7 @@ module.exports = {
   getConsensusKey,
   filterRelevantSearchResults,
   filterPlayableSearchResults,
+  getFuzzyCoverage,
   getPopularity,
   getProviderConsensus,
   getProviderIdentity,

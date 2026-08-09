@@ -1,5 +1,6 @@
 const { Events } = require("discord.js");
 const announcer = require("../helpers/announcements/announcer");
+const { getHighResolutionArtworkUrl } = require("../helpers/artwork");
 const { buildControlRows } = require("../helpers/buttons");
 const { playerEmbed } = require("../helpers/embeds");
 const { getGuildState, updateGuildState } = require("../helpers/guildState.js");
@@ -52,7 +53,7 @@ module.exports = {
 
           const duration = info.isStream ? "Live" : formatDuration(info.length ?? 0);
           const position = info.isStream ? "Live" : formatDuration(player.position ?? 0);
-          const artwork = info.artworkUrl ?? info.image ?? "https://i.imgur.com/3g7nmJC.png";
+          const artwork = getHighResolutionArtworkUrl(info.artworkUrl ?? info.thumbnail ?? info.image) ?? "https://i.imgur.com/3g7nmJC.png";
           const autoplay = getGuildState(player.guildId)?.autoplay ?? false;
           const source = info.sourceName || null;
           const quality =

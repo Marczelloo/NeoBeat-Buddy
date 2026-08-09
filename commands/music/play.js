@@ -12,6 +12,7 @@ const { getPoru } = require("../../helpers/lavalink/players");
 const { searchAcrossSources } = require("../../helpers/lavalink/searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("../../helpers/lavalink/searchRanking");
 const { resolveSearchSource } = require("../../helpers/lavalink/searchSources");
+const { normalizeComparableText } = require("../../helpers/lavalink/trackNormalization");
 const Log = require("../../helpers/logs/log");
 const statsStore = require("../../helpers/stats/store");
 const userPrefs = require("../../helpers/users/preferences");
@@ -110,8 +111,8 @@ module.exports = {
         const title = (track.info?.title || "Unknown").trim();
 
         // Create a normalized key for deduplication
-        const normalizedAuthor = author.toLowerCase().replace(/\s+/g, "");
-        const normalizedTitle = title.toLowerCase().replace(/\s+/g, "");
+        const normalizedAuthor = normalizeComparableText(author).replace(/\s+/g, "");
+        const normalizedTitle = normalizeComparableText(title).replace(/\s+/g, "");
         const key = `${normalizedAuthor}|||${normalizedTitle}`;
 
         if (!seen.has(key)) {
