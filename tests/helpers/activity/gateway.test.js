@@ -1,7 +1,20 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { WebSocket } = require("ws");
-const { createActivityServer, isAllowedArtworkUrl } = require("../../../helpers/activity/server");
+const { createActivityServer, isAllowedArtworkUrl, serializeActivityActionResult, stringifyJson } = require("../../../helpers/activity/server");
+
+test("Activity responses stay JSON-safe for Lavalink objects", () => {
+  const circular = { encoded: 123n };
+  circular.self = circular;
+
+  assert.deepEqual(JSON.parse(stringifyJson(circular)), { encoded: "123", self: "[Circular]" });
+  assert.deepEqual(serializeActivityActionResult("play", { player: circular, track: null }), {
+    success: true,
+    track: null,
+    isPlaylist: false,
+    playlistTrackCount: 0,
+  });
+});
 
 test("Activity artwork proxy only accepts known HTTPS media hosts", () => {
   assert.equal(isAllowedArtworkUrl("https://i.ytimg.com/vi/example/maxresdefault.jpg"), true);

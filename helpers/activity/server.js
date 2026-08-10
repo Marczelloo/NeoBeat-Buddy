@@ -82,7 +82,14 @@ function getActivityConfig() {
 }
 
 function stringifyJson(payload) {
-  return JSON.stringify(payload, (_key, value) => (typeof value === "bigint" ? value.toString() : value));
+  const seen = new WeakSet();
+  return JSON.stringify(payload, (_key, value) => {
+    if (typeof value === "bigint") return value.toString();
+    if (!value || typeof value !== "object") return value;
+    if (seen.has(value)) return "[Circular]";
+    seen.add(value);
+    return value;
+  });
 }
 
 function sendJson(response, statusCode, payload, config) {
@@ -371,6 +378,19 @@ function serializeActivitySearchResults(tracks, query) {
       playQuery: serialized.uri || `${serialized.title} ${serialized.author}`,
     };
   });
+}
+
+function serializeActivityActionResult(action, result) {
+  if (action === "play") {
+    return {
+      success: true,
+      track: result?.track ? serializeTrack(result.track) : null,
+      isPlaylist: Boolean(result?.isPlaylist),
+      playlistTrackCount: Number(result?.playlistTrackCount) || 0,
+    };
+  }
+  if (action === "refresh_lyrics") return result ? serializeLyrics(result) : null;
+  return result;
 }
 
 async function runActivityAction({ guildId, identity, action, payload = {} }) {
@@ -681,7 +701,7 @@ function createActivityServer(client) {
           if (playlist) result = { ...result, playlist: serializePlaylistDetails(playlist) };
         }
         broadcastGuildState(client, guildId);
-        return sendJson(response, 200, { ok: true, result, state: buildActivityState(client, guildId, identity.id) }, config);
+        return sendJson(response, 200, { ok: true, result: serializeActivityActionResult(body.action, result), state: buildActivityState(client, guildId, identity.id) }, config);
       }
 
       return sendJson(response, 404, { ok: false, error: "Not found" }, config);
@@ -768,4 +788,6 @@ module.exports = {
   isAllowedArtworkUrl,
   runActivityAction,
   searchActivityTracks,
+  serializeActivityActionResult,
+  stringifyJson,
 };
