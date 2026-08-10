@@ -453,6 +453,18 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       scoringDetails.push("diversity:+6(new-artist)");
     }
 
+    // A compatible artist can return after a short break, but should not
+    // dominate the radio by alternating with one other artist. Keep these
+    // candidates available as an emergency pool when the source has no other
+    // playable option.
+    if (!candidate.deferred && recentAppearances >= 2 && recentArtistKeys.length >= 3) {
+      const cooldownPenalty = isTrustedContinuation ? 28 : 40;
+      score -= cooldownPenalty;
+      candidate.deferred = true;
+      candidate.deferredReason = `artist-cooldown-${recentAppearances}`;
+      scoringDetails.push(`diversity:defer(${candidate.deferredReason})`);
+    }
+
     // Factor 11: Skip learning
     const skipCount = skipPatterns.skippedArtists[candidate.artist] || 0;
     if (skipCount > 0) {

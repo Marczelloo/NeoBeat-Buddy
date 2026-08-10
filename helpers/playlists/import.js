@@ -22,6 +22,15 @@ function extractYouTubePlaylistId(url) {
   return match ? match[1] : null;
 }
 
+function detectPlaylistSource(url) {
+  const value = String(url || "").toLowerCase();
+  if (value.includes("spotify.com/playlist")) return "spotify";
+  if (value.includes("youtube.com") || value.includes("youtu.be")) return "youtube";
+  if (value.includes("soundcloud.com") && (value.includes("/sets/") || value.includes("/set/"))) return "soundcloud";
+  if (value.includes("deezer.com") && value.includes("/playlist/")) return "deezer";
+  return null;
+}
+
 /**
  * Import playlist from Spotify or YouTube URL
  * @param {Object} client - Discord client
@@ -35,20 +44,17 @@ async function importPlaylistFromUrl(client, userId, guildId, url, options = {})
   const poru = createPoru(client);
 
   let playlistId = null;
-  let source = null;
+  const source = detectPlaylistSource(url);
 
-  // Detect source
-  if (url.includes("spotify.com/playlist")) {
+  if (source === "spotify") {
     playlistId = extractSpotifyPlaylistId(url);
-    source = "spotify";
-  } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
+  } else if (source === "youtube") {
     playlistId = extractYouTubePlaylistId(url);
-    source = "youtube";
-  } else {
-    return { success: false, error: "Invalid URL. Please provide a Spotify or YouTube playlist URL." };
+  } else if (!source) {
+    return { success: false, error: "Invalid URL. Use a Spotify, YouTube, SoundCloud set, or Deezer playlist URL." };
   }
 
-  if (!playlistId) {
+  if (!playlistId && ["spotify", "youtube"].includes(source)) {
     return { success: false, error: "Could not extract playlist ID from URL." };
   }
 
@@ -79,7 +85,7 @@ async function importPlaylistFromUrl(client, userId, guildId, url, options = {})
     // Create playlist
     const result = createPlaylist(userId, guildId, playlistName, {
       type: options.type || "user",
-      description: options.description || `Imported from ${source === "spotify" ? "Spotify" : "YouTube"}`,
+      description: options.description || `Imported from ${({ spotify: "Spotify", youtube: "YouTube", soundcloud: "SoundCloud", deezer: "Deezer" })[source] || source}`,
       public: options.public || false,
       collaborative: options.collaborative || false,
       thumbnail,
@@ -104,6 +110,8 @@ async function importPlaylistFromUrl(client, userId, guildId, url, options = {})
         identifier: track.info.identifier,
         uri: track.info.uri,
         length: track.info.length,
+        artworkUrl: track.info.artworkUrl || track.info.thumbnail || track.info.image || null,
+        source: track.info.sourceName || track.info.source || source,
         addedBy: userId,
         addedAt: Date.now(),
       }));
@@ -165,5 +173,6 @@ module.exports = {
   importPlaylistFromUrl,
   extractSpotifyPlaylistId,
   extractYouTubePlaylistId,
+  detectPlaylistSource,
   autoUpdateThumbnail,
 };

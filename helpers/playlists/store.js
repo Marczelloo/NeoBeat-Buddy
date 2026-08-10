@@ -235,7 +235,10 @@ function addTrack(userId, guildId, name, track) {
     author: track.info?.author || track.author,
     identifier: track.info?.identifier || track.identifier,
     uri: track.info?.uri || track.uri,
-    length: track.info?.length || track.length,
+    length: track.info?.length ?? track.length ?? track.durationMs,
+    artworkUrl: track.info?.artworkUrl || track.info?.thumbnail || track.artworkUrl || track.thumbnail || null,
+    source: track.info?.sourceName || track.info?.source || track.source || null,
+    artworkFallbackUrl: track.info?.artworkFallbackUrl || track.artworkFallbackUrl || null,
     addedBy: userId,
     addedAt: Date.now(),
   });

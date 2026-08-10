@@ -3,7 +3,10 @@ const { URL } = require("node:url");
 const { WebSocketServer } = require("ws");
 
 const djStore = require("../dj/store");
+const { getUserPresets } = require("../equalizer/customPresets");
+const EQ_PRESET_NAMES = require("../equalizer/presets");
 const guildState = require("../guildState");
+const { EQUALIZER_PRESETS } = require("../lavalink/constants");
 const { getEqualizerState } = require("../lavalink/equalizerStore");
 const { getFilterPreset, FILTER_PRESET_NAMES } = require("../lavalink/filterPresets");
 const {
@@ -32,8 +35,9 @@ const { searchSingleSource } = require("../lavalink/searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
 const { getLyricsState, setLyricsState } = require("../lavalink/state");
 const Log = require("../logs/log");
+const { importPlaylistFromUrl } = require("../playlists/import");
 const playlistStore = require("../playlists/store");
-const { serializeFilters, serializeLyrics, serializePlaylist, serializeTrack, normalizeSource } = require("./state");
+const { serializeFilters, serializeLyrics, serializePlaylist, serializePlaylistDetails, serializeTrack, normalizeSource } = require("./state");
 
 const DEFAULT_PORT = 8787;
 const MAX_BODY_SIZE = 64 * 1024;
@@ -46,6 +50,7 @@ const ARTWORK_HOSTS = Object.freeze([
   "spotifycdn.com",
   "ytimg.com",
   "ggpht.com",
+  "googleusercontent.com",
   "img.youtube.com",
   "discordapp.com",
   "discordapp.net",
@@ -289,6 +294,20 @@ function getSerializedPlaylists(userId, guildId) {
   return playlistStore.listPlaylists(userId, guildId).map(serializePlaylist);
 }
 
+function getSerializedEqualizerPresets(userId) {
+  const builtIn = EQ_PRESET_NAMES.map((name) => ({
+    name,
+    custom: false,
+    bands: EQUALIZER_PRESETS[name] || [],
+  }));
+  const custom = Object.values(getUserPresets(userId) || {}).map((preset) => ({
+    name: preset.name,
+    custom: true,
+    bands: Array.isArray(preset.bands) ? preset.bands : [],
+  }));
+  return [...builtIn, ...custom];
+}
+
 function buildActivityState(client, guildId, userId) {
   const player = getPlayer(guildId);
   const currentTrack = player?.currentTrack ? serializeTrack(player.currentTrack) : null;
@@ -325,6 +344,7 @@ function buildActivityState(client, guildId, userId) {
     },
     playlists: getSerializedPlaylists(userId, guildId),
     filterPresets: FILTER_PRESET_NAMES,
+    equalizerPresets: getSerializedEqualizerPresets(userId),
   };
 }
 
@@ -419,6 +439,15 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       return lavalinkSetFilterPreset(guildId, payload.preset);
     case "equalizer":
       return lavalinkSetEqualizer(guildId, Array.isArray(payload.bands) ? payload.bands : []);
+    case "equalizer_preset": {
+      const presetName = limitText(payload.preset, 80).toLowerCase();
+      const customPresets = getUserPresets(identity.id) || {};
+      const customKey = Object.keys(customPresets).find((key) => key.toLowerCase() === presetName);
+      const customPreset = customKey ? customPresets[customKey] : null;
+      if (customPreset) return lavalinkSetEqualizer(guildId, customPreset.bands);
+      if (!EQ_PRESET_NAMES.includes(presetName)) throw Object.assign(new Error("Unknown equalizer preset."), { statusCode: 400 });
+      return lavalinkSetEqualizer(guildId, presetName);
+    }
     case "autoplay":
       return guildState.updateGuildState(guildId, { autoplay: Boolean(payload.enabled) });
     case "refresh_lyrics": {
@@ -428,6 +457,11 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       setLyricsState(guildId, lyrics);
       return lyrics;
     }
+    case "get_playlist": {
+      const playlist = playlistStore.getPlaylist(identity.id, guildId, limitText(payload.name, 80));
+      if (!playlist) throw Object.assign(new Error("Playlist not found."), { statusCode: 404 });
+      return { playlist: serializePlaylistDetails(playlist) };
+    }
     case "create_playlist":
       return playlistStore.createPlaylist(identity.id, guildId, limitText(payload.name, 80), {
         description: limitText(payload.description, 180),
@@ -436,8 +470,64 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
         type: payload.type === "server" ? "server" : "user",
       });
     case "add_to_playlist": {
-      if (!player?.currentTrack) throw Object.assign(new Error("There is no current track to save."), { statusCode: 400 });
-      return playlistStore.addTrack(identity.id, guildId, limitText(payload.name, 80), player.currentTrack);
+      const track = payload.track || player?.currentTrack;
+      if (!track) throw Object.assign(new Error("Choose a track to save."), { statusCode: 400 });
+      return playlistStore.addTrack(identity.id, guildId, limitText(payload.name, 80), track);
+    }
+    case "toggle_like": {
+      const track = payload.track || player?.currentTrack;
+      if (!track) throw Object.assign(new Error("Choose a track to like."), { statusCode: 400 });
+      const liked = playlistStore.getLikedSongs(identity.id);
+      const existing = playlistStore.isTrackInPlaylist(identity.id, guildId, liked.name, track);
+      if (existing.exists) {
+        return { ...playlistStore.removeTrack(identity.id, guildId, liked.name, existing.position), liked: false };
+      }
+      return { ...playlistStore.addTrack(identity.id, guildId, liked.name, track), liked: true };
+    }
+    case "delete_playlist":
+      return playlistStore.deletePlaylist(identity.id, guildId, limitText(payload.name, 80));
+    case "rename_playlist":
+      return playlistStore.renamePlaylist(identity.id, guildId, limitText(payload.name, 80), limitText(payload.newName, 80));
+    case "edit_playlist":
+      return playlistStore.editPlaylist(identity.id, guildId, limitText(payload.name, 80), {
+        description: payload.description === undefined ? undefined : limitText(payload.description, 240),
+        thumbnail: payload.thumbnail === undefined ? undefined : limitText(payload.thumbnail, 500),
+        public: payload.public === undefined ? undefined : Boolean(payload.public),
+        collaborative: payload.collaborative === undefined ? undefined : Boolean(payload.collaborative),
+      });
+    case "update_playlist": {
+      const oldName = limitText(payload.name, 80);
+      const newName = limitText(payload.newName, 80);
+      if (newName && newName.toLowerCase() !== oldName.toLowerCase()) {
+        const renamed = playlistStore.renamePlaylist(identity.id, guildId, oldName, newName);
+        if (!renamed.success) return renamed;
+      }
+      const result = playlistStore.editPlaylist(identity.id, guildId, newName || oldName, {
+        description: payload.description === undefined ? undefined : limitText(payload.description, 240),
+        thumbnail: payload.thumbnail === undefined ? undefined : limitText(payload.thumbnail, 500),
+        public: payload.public === undefined ? undefined : Boolean(payload.public),
+        collaborative: payload.collaborative === undefined ? undefined : Boolean(payload.collaborative),
+      });
+      if (result.success) {
+        const playlist = playlistStore.getPlaylist(identity.id, guildId, newName || oldName);
+        return { ...result, playlist: playlist ? serializePlaylistDetails(playlist) : null };
+      }
+      return result;
+    }
+    case "remove_playlist_track":
+      return playlistStore.removeTrack(identity.id, guildId, limitText(payload.name, 80), Number(payload.position) + 1);
+    case "move_playlist_track":
+      return playlistStore.moveTrack(identity.id, guildId, limitText(payload.name, 80), Number(payload.from) + 1, Number(payload.to) + 1);
+    case "import_playlist": {
+      const url = limitText(payload.url, 1000);
+      if (!url) throw Object.assign(new Error("Paste a playlist URL first."), { statusCode: 400 });
+      return importPlaylistFromUrl(null, identity.id, guildId, url, {
+        name: limitText(payload.name, 80) || undefined,
+        description: limitText(payload.description, 240) || undefined,
+        type: payload.type === "server" ? "server" : "user",
+        public: Boolean(payload.public),
+        collaborative: Boolean(payload.collaborative),
+      });
     }
     case "play_playlist": {
       const playlist = playlistStore.getPlaylist(identity.id, guildId, limitText(payload.name, 80));
@@ -450,7 +540,9 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       if (player && player.textChannel !== textId) player.textChannel = textId;
       if (settings?.playerChannel) guildState.updateGuildState(guildId, { nowPlayingChannel: textId });
 
-      for (const track of playlist.tracks.slice(0, 100)) {
+      const tracks = [...playlist.tracks.slice(0, 100)];
+      if (payload.shuffle) tracks.sort(() => Math.random() - 0.5);
+      for (const track of tracks) {
         const query = track.uri || `${track.title} ${track.author}`;
         await lavalinkPlay({
           guildId,
@@ -461,7 +553,7 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
           requester: { id: identity.id, tag: identity.tag || identity.username, avatar: identity.avatar },
         });
       }
-      return { count: Math.min(playlist.tracks.length, 100) };
+      return { count: tracks.length, shuffled: Boolean(payload.shuffle) };
     }
     default:
       throw Object.assign(new Error(`Unknown Activity action: ${action}`), { statusCode: 400 });
@@ -564,9 +656,25 @@ function createActivityServer(client) {
         const body = await readJson(request);
         const guildId = limitText(body.guildId || config.devGuildId, 80);
         const identity = await authenticateRequest(client, request, guildId, config);
-        await runActivityAction({ guildId, identity, action: body.action, payload: body.payload || {} });
+        let result = await runActivityAction({ guildId, identity, action: body.action, payload: body.payload || {} });
+        const actionPayload = body.payload || {};
+        const detailName = actionPayload.newName || actionPayload.name || result?.playlistName;
+        const detailActions = new Set([
+          "create_playlist",
+          "add_to_playlist",
+          "get_playlist",
+          "edit_playlist",
+          "update_playlist",
+          "remove_playlist_track",
+          "move_playlist_track",
+          "import_playlist",
+        ]);
+        if (detailActions.has(body.action) && detailName) {
+          const playlist = playlistStore.getPlaylist(identity.id, guildId, detailName);
+          if (playlist) result = { ...result, playlist: serializePlaylistDetails(playlist) };
+        }
         broadcastGuildState(client, guildId);
-        return sendJson(response, 200, { ok: true, state: buildActivityState(client, guildId, identity.id) }, config);
+        return sendJson(response, 200, { ok: true, result, state: buildActivityState(client, guildId, identity.id) }, config);
       }
 
       return sendJson(response, 404, { ok: false, error: "Not found" }, config);

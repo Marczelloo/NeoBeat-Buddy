@@ -4,7 +4,7 @@ const SOURCE_LABELS = Object.freeze({
   spotify: "Spotify",
   youtube: "YouTube",
 });
-const { getArtworkUrls } = require("../artwork");
+const { getArtworkUrls, getTrackArtworkSource } = require("../artwork");
 
 function normalizeSource(source) {
   const value = String(source || "unknown").toLowerCase();
@@ -25,7 +25,7 @@ function serializeTrack(track, index = null) {
 
   const info = track.info || {};
   const source = normalizeSource(info.sourceName || info.source || info.uri);
-  const artwork = getArtworkUrls(info.artworkUrl || info.thumbnail || info.image);
+  const artwork = getArtworkUrls(getTrackArtworkSource(track));
 
   return {
     id: getTrackId(track),
@@ -76,8 +76,22 @@ function serializeFilters(filters = {}) {
   };
 }
 
-function serializePlaylist(playlist) {
-  return {
+function serializePlaylistTrack(track, index = null) {
+  return serializeTrack({
+    info: {
+      identifier: track.identifier,
+      title: track.title,
+      author: track.author,
+      length: track.length,
+      sourceName: track.source,
+      uri: track.uri,
+      artworkUrl: track.artworkUrl || track.thumbnail || track.image,
+    },
+  }, index);
+}
+
+function serializePlaylist(playlist, { includeTracks = false } = {}) {
+  const serialized = {
     id: playlist.id,
     name: playlist.name,
     type: playlist.type,
@@ -88,6 +102,13 @@ function serializePlaylist(playlist) {
     collaborative: Boolean(playlist.collaborative),
     isDefault: Boolean(playlist.isDefault),
   };
+
+  if (includeTracks) serialized.tracks = (playlist.tracks || []).map(serializePlaylistTrack);
+  return serialized;
+}
+
+function serializePlaylistDetails(playlist) {
+  return serializePlaylist(playlist, { includeTracks: true });
 }
 
 module.exports = {
@@ -96,5 +117,7 @@ module.exports = {
   serializeFilters,
   serializeLyrics,
   serializePlaylist,
+  serializePlaylistDetails,
+  serializePlaylistTrack,
   serializeTrack,
 };

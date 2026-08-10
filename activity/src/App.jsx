@@ -413,9 +413,14 @@ function QueuePanel({ queue, onAction }) {
   );
 }
 
-function SearchPanel({ query, setQuery, source, setSource, results, status, onSearch, onAction, showSearchBar = true }) {
+function SearchPanel({ query, setQuery, source, setSource, results, status, onSearch, onAction, playlists = [], showSearchBar = true }) {
   const directLink = parseMusicLink(query);
   const directSource = directLink?.source === "direct" ? "auto" : directLink?.source;
+  const [saveTarget, setSaveTarget] = useState(playlists[0]?.name || "");
+
+  useEffect(() => {
+    if (!saveTarget && playlists[0]?.name) setSaveTarget(playlists[0].name);
+  }, [playlists, saveTarget]);
 
   return (
     <div className="search-panel">
@@ -442,19 +447,24 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
         </div>
       </section> : null}
       {!directLink && status === "empty" ? <div className="empty-state compact"><MagnifyingGlass size={30} weight="duotone" aria-hidden="true" /><strong>No close matches</strong><span>Try the artist name, a direct URL, or another source.</span></div> : null}
-      {!directLink && status !== "searching" && results.length > 0 ? <div className="search-results">{results.map((track) => (
+      {!directLink && status !== "searching" && results.length > 0 ? <>
+        {playlists.length ? <div className="search-save-bar"><span>Save results to</span><select value={saveTarget} onChange={(event) => setSaveTarget(event.target.value)} aria-label="Playlist target"><option value="" disabled>Choose a playlist</option>{playlists.map((playlist) => <option value={playlist.name} key={playlist.id}>{playlist.name}</option>)}</select><button className="secondary-button" type="button" disabled={!saveTarget} onClick={() => results[0] && onAction("add_to_playlist", { name: saveTarget, track: results[0] })}><Heart size={15} weight="fill" aria-hidden="true" /> Save first result</button></div> : null}
+        <div className="search-results">{results.map((track) => (
         <div className="result-row" key={track.id}>
           <Artwork track={track} size="small" />
           <div className="result-copy"><strong>{track.title}</strong><span>{track.author}</span><div><SourceTag source={track.source} /> <span className="result-duration">{formatTime(track.durationMs)}</span></div></div>
           <button className="result-action" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source, playNow: true })}><Play size={16} weight="fill" aria-hidden="true" /> Play</button>
           <button className="result-next" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source })} title="Add to queue"><Plus size={17} weight="bold" aria-hidden="true" /></button>
+          <button className="result-next" type="button" disabled={!saveTarget} onClick={() => onAction("add_to_playlist", { name: saveTarget, track })} title="Save to selected playlist"><Heart size={16} weight="fill" aria-hidden="true" /></button>
+          <button className="result-next" type="button" onClick={() => onAction("toggle_like", { track })} title="Toggle liked songs"><Sparkle size={16} aria-hidden="true" /></button>
         </div>
-      ))}</div> : null}
+        ))}</div>
+      </> : null}
     </div>
   );
 }
 
-function FiltersPanel({ filters, filterPresets, onAction, activeSection = "effects" }) {
+function FiltersPanel({ filters, filterPresets, equalizerPresets = [], onAction, activeSection = "effects" }) {
   const values = useMemo(() => Array.from({ length: 15 }, (_, index) => filters.equalizer?.find((band) => band.band === index)?.gain ?? 0), [filters.equalizer]);
   const [bands, setBands] = useState(values);
   const bandsRef = useRef(values);
@@ -511,7 +521,7 @@ function FiltersPanel({ filters, filterPresets, onAction, activeSection = "effec
   return (
     <div className="filters-panel">
       {activeSection === "effects" ? <div className="filter-section"><div className="filter-label-row"><div><strong>Fun filters</strong><span>One-click Lavalink effects</span></div><button className="ghost-button" type="button" onClick={() => onAction("filter", { preset: "off" })}>Reset</button></div><div className="filter-grid">{(filterPresets || []).map((preset) => <button type="button" key={preset} className={`filter-tile ${filters.effectPreset === preset ? "is-selected" : ""}`} onClick={() => onAction("filter", { preset })}><Faders size={17} aria-hidden="true" /><span>{preset}</span>{filters.effectPreset === preset ? <Check size={15} weight="bold" aria-hidden="true" /> : null}</button>)}</div></div> : null}
-      {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><button className="ghost-button" type="button" onClick={resetBands}>Flat</button></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><span className="eq-band-label">{BAND_LABELS[index]}</span><span className="eq-slider-control"><input type="range" min="-0.25" max="1" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band, ${formatEqGain(gain)} gain`} onPointerDown={() => { isAdjustingRef.current = true; }} onPointerCancel={commitBands} onChange={(event) => updateBand(index, event.target.value)} onPointerUp={commitBands} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") isAdjustingRef.current = true; }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /></span><span className="eq-band-value">{formatEqGain(gain)}</span></label>)}</div></div> : null}
+      {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><div className="eq-actions"><label className="eq-preset-control"><span>Preset</span><select value={filters.preset === "custom" ? "custom" : filters.preset || "flat"} onChange={(event) => { if (event.target.value !== "custom") onAction("equalizer_preset", { preset: event.target.value }); }} aria-label="Equalizer preset"><option value="custom" disabled>Custom curve</option>{equalizerPresets.map((preset) => <option value={preset.name} key={`${preset.custom ? "custom" : "built-in"}-${preset.name}`}>{preset.name}{preset.custom ? " • custom" : ""}</option>)}</select></label><button className="ghost-button" type="button" onClick={resetBands}>Flat</button></div></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><span className="eq-band-label">{BAND_LABELS[index]}</span><span className="eq-slider-control"><input type="range" min="-0.25" max="1" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band, ${formatEqGain(gain)} gain`} onPointerDown={() => { isAdjustingRef.current = true; }} onPointerCancel={commitBands} onChange={(event) => updateBand(index, event.target.value)} onPointerUp={commitBands} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") isAdjustingRef.current = true; }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /></span><span className="eq-band-value">{formatEqGain(gain)}</span></label>)}</div></div> : null}
     </div>
   );
 }
@@ -536,15 +546,47 @@ function LyricsPanel({ lyrics, position, onAction }) {
   );
 }
 
-function PlaylistsPanel({ playlists, currentTrack, onAction }) {
+function PlaylistsPanel({ playlists, currentTrack, selectedPlaylist, playlistDetail, onSelect, onAction }) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const [importUrl, setImportUrl] = useState("");
+  const [importName, setImportName] = useState("");
+  const [editor, setEditor] = useState(null);
+  const selectedSummary = playlists.find((playlist) => playlist.name === selectedPlaylist) || playlists.find((playlist) => playlist.id === selectedPlaylist);
+
+  useEffect(() => {
+    if (selectedPlaylist === null) setEditor(null);
+  }, [selectedPlaylist]);
+
+  useEffect(() => {
+    if (playlistDetail) setEditor({ ...playlistDetail, newName: playlistDetail.name });
+  }, [playlistDetail]);
+
   const submit = () => { if (!name.trim()) return; onAction("create_playlist", { name: name.trim() }); setName(""); setCreating(false); };
+  const selectedName = editor?.name || selectedSummary?.name;
+  const saveEditor = () => {
+    if (!editor || !selectedName) return;
+    onAction("update_playlist", {
+      name: selectedName,
+      newName: editor.newName,
+      description: editor.description,
+      thumbnail: editor.thumbnail,
+      public: editor.public,
+      collaborative: editor.collaborative,
+    });
+  };
   return (
     <div className="playlists-panel">
       <PanelTitle icon={<VinylRecord size={18} aria-hidden="true" />} title="Playlists" description="Keep a room's best moments close" action={<button className="ghost-button" type="button" onClick={() => setCreating((value) => !value)}><Plus size={15} aria-hidden="true" /> New</button>} />
       {creating ? <div className="create-playlist"><input value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") submit(); }} placeholder="Playlist name" aria-label="New playlist name" /><button className="primary-button" type="button" onClick={submit}>Create</button></div> : null}
-      <div className="playlist-list">{playlists.length ? playlists.map((playlist) => <div className="playlist-row" key={playlist.id}><Artwork track={{ title: playlist.name, artworkUrl: playlist.thumbnail }} size="small" /><div className="playlist-copy"><strong>{playlist.name}</strong><span>{playlist.trackCount} tracks {playlist.collaborative ? "• collaborative" : ""}</span></div><button className="playlist-action" type="button" onClick={() => onAction("play_playlist", { name: playlist.name })}><CaretRight size={18} weight="bold" aria-hidden="true" /></button><button className="playlist-action" type="button" disabled={!currentTrack} onClick={() => onAction("add_to_playlist", { name: playlist.name })} title="Save current track"><Heart size={17} aria-hidden="true" /></button></div>) : <div className="empty-state compact"><VinylRecord size={30} weight="duotone" aria-hidden="true" /><strong>No playlists yet</strong><span>Create one for this server.</span></div>}</div>
+      <div className="playlist-list">{playlists.length ? playlists.map((playlist) => <div className={`playlist-row ${selectedName === playlist.name ? "is-selected" : ""}`} key={playlist.id}><button className="playlist-open" type="button" onClick={() => { onSelect?.(playlist.name); onAction("get_playlist", { name: playlist.name }); }}><Artwork track={{ title: playlist.name, artworkUrl: playlist.thumbnail }} size="small" /><span className="playlist-copy"><strong>{playlist.name}</strong><span>{playlist.trackCount} tracks {playlist.collaborative ? "• collaborative" : ""}</span></span></button><button className="playlist-action" type="button" onClick={() => onAction("play_playlist", { name: playlist.name })} title="Play playlist"><CaretRight size={18} weight="bold" aria-hidden="true" /></button><button className="playlist-action" type="button" onClick={() => onAction("play_playlist", { name: playlist.name, shuffle: true })} title="Shuffle playlist"><Shuffle size={16} aria-hidden="true" /></button><button className="playlist-action" type="button" disabled={!currentTrack} onClick={() => onAction("add_to_playlist", { name: playlist.name })} title="Save current track"><Heart size={17} aria-hidden="true" /></button></div>) : <div className="empty-state compact"><VinylRecord size={30} weight="duotone" aria-hidden="true" /><strong>No playlists yet</strong><span>Create one for this server.</span></div>}</div>
+      {editor ? <section className="playlist-detail" aria-label={`${editor.name} playlist editor`}>
+        <div className="playlist-detail-heading"><div><span className="sidebar-kicker">PLAYLIST EDITOR</span><h3>{editor.name}</h3><span>{editor.tracks?.length || 0} tracks</span></div><div className="playlist-detail-actions"><button className="primary-button" type="button" onClick={() => onAction("play_playlist", { name: editor.name })}><Play size={15} weight="fill" aria-hidden="true" /> Play</button><button className="secondary-button" type="button" onClick={() => onAction("play_playlist", { name: editor.name, shuffle: true })}><Shuffle size={15} aria-hidden="true" /> Shuffle</button>{!editor.isDefault ? <button className="ghost-button danger-button" type="button" onClick={() => onAction("delete_playlist", { name: editor.name })}><Trash size={15} aria-hidden="true" /> Delete</button> : null}</div></div>
+        <div className="playlist-editor-grid"><label>Name<input value={editor.newName ?? editor.name} disabled={editor.isDefault} onChange={(event) => setEditor((value) => ({ ...value, newName: event.target.value }))} /></label><label>Description<textarea value={editor.description || ""} onChange={(event) => setEditor((value) => ({ ...value, description: event.target.value }))} rows="2" /></label><label>Artwork URL<input value={editor.thumbnail || ""} onChange={(event) => setEditor((value) => ({ ...value, thumbnail: event.target.value }))} placeholder="https://…" /></label><div className="playlist-checks"><label><input type="checkbox" checked={Boolean(editor.public)} onChange={(event) => setEditor((value) => ({ ...value, public: event.target.checked }))} /> Public</label><label><input type="checkbox" checked={Boolean(editor.collaborative)} onChange={(event) => setEditor((value) => ({ ...value, collaborative: event.target.checked }))} /> Collaborative</label><button className="secondary-button" type="button" onClick={saveEditor}><Check size={15} weight="bold" aria-hidden="true" /> Save changes</button></div></div>
+        <div className="playlist-detail-toolbar"><strong>Tracks</strong><button className="secondary-button" type="button" disabled={!currentTrack} onClick={() => onAction("add_to_playlist", { name: editor.name })}><Plus size={15} weight="bold" aria-hidden="true" /> Add current</button><button className="secondary-button" type="button" disabled={!currentTrack} onClick={() => onAction("toggle_like", { track: currentTrack })}><Heart size={15} weight="fill" aria-hidden="true" /> Like current</button></div>
+        <div className="playlist-track-list">{editor.tracks?.length ? editor.tracks.map((track, index) => <div className="playlist-track-row" key={`${track.id}-${index}`}><Artwork track={track} size="small" /><div className="playlist-track-copy"><strong>{track.title}</strong><span>{track.author}</span><SourceTag source={track.source} /></div><span className="playlist-track-duration">{formatTime(track.durationMs)}</span><button className="playlist-action" type="button" disabled={index === 0} onClick={() => onAction("move_playlist_track", { name: editor.name, from: index, to: index - 1 })} title="Move up"><ArrowUp size={15} aria-hidden="true" /></button><button className="playlist-action" type="button" disabled={index === editor.tracks.length - 1} onClick={() => onAction("move_playlist_track", { name: editor.name, from: index, to: index + 1 })} title="Move down"><ArrowDown size={15} aria-hidden="true" /></button><button className="playlist-action danger-button" type="button" onClick={() => onAction("remove_playlist_track", { name: editor.name, position: index })} title="Remove track"><Trash size={15} aria-hidden="true" /></button></div>) : <div className="empty-state compact"><MusicNotes size={30} weight="duotone" aria-hidden="true" /><strong>Playlist is empty</strong><span>Add the current track or save one from search.</span></div>}</div>
+      </section> : null}
+      <section className="playlist-import"><div><strong>Import playlist</strong><span>Spotify, YouTube, SoundCloud sets, and Deezer playlists.</span></div><div className="playlist-import-fields"><input value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="Paste playlist URL" aria-label="Playlist URL" /><input value={importName} onChange={(event) => setImportName(event.target.value)} placeholder="Optional name" aria-label="Imported playlist name" /><button className="secondary-button" type="button" disabled={!importUrl.trim()} onClick={() => { onAction("import_playlist", { url: importUrl.trim(), name: importName.trim() }); setImportUrl(""); setImportName(""); }}><UploadSimple size={15} aria-hidden="true" /> Import</button></div></section>
     </div>
   );
 }
@@ -785,6 +827,7 @@ function App() {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 900);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
+  const [selectedPlaylistDetail, setSelectedPlaylistDetail] = useState(null);
   const [clock, setClock] = useState(Date.now());
   const [toast, setToast] = useState(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -918,6 +961,11 @@ function App() {
       if (action === "move_queue") { const [track] = next.player.queue.splice(payload.from, 1); next.player.queue.splice(payload.to, 0, track); }
       if (action === "filter") next.player.filters.effectPreset = payload.preset;
       if (action === "equalizer") { next.player.filters.equalizer = payload.bands; next.player.filters.preset = "custom"; }
+      if (action === "equalizer_preset") {
+        const preset = next.equalizerPresets?.find((item) => item.name === payload.preset);
+        next.player.filters.equalizer = preset?.bands || [];
+        next.player.filters.preset = payload.preset;
+      }
       if (action === "play") {
         const result = searchResults.find((track) => track.playQuery === payload.query);
         if (result && next.player.currentTrack) {
@@ -954,7 +1002,17 @@ function App() {
       const shouldHitGateway = context.mode === "discord" || Boolean(import.meta.env.VITE_ACTIVITY_GATEWAY_URL || import.meta.env.VITE_ACTIVITY_CONNECT_LOCAL);
       if (shouldHitGateway) {
         const response = await sendActivityAction({ ...context, action, payload });
+        if (response.result?.success === false) throw new Error(response.result.error || "Activity action failed.");
         applyState(response.state);
+        if (response.result?.playlist) setSelectedPlaylistDetail(response.result.playlist);
+        if (action === "delete_playlist" && response.result?.success) {
+          setSelectedPlaylistDetail(null);
+          setSelectedPlaylist(null);
+        }
+        if (action === "get_playlist" && response.result?.playlist) {
+          setSelectedPlaylist(response.result.playlist.name);
+          setActiveTab("playlists");
+        }
         const successMessage = action === "play"
           ? (payload.playNow ? "Playing now" : "Added to queue")
           : action === "stop"
@@ -1019,6 +1077,7 @@ function App() {
     results: searchResults,
     status: searchStatus,
     onSearch: runSearch,
+    playlists: state.playlists,
   };
 
   const viewState = { ...state, player: { ...state.player, positionMs: position } };
@@ -1033,7 +1092,7 @@ function App() {
             <PlaylistSidebar
               playlists={state.playlists}
               selectedPlaylist={selectedPlaylist}
-              onSelect={(playlistId) => { setSelectedPlaylist(playlistId); goToView("playlists"); }}
+              onSelect={(playlistId) => { setSelectedPlaylist(playlistId); setSelectedPlaylistDetail(null); goToView("playlists"); const playlist = state.playlists.find((item) => item.id === playlistId); if (playlist) onAction("get_playlist", { name: playlist.name }); }}
               onView={goToView}
               loading={isHydrating}
             />
@@ -1053,9 +1112,9 @@ function App() {
             <div className={`main-content main-view-${activeTab}`}>
               {activeTab === "home" ? (isHydrating ? <HomePanel loading /> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={viewState} position={position} onAction={onAction} onTab={goToView} /> : <HomePanel onView={goToView} />) : null}
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
-              {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} activeSection={soundSection} onAction={onAction} /></section> : null}
+              {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} onAction={onAction} /></section> : null}
               {activeTab === "lyrics" ? <section className="content-panel panel-surface"><LyricsPanel lyrics={state.player.lyrics} position={state.player.positionMs} onAction={onAction} /></section> : null}
-              {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} onAction={onAction} /></section> : null}
+              {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} selectedPlaylist={selectedPlaylistDetail?.name || selectedPlaylist} playlistDetail={selectedPlaylistDetail} onSelect={setSelectedPlaylist} onAction={onAction} /></section> : null}
             </div>
           </section>
           <aside className="sidebar sidebar-right" aria-label="Queue sidebar">

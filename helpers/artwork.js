@@ -46,7 +46,27 @@ function getArtworkUrls(value) {
   };
 }
 
+function getTrackArtworkSource(track) {
+  const info = track?.info || track || {};
+  const direct = info.artworkUrl || info.thumbnail || info.image || track?.artworkUrl || track?.thumbnail;
+  if (direct) return direct;
+
+  const source = String(info.sourceName || info.source || track?.source || "").toLowerCase();
+  const identifier = String(info.identifier || track?.identifier || "").trim();
+  const uri = String(info.uri || track?.uri || "");
+
+  if (source.includes("youtube") || source === "ytsearch" || source === "ytmsearch") {
+    const videoId = identifier.match(/^[A-Za-z0-9_-]{11}$/)?.[0] ||
+      uri.match(/[?&]v=([A-Za-z0-9_-]{11})/)?.[1] ||
+      uri.match(/youtu\.be\/([A-Za-z0-9_-]{11})/)?.[1];
+    if (videoId) return `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+  }
+
+  return null;
+}
+
 module.exports = {
   getArtworkUrls,
   getHighResolutionArtworkUrl,
+  getTrackArtworkSource,
 };

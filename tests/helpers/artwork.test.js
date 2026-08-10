@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { getArtworkUrls, getHighResolutionArtworkUrl } = require("../../helpers/artwork");
+const { getArtworkUrls, getHighResolutionArtworkUrl, getTrackArtworkSource } = require("../../helpers/artwork");
 
 test("upgrades known provider artwork URLs without dropping their fallback", () => {
   assert.equal(
@@ -21,4 +21,11 @@ test("upgrades known provider artwork URLs without dropping their fallback", () 
     primary: "https://i.ytimg.com/vi/example/maxresdefault.jpg",
     fallback: "https://i.ytimg.com/vi/example/hqdefault.jpg",
   });
+});
+
+test("derives a high-resolution YouTube thumbnail when Lavalink omits artwork", () => {
+  assert.equal(
+    getTrackArtworkSource({ info: { sourceName: "youtube", identifier: "dQw4w9WgXcQ" } }),
+    "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"
+  );
 });

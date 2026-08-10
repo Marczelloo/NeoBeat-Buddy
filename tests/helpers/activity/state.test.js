@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { serializeFilters, serializeLyrics, serializeTrack } = require("../../../helpers/activity/state");
+const { serializeFilters, serializeLyrics, serializePlaylistDetails, serializeTrack } = require("../../../helpers/activity/state");
 
 test.describe("Activity state serialization", () => {
   test("exposes safe track metadata and preserves provider identity", () => {
@@ -54,5 +54,18 @@ test.describe("Activity state serialization", () => {
       serializeFilters({ preset: "rnb", filterPreset: "vaporwave", equalizer: [{ band: 3, gain: 0.22 }] }),
       { preset: "rnb", effectPreset: "vaporwave", equalizer: [{ band: 3, gain: 0.22 }] }
     );
+  });
+
+  test("serializes editable playlist tracks with artwork and source metadata", () => {
+    const playlist = serializePlaylistDetails({
+      id: "playlist-1",
+      name: "Night Drive",
+      type: "user",
+      tracks: [{ title: "Tamagotchi", author: "TACONAFIDE", identifier: "sc-1", source: "soundcloud", length: 205000, artworkUrl: "https://i1.sndcdn.com/art.jpg" }],
+    });
+
+    assert.equal(playlist.trackCount, 1);
+    assert.equal(playlist.tracks[0].source, "soundcloud");
+    assert.equal(playlist.tracks[0].artworkUrl, "https://i1.sndcdn.com/art.jpg");
   });
 });
