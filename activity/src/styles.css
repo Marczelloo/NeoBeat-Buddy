@@ -261,6 +261,7 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
 .result-action:hover { background: rgb(101 231 255 / 0.14); }
 .result-next { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 10px; }
 .result-next:hover { color: var(--cyan); border-color: rgb(101 231 255 / 0.3); }
+.result-row > .source-tag { flex: 0 0 auto; margin-left: 2px; }
 .track-save-actions { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; }
 .track-save-actions .icon-button { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 10px; background: transparent; }
 .like-button.is-liked { color: #ff6f98; border-color: rgb(255 111 152 / 0.34); background: rgb(255 111 152 / 0.1); }
@@ -268,7 +269,7 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
 .playlist-menu-anchor { position: static; display: inline-flex; }
 .playlist-add-icon { position: relative; display: inline-grid; place-items: center; width: 18px; height: 18px; }
 .playlist-add-icon svg:last-child { position: absolute; right: -1px; bottom: -1px; color: var(--cyan); background: var(--surface); border-radius: 999px; }
-.playlist-context-menu { position: fixed; z-index: 80; min-width: 220px; max-width: min(260px, calc(100vw - 20px)); display: grid; gap: 3px; padding: 7px; border: 1px solid rgb(101 231 255 / 0.28); border-radius: 13px; background: #171c24; box-shadow: 0 18px 44px rgb(0 0 0 / 0.42); animation: playlist-menu-in 150ms cubic-bezier(0.2, 0, 0, 1) both; }
+.playlist-context-menu { position: fixed; z-index: 80; min-width: 220px; max-width: min(260px, calc(100vw - 20px)); max-height: min(320px, calc(100dvh - 20px)); display: grid; gap: 3px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 7px; border: 1px solid rgb(101 231 255 / 0.28); border-radius: 13px; background: #171c24; box-shadow: 0 18px 44px rgb(0 0 0 / 0.42); animation: playlist-menu-in 150ms cubic-bezier(0.2, 0, 0, 1) both; }
 .playlist-menu-title { padding: 5px 8px 7px; color: var(--muted); font: 700 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.1em; text-transform: uppercase; }
 .playlist-context-menu button { min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border: 0; border-radius: 8px; color: var(--muted-strong); background: transparent; text-align: left; font-size: 11px; }
 .playlist-context-menu button:hover, .playlist-context-menu button:focus-visible { color: var(--cyan); background: rgb(101 231 255 / 0.09); outline: 0; }
@@ -386,6 +387,9 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
 .result-save-actions { margin-left: -3px; }
 .main-save-actions { margin-left: 5px; }
 .bar-save-actions { margin-right: 4px; }
+.bar-save-actions .icon-button { border-color: transparent; }
+.bar-save-actions .icon-button:hover { border-color: transparent; background: var(--surface-soft); }
+.bar-save-actions .like-button.is-liked:hover { background: rgb(255 111 152 / 0.16); }
 .result-copy { min-width: 0; }
 @media (max-width: 760px) {
   .playlist-detail-heading, .playlist-import { align-items: stretch; flex-direction: column; }
@@ -573,6 +577,8 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
   .eq-grid { gap: 3px; overflow-x: auto; padding-inline: 2px; }
   .eq-band { min-width: 20px; }
   .result-action { padding: 0 8px; }
+  .result-row { flex-wrap: wrap; }
+  .result-row > .source-tag { margin-left: auto; }
   .result-action { font-size: 0; }
   .result-action svg { margin: 0; }
   .direct-link-card { grid-template-columns: 38px minmax(0, 1fr); gap: 10px; padding: 11px; }

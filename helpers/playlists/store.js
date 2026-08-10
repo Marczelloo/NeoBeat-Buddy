@@ -44,6 +44,51 @@ function generateId() {
   return crypto.randomBytes(8).toString("hex");
 }
 
+function normalizeTrackIdentityPart(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getTrackIdentity(track) {
+  const info = track?.info || {};
+  return {
+    identifier: String(info.identifier || track?.identifier || track?.id || "").trim(),
+    title: normalizeTrackIdentityPart(info.title || track?.title),
+    author: normalizeTrackIdentityPart(info.author || track?.author),
+  };
+}
+
+function getTrackIdentityKeys(track) {
+  const identity = getTrackIdentity(track);
+  const keys = [];
+  if (identity.identifier) keys.push(identity.identifier);
+  if (identity.title && identity.author) keys.push(`${identity.title}::${identity.author}`);
+  return keys;
+}
+
+function tracksMatch(first, second) {
+  const firstIdentity = getTrackIdentity(first);
+  const secondIdentity = getTrackIdentity(second);
+  if (firstIdentity.identifier && secondIdentity.identifier && firstIdentity.identifier === secondIdentity.identifier) return true;
+  return Boolean(
+    firstIdentity.title &&
+      firstIdentity.author &&
+      firstIdentity.title === secondIdentity.title &&
+      firstIdentity.author === secondIdentity.author
+  );
+}
+
+function deduplicateTracks(tracks) {
+  const unique = [];
+  for (const track of Array.isArray(tracks) ? tracks : []) {
+    if (!unique.some((existing) => tracksMatch(existing, track))) unique.push(track);
+  }
+  return unique;
+}
+
 /**
  * Create a new playlist
  * @param {string} userId - User ID
@@ -229,11 +274,16 @@ function addTrack(userId, guildId, name, track) {
     return { success: false, error: "Only the creator can add tracks to this playlist (not collaborative)." };
   }
 
+  if (targetPlaylist.tracks.some((existing) => tracksMatch(existing, track))) {
+    return { success: true, duplicate: true, message: `"${track.info?.title || track.title}" is already in playlist "${name}".` };
+  }
+
   // Add track to the playlist in the data structure
+  const identity = getTrackIdentity(track);
   targetPlaylist.tracks.push({
     title: track.info?.title || track.title,
     author: track.info?.author || track.author,
-    identifier: track.info?.identifier || track.identifier,
+    identifier: identity.identifier || null,
     uri: track.info?.uri || track.uri,
     length: track.info?.length ?? track.length ?? track.durationMs,
     artworkUrl: track.info?.artworkUrl || track.info?.thumbnail || track.artworkUrl || track.thumbnail || null,
@@ -638,18 +688,7 @@ function isTrackInPlaylist(userId, guildId, name, track) {
     return { exists: false, position: -1 };
   }
 
-  const trackIdentifier = track.info?.identifier || track.identifier;
-  const trackTitle = (track.info?.title || track.title || "").toLowerCase();
-  const trackAuthor = (track.info?.author || track.author || "").toLowerCase();
-
-  const position = playlist.tracks.findIndex((t) => {
-    // Match by identifier if available
-    if (trackIdentifier && t.identifier === trackIdentifier) {
-      return true;
-    }
-    // Fallback to title + author match
-    return t.title.toLowerCase() === trackTitle && t.author.toLowerCase() === trackAuthor;
-  });
+  const position = playlist.tracks.findIndex((existing) => tracksMatch(existing, track));
 
   return {
     exists: position !== -1,
@@ -691,6 +730,13 @@ function getLikedSongs(userId) {
     };
     data.user[userId].push(likedSongs);
     savePlaylists(data);
+  } else {
+    const existingTracks = Array.isArray(likedSongs.tracks) ? likedSongs.tracks : [];
+    const deduplicatedTracks = deduplicateTracks(existingTracks);
+    if (deduplicatedTracks.length !== existingTracks.length || !Array.isArray(likedSongs.tracks)) {
+      likedSongs.tracks = deduplicatedTracks;
+      savePlaylists(data);
+    }
   }
 
   return likedSongs;
@@ -710,6 +756,8 @@ module.exports = {
   manageCollaborator,
   listPlaylists,
   mergePlaylists,
+  deduplicateTracks,
   getLikedSongs,
+  getTrackIdentityKeys,
   isTrackInPlaylist,
 };

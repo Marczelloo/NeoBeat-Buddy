@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowDown,
   ArrowUp,
@@ -143,10 +144,16 @@ function IconButton({ label, children, className = "", ...props }) {
   );
 }
 
+function getTrackLikeKey(track) {
+  const normalize = (value) => String(value || "").normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+  return `${normalize(track?.title)}::${normalize(track?.author)}`;
+}
+
 function PlaylistMenu({ track, playlists, onAction, className = "" }) {
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState(null);
   const rootRef = useRef(null);
+  const menuRef = useRef(null);
   const closeTimerRef = useRef(null);
 
   const clearCloseTimer = () => window.clearTimeout(closeTimerRef.current);
@@ -161,16 +168,18 @@ function PlaylistMenu({ track, playlists, onAction, className = "" }) {
       return;
     }
     const rect = event.currentTarget.getBoundingClientRect();
+    const menuHeight = Math.min(320, 56 + Math.max(1, playlists.length) * 37);
+    const openAbove = window.innerHeight - rect.bottom < menuHeight + 14;
     setMenuPosition({
-      top: Math.max(10, Math.min(rect.bottom + 8, window.innerHeight - 260)),
-      left: Math.min(Math.max(10, rect.right - 232), window.innerWidth - 242),
-    });
+      top: openAbove ? Math.max(10, rect.top - menuHeight - 8) : Math.min(rect.bottom + 8, window.innerHeight - menuHeight - 10),
+      left: Math.max(10, Math.min(rect.right - 220, window.innerWidth - 230)),
+      });
     setOpen(true);
   };
 
   useEffect(() => {
     const closeOnOutsidePointer = (event) => {
-      if (!rootRef.current?.contains(event.target)) setOpen(false);
+      if (!rootRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setOpen(false);
     };
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     return () => {
@@ -191,17 +200,20 @@ function PlaylistMenu({ track, playlists, onAction, className = "" }) {
       <IconButton label="Add to playlist" className={open ? "is-active" : ""} onClick={toggleMenu} disabled={!track} aria-expanded={open}>
         <span className="playlist-add-icon"><VinylRecord size={16} aria-hidden="true" /><Plus size={9} weight="bold" aria-hidden="true" /></span>
       </IconButton>
-      {open ? <div className="playlist-context-menu" style={menuPosition || undefined} role="menu" aria-label={`Add ${track?.title || "track"} to playlist`} onMouseEnter={clearCloseTimer} onMouseLeave={scheduleClose}>
-        <span className="playlist-menu-title">Add to playlist</span>
-        {playlists.length ? playlists.map((playlist) => <button type="button" role="menuitem" key={playlist.id} onClick={() => { onAction("add_to_playlist", { name: playlist.name, track }); setOpen(false); }}><VinylRecord size={14} aria-hidden="true" /><span>{playlist.name}</span></button>) : <span className="playlist-menu-empty">Create a playlist first</span>}
-      </div> : null}
+      {open && menuPosition ? createPortal(
+        <div ref={menuRef} className="playlist-context-menu" style={menuPosition} role="menu" aria-label={`Add ${track?.title || "track"} to playlist`} onMouseEnter={clearCloseTimer} onMouseLeave={scheduleClose}>
+          <span className="playlist-menu-title">Add to playlist</span>
+          {playlists.length ? playlists.map((playlist) => <button type="button" role="menuitem" key={playlist.id} onClick={() => { onAction("add_to_playlist", { name: playlist.name, track }); setOpen(false); }}><VinylRecord size={14} aria-hidden="true" /><span>{playlist.name}</span></button>) : <span className="playlist-menu-empty">Create a playlist first</span>}
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 }
 
 function TrackSaveActions({ track, playlists = [], likedTrackIds = [], onAction, className = "" }) {
   if (!track) return null;
-  const isLiked = likedTrackIds.includes(track.id);
+  const isLiked = likedTrackIds.includes(track.id) || likedTrackIds.includes(getTrackLikeKey(track));
   return (
     <div className={`track-save-actions ${className}`}>
       <IconButton label={isLiked ? "Remove from liked songs" : "Add to liked songs"} className={`like-button ${isLiked ? "is-liked" : ""}`} onClick={() => onAction("toggle_like", { track })} aria-pressed={isLiked}>
@@ -515,10 +527,11 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
       {!directLink && status !== "searching" && results.length > 0 ? <div className="search-results">{results.map((track) => (
         <div className="result-row" key={track.id}>
           <Artwork track={track} size="small" />
-          <div className="result-copy"><strong>{track.title}</strong><span>{track.author}</span><div><SourceTag source={track.source} /> <span className="result-duration">{formatTime(track.durationMs)}</span></div></div>
+          <div className="result-copy"><strong>{track.title}</strong><span>{track.author}</span><div><span className="result-duration">{formatTime(track.durationMs)}</span></div></div>
           <button className="result-action" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source, playNow: true })}><Play size={16} weight="fill" aria-hidden="true" /> Play</button>
           <button className="result-next" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source })} title="Add to queue"><Plus size={17} weight="bold" aria-hidden="true" /></button>
           <TrackSaveActions track={track} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} className="result-save-actions" />
+          <SourceTag source={track.source} />
         </div>
       ))}</div> : null}
     </div>

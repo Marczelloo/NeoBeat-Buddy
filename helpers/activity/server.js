@@ -356,7 +356,7 @@ function buildActivityState(client, guildId, userId) {
       updatedAt: Date.now(),
     },
     playlists: getSerializedPlaylists(userId, guildId),
-    likedTrackIds: (likedSongs.tracks || []).map((track) => String(track.identifier || `${track.title}:${track.author}`)),
+    likedTrackIds: [...new Set((likedSongs.tracks || []).flatMap((track) => playlistStore.getTrackIdentityKeys(track)))],
     filterPresets: FILTER_PRESET_NAMES,
     equalizerPresets: getSerializedEqualizerPresets(userId),
   };
