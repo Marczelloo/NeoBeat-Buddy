@@ -50,6 +50,8 @@ export function createMockState() {
       { id: "liked", name: "Liked Songs", type: "user", description: "Your saved tracks", trackCount: 42, thumbnail: artwork, public: false, collaborative: false, isDefault: true },
       { id: "night-drive", name: "Night Drive.exe", type: "user", description: "Blue lights, no skips", trackCount: 18, thumbnail: artwork, public: true, collaborative: true, isDefault: false },
     ],
+    likedTrackIds: ["mock-queue-1"],
+    equalizerPresets: [],
     filterPresets: ["nightcore", "vaporwave", "chipmunk", "deepvoice", "eightd", "karaoke", "wobble", "vibrato", "robot", "telephone", "mono", "surround", "meme"],
   };
 }

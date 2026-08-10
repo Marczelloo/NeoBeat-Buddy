@@ -81,7 +81,12 @@ function getActivityConfig() {
   };
 }
 
+function stringifyJson(payload) {
+  return JSON.stringify(payload, (_key, value) => (typeof value === "bigint" ? value.toString() : value));
+}
+
 function sendJson(response, statusCode, payload, config) {
+  const serializedPayload = stringifyJson(payload);
   const requestedOrigin = response.req?.headers?.origin;
   const allowOrigin = config.allowedOrigins.includes("*")
     ? "*"
@@ -96,7 +101,7 @@ function sendJson(response, statusCode, payload, config) {
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   });
-  response.end(JSON.stringify(payload));
+  response.end(serializedPayload);
 }
 
 function isAllowedArtworkUrl(value) {
@@ -310,6 +315,7 @@ function getSerializedEqualizerPresets(userId) {
 
 function buildActivityState(client, guildId, userId) {
   const player = getPlayer(guildId);
+  const likedSongs = playlistStore.getLikedSongs(userId);
   const currentTrack = player?.currentTrack ? serializeTrack(player.currentTrack) : null;
   const filters = getEqualizerState(guildId) || player?.filters || {};
   const guild = client.guilds.cache.get(guildId);
@@ -343,6 +349,7 @@ function buildActivityState(client, guildId, userId) {
       updatedAt: Date.now(),
     },
     playlists: getSerializedPlaylists(userId, guildId),
+    likedTrackIds: (likedSongs.tracks || []).map((track) => String(track.identifier || `${track.title}:${track.author}`)),
     filterPresets: FILTER_PRESET_NAMES,
     equalizerPresets: getSerializedEqualizerPresets(userId),
   };
@@ -585,7 +592,7 @@ async function searchActivityTracks(query, preferredSource) {
 }
 
 function sendSocket(socket, payload) {
-  if (socket.readyState === 1) socket.send(JSON.stringify(payload));
+  if (socket.readyState === 1) socket.send(stringifyJson(payload));
 }
 
 function broadcastGuildState(client, guildId) {
