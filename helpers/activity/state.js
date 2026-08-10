@@ -77,7 +77,7 @@ function serializeFilters(filters = {}) {
 }
 
 function serializePlaylistTrack(track, index = null) {
-  return serializeTrack({
+  const serialized = serializeTrack({
     info: {
       identifier: track.identifier,
       title: track.title,
@@ -88,6 +88,8 @@ function serializePlaylistTrack(track, index = null) {
       artworkUrl: track.artworkUrl || track.thumbnail || track.image,
     },
   }, index);
+
+  return { ...serialized, addedAt: Number(track.addedAt) || 0 };
 }
 
 function serializePlaylist(playlist, { includeTracks = false } = {}) {

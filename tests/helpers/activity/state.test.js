@@ -61,11 +61,12 @@ test.describe("Activity state serialization", () => {
       id: "playlist-1",
       name: "Night Drive",
       type: "user",
-      tracks: [{ title: "Tamagotchi", author: "TACONAFIDE", identifier: "sc-1", source: "soundcloud", length: 205000, artworkUrl: "https://i1.sndcdn.com/art.jpg" }],
+      tracks: [{ title: "Tamagotchi", author: "TACONAFIDE", identifier: "sc-1", source: "soundcloud", length: 205000, artworkUrl: "https://i1.sndcdn.com/art.jpg", addedAt: 1700000000000 }],
     });
 
     assert.equal(playlist.trackCount, 1);
     assert.equal(playlist.tracks[0].source, "soundcloud");
     assert.equal(playlist.tracks[0].artworkUrl, "https://i1.sndcdn.com/art.jpg");
+    assert.equal(playlist.tracks[0].addedAt, 1700000000000);
   });
 });
