@@ -619,11 +619,11 @@ function LyricsPanel({ lyrics, position, onAction }) {
   );
 }
 
-function PlaylistsPanel({ playlists, currentTrack, selectedPlaylist, playlistDetail, likedTrackIds = [], onAction }) {
-  const [creating, setCreating] = useState(false);
+function PlaylistsPanel({ playlists, currentTrack, selectedPlaylist, playlistDetail, likedTrackIds = [], composerOpen = false, onComposerClose, onAction }) {
   const [name, setName] = useState("");
   const [importUrl, setImportUrl] = useState("");
   const [importName, setImportName] = useState("");
+  const [composerTab, setComposerTab] = useState("create");
   const [editor, setEditor] = useState(null);
   const [sortMode, setSortMode] = useState("recent");
   const selectedSummary = playlists.find((playlist) => playlist.name === selectedPlaylist) || playlists.find((playlist) => playlist.id === selectedPlaylist);
@@ -638,6 +638,19 @@ function PlaylistsPanel({ playlists, currentTrack, selectedPlaylist, playlistDet
   useEffect(() => {
     if (playlistDetail) setEditor({ ...playlistDetail, newName: playlistDetail.name });
   }, [playlistDetail]);
+
+  useEffect(() => {
+    if (composerOpen) setComposerTab("create");
+  }, [composerOpen]);
+
+  useEffect(() => {
+    if (!composerOpen) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") onComposerClose?.();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [composerOpen, onComposerClose]);
 
   const sortedTracks = useMemo(() => {
     const tracks = (editor?.tracks || []).map((track, index) => ({ track, index }));
@@ -658,7 +671,8 @@ function PlaylistsPanel({ playlists, currentTrack, selectedPlaylist, playlistDet
     });
   }, [editor?.tracks, sortMode]);
 
-  const submit = () => { if (!name.trim()) return; onAction("create_playlist", { name: name.trim() }); setName(""); setCreating(false); };
+  const submit = () => { if (!name.trim()) return; onAction("create_playlist", { name: name.trim() }); setName(""); onComposerClose?.(); };
+  const submitImport = () => { if (!importUrl.trim()) return; onAction("import_playlist", { url: importUrl.trim(), name: importName.trim() }); setImportUrl(""); setImportName(""); onComposerClose?.(); };
   const selectedName = editor?.name || selectedSummary?.name;
   const saveEditor = () => {
     if (!editor || !selectedName) return;
@@ -673,16 +687,21 @@ function PlaylistsPanel({ playlists, currentTrack, selectedPlaylist, playlistDet
   };
   return (
     <div className="playlists-panel">
-      <PanelTitle icon={<VinylRecord size={18} aria-hidden="true" />} title="Playlists" description="Keep a room's best moments close" action={<button className="ghost-button" type="button" onClick={() => setCreating((value) => !value)}><Plus size={15} aria-hidden="true" /> New</button>} />
-      {creating ? <div className="create-playlist"><input value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") submit(); }} placeholder="Playlist name" aria-label="New playlist name" /><button className="primary-button" type="button" onClick={submit}>Create</button></div> : null}
+      <PanelTitle icon={<VinylRecord size={18} aria-hidden="true" />} title="Playlists" />
       {editor ? <section className="playlist-detail" aria-label={`${editor.name} playlist editor`}>
         <div className="playlist-detail-heading"><div><span className="sidebar-kicker">PLAYLIST EDITOR</span><h3>{editor.name}</h3><span>{editor.tracks?.length || 0} tracks</span></div><div className="playlist-detail-actions"><button className="primary-button" type="button" onClick={() => onAction("play_playlist", { name: editor.name })}><Play size={15} weight="fill" aria-hidden="true" /> Play</button><button className="secondary-button" type="button" onClick={() => onAction("play_playlist", { name: editor.name, shuffle: true })}><Shuffle size={15} aria-hidden="true" /> Shuffle</button>{!editor.isDefault ? <button className="ghost-button danger-button" type="button" onClick={() => onAction("delete_playlist", { name: editor.name })}><Trash size={15} aria-hidden="true" /> Delete</button> : null}</div></div>
         <div className="playlist-editor-grid"><label>Name<input value={editor.newName ?? editor.name} disabled={editor.isDefault} onChange={(event) => setEditor((value) => ({ ...value, newName: event.target.value }))} /></label><label>Description<textarea value={editor.description || ""} onChange={(event) => setEditor((value) => ({ ...value, description: event.target.value }))} rows="2" /></label><label>Artwork URL<input value={editor.thumbnail || ""} onChange={(event) => setEditor((value) => ({ ...value, thumbnail: event.target.value }))} placeholder="https://…" /></label><div className="playlist-checks"><label className={`playlist-check-toggle ${editor.public ? "is-on" : ""}`}><input type="checkbox" checked={Boolean(editor.public)} disabled={editor.isDefault} onChange={(event) => setEditor((value) => ({ ...value, public: event.target.checked }))} /><Globe size={16} aria-hidden="true" /><span><strong>Public</strong><small>Visible to shared listeners</small></span></label><label className={`playlist-check-toggle ${editor.collaborative ? "is-on" : ""}`}><input type="checkbox" checked={Boolean(editor.collaborative)} disabled={editor.isDefault} onChange={(event) => setEditor((value) => ({ ...value, collaborative: event.target.checked }))} /><UsersThree size={16} aria-hidden="true" /><span><strong>Collaborative</strong><small>Let others add tracks</small></span></label><button className="secondary-button" type="button" onClick={saveEditor}><Check size={15} weight="bold" aria-hidden="true" /> Save changes</button></div></div>
-        <div className="playlist-detail-toolbar"><strong>Tracks</strong><label className="playlist-sort-control"><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label="Sort playlist tracks"><option value="recent">Recently added</option><option value="title">Title A–Z</option><option value="artist">Artist A–Z</option><option value="duration-desc">Longest first</option><option value="duration-asc">Shortest first</option></select></label><button className="secondary-button" type="button" disabled={!currentTrack} onClick={() => onAction("add_to_playlist", { name: editor.name })}><Plus size={15} weight="bold" aria-hidden="true" /> Add current</button><button className="secondary-button" type="button" disabled={!currentTrack} onClick={() => onAction("toggle_like", { track: currentTrack })}><Heart size={15} weight="fill" aria-hidden="true" /> Like current</button></div>
+        <div className="playlist-detail-toolbar"><strong>Tracks</strong><label className="playlist-sort-control"><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label="Sort playlist tracks"><option value="recent">Recently added</option><option value="title">Title A–Z</option><option value="artist">Artist A–Z</option><option value="duration-desc">Longest first</option><option value="duration-asc">Shortest first</option></select></label></div>
         <div className="playlist-track-list">{sortedTracks.length ? sortedTracks.map(({ track, index }) => <div className="playlist-track-row" key={`${track.id}-${index}`}><Artwork track={track} size="small" /><div className="playlist-track-copy"><strong>{track.title}</strong><span>{track.author}</span><SourceTag source={track.source} /></div><span className="playlist-track-duration">{formatTime(track.durationMs)}</span><TrackSaveActions track={track} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} className="playlist-track-save-actions" /><button className="playlist-action danger-button" type="button" onClick={() => onAction("remove_playlist_track", { name: editor.name, position: index })} title="Remove track"><Trash size={15} aria-hidden="true" /></button></div>) : <div className="empty-state compact"><MusicNotes size={30} weight="duotone" aria-hidden="true" /><strong>Playlist is empty</strong><span>Add the current track or save one from search.</span></div>}</div>
       </section> : null}
       {!editor ? <div className="empty-state compact playlist-selection-empty"><VinylRecord size={30} weight="duotone" aria-hidden="true" /><strong>{selectedSummary ? `Opening ${selectedSummary.name}` : "Select a playlist to edit"}</strong><span>Choose a playlist from Your Library on the left.</span></div> : null}
-      <section className="playlist-import"><div><strong>Import playlist</strong><span>Spotify, YouTube, SoundCloud sets, and Deezer playlists.</span></div><div className="playlist-import-fields"><input value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="Paste playlist URL" aria-label="Playlist URL" /><input value={importName} onChange={(event) => setImportName(event.target.value)} placeholder="Optional name" aria-label="Imported playlist name" /><button className="secondary-button" type="button" disabled={!importUrl.trim()} onClick={() => { onAction("import_playlist", { url: importUrl.trim(), name: importName.trim() }); setImportUrl(""); setImportName(""); }}><UploadSimple size={15} aria-hidden="true" /> Import</button></div></section>
+      {composerOpen ? <div className="playlist-composer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onComposerClose?.(); }}>
+        <section className="playlist-composer" role="dialog" aria-modal="true" aria-labelledby="playlist-composer-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="playlist-composer-heading"><div><span className="sidebar-kicker">YOUR LIBRARY</span><h3 id="playlist-composer-title">Add a playlist</h3></div><button className="icon-button" type="button" onClick={onComposerClose} aria-label="Close playlist dialog" title="Close"><X size={17} aria-hidden="true" /></button></div>
+          <div className="playlist-composer-tabs" role="tablist" aria-label="Playlist actions"><button type="button" role="tab" aria-selected={composerTab === "create"} className={composerTab === "create" ? "is-active" : ""} onClick={() => setComposerTab("create")}><Plus size={15} weight="bold" aria-hidden="true" /> Create</button><button type="button" role="tab" aria-selected={composerTab === "import"} className={composerTab === "import" ? "is-active" : ""} onClick={() => setComposerTab("import")}><UploadSimple size={15} aria-hidden="true" /> Import</button></div>
+          {composerTab === "create" ? <form className="playlist-composer-form" onSubmit={(event) => { event.preventDefault(); submit(); }}><label>Playlist name<input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Night Drive" aria-label="New playlist name" /></label><div className="playlist-composer-actions"><button className="secondary-button" type="button" onClick={onComposerClose}>Cancel</button><button className="primary-button" type="submit" disabled={!name.trim()}><Plus size={15} weight="bold" aria-hidden="true" /> Create playlist</button></div></form> : <form className="playlist-composer-form" onSubmit={(event) => { event.preventDefault(); submitImport(); }}><label>Playlist URL<input autoFocus value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="Paste Spotify, YouTube, SoundCloud or Deezer URL" aria-label="Playlist URL" /></label><label>Playlist name <span className="field-hint">optional</span><input value={importName} onChange={(event) => setImportName(event.target.value)} placeholder="Use the provider name if empty" aria-label="Imported playlist name" /></label><div className="playlist-composer-actions"><button className="secondary-button" type="button" onClick={onComposerClose}>Cancel</button><button className="primary-button" type="submit" disabled={!importUrl.trim()}><UploadSimple size={15} aria-hidden="true" /> Import playlist</button></div></form>}
+        </section>
+      </div> : null}
     </div>
   );
 }
@@ -725,12 +744,12 @@ function DrawerToggle({ side, open, count, onClick }) {
   );
 }
 
-function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onView, loading = false }) {
+function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, loading = false }) {
   return (
     <div className="sidebar-content">
       <div className="sidebar-heading">
         <div><span className="sidebar-kicker">YOUR LIBRARY</span><h2>Playlists</h2></div>
-        <button className="icon-button" type="button" onClick={() => onView("playlists")} disabled={loading} aria-label="Create or edit playlists" title="Create or edit playlists"><Plus size={18} weight="bold" aria-hidden="true" /></button>
+        <button className="icon-button" type="button" onClick={onCreate} disabled={loading} aria-label="Create playlist" title="Create playlist"><Plus size={18} weight="bold" aria-hidden="true" /></button>
       </div>
       <button className={`library-home ${!selectedPlaylist ? "is-active" : ""}`} type="button" onClick={() => onSelect(null)} disabled={loading}>
         <House size={18} weight={!selectedPlaylist ? "fill" : "regular"} aria-hidden="true" />
@@ -744,7 +763,6 @@ function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onView, loadin
           </button>
         ))}
       </div>}
-      <button className="sidebar-footer-action" type="button" onClick={() => onView("playlists")} disabled={loading}><Plus size={16} aria-hidden="true" /> New playlist</button>
     </div>
   );
 }
@@ -925,6 +943,7 @@ function App() {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 900);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [selectedPlaylistDetail, setSelectedPlaylistDetail] = useState(null);
+  const [playlistComposerOpen, setPlaylistComposerOpen] = useState(false);
   const [clock, setClock] = useState(Date.now());
   const [toast, setToast] = useState(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -1190,8 +1209,8 @@ function App() {
             <PlaylistSidebar
               playlists={state.playlists}
               selectedPlaylist={selectedPlaylist}
-              onSelect={(playlistId) => { setSelectedPlaylist(playlistId); setSelectedPlaylistDetail(null); goToView("playlists"); const playlist = state.playlists.find((item) => item.id === playlistId); if (playlist) onAction("get_playlist", { name: playlist.name }); }}
-              onView={goToView}
+              onSelect={(playlistId) => { setPlaylistComposerOpen(false); setSelectedPlaylist(playlistId); setSelectedPlaylistDetail(null); goToView("playlists"); const playlist = state.playlists.find((item) => item.id === playlistId); if (playlist) onAction("get_playlist", { name: playlist.name }); }}
+              onCreate={() => { setPlaylistComposerOpen(true); goToView("playlists"); }}
               loading={isHydrating}
             />
           </aside>
@@ -1212,7 +1231,7 @@ function App() {
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
               {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} onAction={onAction} /></section> : null}
               {activeTab === "lyrics" ? <section className="content-panel panel-surface"><LyricsPanel lyrics={state.player.lyrics} position={state.player.positionMs} onAction={onAction} /></section> : null}
-              {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} likedTrackIds={state.likedTrackIds || []} selectedPlaylist={selectedPlaylistDetail?.name || selectedPlaylist} playlistDetail={selectedPlaylistDetail} onAction={onAction} /></section> : null}
+              {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} likedTrackIds={state.likedTrackIds || []} selectedPlaylist={selectedPlaylistDetail?.name || selectedPlaylist} playlistDetail={selectedPlaylistDetail} composerOpen={playlistComposerOpen} onComposerClose={() => setPlaylistComposerOpen(false)} onAction={onAction} /></section> : null}
             </div>
           </section>
           <aside className="sidebar sidebar-right" aria-label="Queue sidebar">
