@@ -37,6 +37,53 @@ function getFeatureCoverage(features) {
   ).length;
 }
 
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
+}
+
+function getMetadataMoodCues(candidate) {
+  return [candidate?.artist, candidate?.title, ...(candidate?.genres || [])]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+/**
+ * Builds low-confidence feature hints from catalog metadata that is available
+ * without Spotify audio-features access. These are deliberately kept separate
+ * from measured features: BPM/gain can suggest energy, but they cannot prove
+ * a song's actual mood. The scorer may use these hints only as a tie-breaker.
+ */
+function deriveCatalogFeatureHints(candidate) {
+  const measured = candidate?.features || {};
+  const tempo = Number(measured.tempo);
+  const loudness = Number(measured.loudness);
+  const cues = getMetadataMoodCues(candidate);
+  const hasTempo = isFinitePositive(tempo);
+  const hasLoudness = Number.isFinite(loudness);
+  if (!hasTempo && !hasLoudness) return null;
+
+  const hints = {};
+  if (hasTempo || hasLoudness) {
+    const tempoEnergy = hasTempo ? clamp01((tempo - 72) / 105) : 0.5;
+    const loudnessEnergy = hasLoudness ? clamp01((loudness + 18) / 16) : 0.5;
+    hints.energy = Number((tempoEnergy * 0.58 + loudnessEnergy * 0.42).toFixed(3));
+  }
+
+  const positiveCue = /\b(?:dance|disco|funk|party|summer|upbeat|happy|feel[ -]?good|euphoric|joy|bright)\b/.test(cues);
+  const subduedCue = /\b(?:ambient|acoustic|sad|melanchol|dark|doom|slowcore|depress|ballad|somber|piano)\b/.test(cues);
+  if (positiveCue || subduedCue) {
+    hints.valence = Number((0.5 + (positiveCue ? 0.12 : 0) - (subduedCue ? 0.12 : 0)).toFixed(3));
+  }
+
+  const danceCue = /\b(?:dance|disco|funk|house|edm|electronic|hip[ -]?hop|rnb|pop|reggaeton)\b/.test(cues);
+  if (danceCue && hasTempo) {
+    hints.danceability = Number((0.42 + clamp01((tempo - 82) / 95) * 0.28).toFixed(3));
+  }
+
+  return Object.keys(hints).length ? hints : null;
+}
+
 function normalizeDeezerMetadata(payload) {
   if (!payload || typeof payload !== "object" || payload.error) return null;
 
@@ -133,11 +180,14 @@ async function enrichCandidateWithDeezerMetadata(candidate) {
   if (existingCoverage >= 3) {
     candidate.metadataChecked = true;
     candidate.metadataConfidence = Math.max(candidate.metadataConfidence || 0, 1);
+    candidate.derivedFeatures ||= deriveCatalogFeatureHints(candidate);
     return candidate;
   }
 
   const metadata = await getDeezerMetadata(candidate);
-  return mergeAudioMetadata(candidate, metadata);
+  mergeAudioMetadata(candidate, metadata);
+  candidate.derivedFeatures = deriveCatalogFeatureHints(candidate);
+  return candidate;
 }
 
 async function mapWithConcurrency(items, limit, worker) {
@@ -199,6 +249,7 @@ module.exports = {
   enrichCandidateWithDeezerMetadata,
   enrichCandidatesWithDeezerMetadata,
   getDeezerMetadata,
+  deriveCatalogFeatureHints,
   getFeatureCoverage,
   getTempoDistance,
   getTempoVariants,

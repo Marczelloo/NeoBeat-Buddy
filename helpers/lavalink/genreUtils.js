@@ -41,6 +41,21 @@ const GENRE_ALIASES = [
 
 const NON_MUSIC_TAG_PATTERN = /^(?:\d{4}s?|\d{2}s|\d{4}\s+music|seen\s+live|favorite(?:s)?|favourites?|my\s+(?:favorites?|favourites?|music|shit)|female\s+vocalists?|male\s+vocalists?|under\s+\d+\s+listeners|awesome|love|loved|beautiful|cool|best|good|bad|spotify|last\s*fm|scrobble(?:d)?|heard\s+on|playlist|indie\s+playlist|english|polish|american|british|german|french|swedish|canadian)$/i;
 
+function isNoisyGenreTag(genre) {
+  const tag = normalizeGenre(genre);
+  if (!tag) return true;
+
+  // Last.fm also returns listener-made sentences, radio names and playlist
+  // fragments. They are useful for discovery, but too unstable to steer DJ
+  // transitions or build a session profile.
+  if (tag.length > 32 || tag.split(" ").length > 4) return true;
+  if (/\b(?:fm|radio|listeners?|scrobble|playlist|station|channel)\b/i.test(tag)) return true;
+  if (/\d/.test(tag) && !/^\d{4}s?$/.test(tag)) return true;
+  if (/^(?:my|the)\s+(?:pussy|favorite|favourite|personal|own)\b/i.test(tag)) return true;
+
+  return false;
+}
+
 function normalizeGenre(genre) {
   let normalized = String(genre || "")
     .normalize("NFKD")
@@ -76,7 +91,13 @@ function normalizeGenreTags(genres = [], context = {}) {
 
   for (const genre of Array.isArray(genres) ? genres : []) {
     const normalized = normalizeGenre(genre);
-    if (!normalized || NON_MUSIC_TAG_PATTERN.test(normalized) || isContextTag(normalized, context)) continue;
+    if (
+      !normalized ||
+      NON_MUSIC_TAG_PATTERN.test(normalized) ||
+      isNoisyGenreTag(normalized) ||
+      isContextTag(normalized, context)
+    )
+      continue;
     unique.add(normalized);
   }
 
@@ -121,6 +142,7 @@ function findGenreOverlap(left = [], right = []) {
 module.exports = {
   normalizeGenre,
   normalizeGenreTags,
+  isNoisyGenreTag,
   getGenreFamilies,
   areGenreFamiliesCompatible,
   findGenreOverlap,

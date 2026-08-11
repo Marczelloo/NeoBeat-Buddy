@@ -4,6 +4,7 @@ const { scoreCandidates } = require("../../../helpers/lavalink/candidateScoring"
 const {
   areGenreFamiliesCompatible,
   getGenreFamilies,
+  normalizeGenreTags,
 } = require("../../../helpers/lavalink/genreUtils");
 
 describe("Autoplay genre continuity", () => {
@@ -12,6 +13,13 @@ describe("Autoplay genre continuity", () => {
     assert.deepStrictEqual(getGenreFamilies(["alternative rock", "indie rock"]), ["rock"]);
     assert.strictEqual(areGenreFamiliesCompatible(["hiphop"], ["metal"]), false);
     assert.strictEqual(areGenreFamiliesCompatible(["hiphop"], ["rnb"]), true);
+  });
+
+  it("removes listener-made sentences and radio metadata from genre anchors", () => {
+    assert.deepStrictEqual(
+      normalizeGenreTags(["pop", "my pussy taste like pepsi cola", "wsum 91 7 fm madison", "best of 2016"]),
+      ["pop"]
+    );
   });
 
   it("hard-rejects a known incompatible transition from the current track", () => {

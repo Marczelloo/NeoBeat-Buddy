@@ -4,6 +4,8 @@ const { getAutoplayExposureSnapshot, getExposureKey, getExposureRecord } = requi
 const {
   enrichCandidateWithDeezerMetadata,
   enrichCandidatesWithDeezerMetadata,
+  getFeatureCoverage,
+  getTempoDistance,
 } = require("./autoplayMetadata");
 const { scoreCandidates, getTimeOfDayFactor } = require("./candidateScoring");
 const { areGenreFamiliesCompatible, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
@@ -23,8 +25,10 @@ const USE_SPOTIFY_AUTOPLAY = process.env.USE_SPOTIFY_AUTOPLAY === "true";
 const USE_SPOTIFY_METADATA = process.env.USE_SPOTIFY_METADATA === "true";
 const LASTFM_AUTOPLAY_FETCH_LIMIT = Number(process.env.LASTFM_AUTOPLAY_FETCH_LIMIT ?? 18);
 const LASTFM_AUTOPLAY_RESOLVE_LIMIT = Number(process.env.LASTFM_AUTOPLAY_RESOLVE_LIMIT ?? 12);
-const AUTOPLAY_DIVERSITY_POOL_SIZE = Number(process.env.AUTOPLAY_DIVERSITY_POOL_SIZE ?? 8);
-const AUTOPLAY_DIVERSITY_SCORE_BAND = Number(process.env.AUTOPLAY_DIVERSITY_SCORE_BAND ?? 12);
+const AUTOPLAY_DIVERSITY_POOL_SIZE = Number(process.env.AUTOPLAY_DIVERSITY_POOL_SIZE ?? 4);
+const AUTOPLAY_DIVERSITY_SCORE_BAND = Number(process.env.AUTOPLAY_DIVERSITY_SCORE_BAND ?? 6);
+const AUTOPLAY_SELECTION_MAX_SCORE_DROP = Number(process.env.AUTOPLAY_SELECTION_MAX_SCORE_DROP ?? 4);
+const AUTOPLAY_SELECTION_QUALITY_ADVANTAGE = Number(process.env.AUTOPLAY_SELECTION_QUALITY_ADVANTAGE ?? 3);
 const USE_DEEZER_METADATA = process.env.AUTOPLAY_DEEZER_METADATA !== "false";
 const AUTOPLAY_DEEZER_METADATA_LIMIT = Number(process.env.AUTOPLAY_DEEZER_METADATA_LIMIT ?? 18);
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
@@ -174,6 +178,7 @@ function applyCandidateMetadata(track, candidate) {
   const normalizedGenres = normalizeGenreTags(candidate.genres, { artist: candidate.artist, title: candidate.title });
   if (normalizedGenres.length) track.userData.genres = normalizedGenres;
   if (candidate.features) track.userData.features = candidate.features;
+  if (candidate.derivedFeatures) track.userData.derivedFeatures = candidate.derivedFeatures;
   if (candidate.metadataChecked) track.userData.metadataChecked = true;
   if (Number.isFinite(candidate.metadataConfidence)) track.userData.metadataConfidence = candidate.metadataConfidence;
   if (candidate.metadataProvider) track.userData.metadataProvider = candidate.metadataProvider;
@@ -716,6 +721,7 @@ async function resolveToPlayable(candidate, guildId) {
         genreCache.set(track.info.identifier, {
           genres: candidate.genres || [],
           features: candidate.features || null,
+          derivedFeatures: candidate.derivedFeatures || null,
           releaseYear: candidate.releaseYear || null,
         });
       }
@@ -749,13 +755,58 @@ function partitionRankedCandidates(rankedCandidates) {
   return { safe, deferred };
 }
 
+function getTransitionQuality(candidate, profile = {}) {
+  const referenceFeatures = {
+    ...(profile.avgDerivedFeatures || {}),
+    ...(profile.avgFeatures || {}),
+    ...(profile.referenceDerivedFeatures || {}),
+    ...(profile.referenceFeatures || {}),
+  };
+  const hasReferenceFeatures = Object.keys(referenceFeatures).length > 0;
+  const candidateFeatures = { ...(candidate?.derivedFeatures || {}), ...(candidate?.features || {}) };
+  const referenceFamilies = profile.referenceGenreFamilies || [];
+  const candidateFamilies = candidate?.genreFamilies || getGenreFamilies(candidate?.genres || []);
+  let quality = 0;
+
+  const genreCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
+  if (genreCompatibility === true) quality += 3;
+  if (genreCompatibility === false) quality -= 6;
+
+  if (hasReferenceFeatures && Number.isFinite(Number(candidateFeatures.tempo)) && Number.isFinite(Number(referenceFeatures.tempo))) {
+    const tempoDistance = getTempoDistance(candidateFeatures.tempo, referenceFeatures.tempo);
+    if (tempoDistance < 10) quality += 6;
+    else if (tempoDistance < 22) quality += 3;
+    else if (tempoDistance > 40) quality -= 6;
+  }
+
+  for (const [field, good, bad] of [
+    ["energy", 5, -6],
+    ["valence", 4, -5],
+  ]) {
+    if (!hasReferenceFeatures || !Number.isFinite(Number(candidateFeatures[field])) || !Number.isFinite(Number(referenceFeatures[field]))) continue;
+    const difference = Math.abs(Number(candidateFeatures[field]) - Number(referenceFeatures[field]));
+    if (difference < 0.15) quality += good;
+    else if (difference > 0.4) quality += bad;
+  }
+
+  if (getFeatureCoverage(candidate?.features) > 0) quality += 1;
+  return quality;
+}
+
 function getDiversifiedResolutionOrder(rankedCandidates, random = Math.random) {
   const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
   if (safe.length < 2 || AUTOPLAY_DIVERSITY_POOL_SIZE < 2) return rankedCandidates;
 
   const topScore = safe[0].score;
+  const topQuality = Number(safe[0].transitionQuality) || 0;
+  const minimumScore = topScore - AUTOPLAY_DIVERSITY_SCORE_BAND;
   const pool = safe
-    .filter((candidate) => candidate.score >= topScore - AUTOPLAY_DIVERSITY_SCORE_BAND)
+    .filter((candidate) => {
+      if (candidate.score < minimumScore) return false;
+      const scoreDrop = topScore - candidate.score;
+      if (scoreDrop <= AUTOPLAY_SELECTION_MAX_SCORE_DROP) return true;
+      return (Number(candidate.transitionQuality) || 0) >= topQuality + AUTOPLAY_SELECTION_QUALITY_ADVANTAGE;
+    })
     .slice(0, AUTOPLAY_DIVERSITY_POOL_SIZE);
   if (pool.length < 2) return rankedCandidates;
 
@@ -906,6 +957,9 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
   if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata(candidates, candidates.length);
 
   const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
+  rankedCandidates.forEach((candidate) => {
+    candidate.transitionQuality = getTransitionQuality(candidate, profile);
+  });
   const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
   const resolutionOrder = getDiversifiedResolutionOrder(rankedCandidates);
   const selectedCandidate = resolutionOrder[0];
@@ -929,6 +983,8 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
     `winner=${rankedCandidates[0]?.artist} - ${rankedCandidates[0]?.title} (${rankedCandidates[0]?.score})`,
     `selected=${selectedCandidate?.artist} - ${selectedCandidate?.title} (${selectedCandidate?.score})`,
     `selectedRank=${selectedRank || "none"}`,
+    `scoreDelta=${selectedCandidate ? Number((rankedCandidates[0].score - selectedCandidate.score).toFixed(2)) : "none"}`,
+    `transitionQuality=${selectedCandidate?.transitionQuality ?? "unknown"}`,
     `safe=${safe.length}`,
     `deferred=${deferred.length}`,
     `scoring=${rankedCandidates[0]?.scoringDetails?.join(", ") || "none"}`
@@ -983,12 +1039,14 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
     autoplayReference: { title: reference.cleanTitle, artist: reference.searchArtist },
     genres: referenceMetadata.genres,
     features: referenceMetadata.features,
+    derivedFeatures: referenceMetadata.derivedFeatures || null,
     releaseYear: referenceMetadata.releaseYear,
   };
-  if (referenceMetadata.genres?.length || referenceMetadata.features) {
+  if (referenceMetadata.genres?.length || referenceMetadata.features || referenceMetadata.derivedFeatures) {
     genreCache.set(referenceTrack.info.identifier, {
       genres: referenceMetadata.genres,
       features: referenceMetadata.features,
+      derivedFeatures: referenceMetadata.derivedFeatures || null,
       releaseYear: referenceMetadata.releaseYear,
     });
   }
@@ -1064,6 +1122,7 @@ module.exports = {
   applyCandidateMetadata,
   selectTagEnrichmentTargets,
   partitionRankedCandidates,
+  getTransitionQuality,
   getDiversifiedResolutionOrder,
   hasSessionVibeAnchor,
   getMetadataFreeYouTubeMixFallbackCandidates,

@@ -128,6 +128,15 @@ describe("Smart Autoplay System", () => {
 
       assert.strictEqual(profile.topArtists[0].artist, "Unknown");
     });
+
+    it("normalizes YouTube channel suffixes before building artist history", () => {
+      playbackState.set(GUILD_ID, { history: [] });
+
+      const profile = buildSessionProfile(GUILD_ID, createMockTrack("Into You", "ArianaGrandeVevo", "id-ariana"));
+
+      assert.strictEqual(profile.topArtists[0].artist, "Ariana Grande");
+      assert.deepStrictEqual(profile.lastThreeArtists, ["Ariana Grande"]);
+    });
   });
 
   describe("recordSkip", () => {

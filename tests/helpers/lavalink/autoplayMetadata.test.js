@@ -5,6 +5,7 @@ const {
   getFeatureCoverage,
   getTempoDistance,
   mergeAudioMetadata,
+  deriveCatalogFeatureHints,
   normalizeDeezerMetadata,
 } = require("../../../helpers/lavalink/autoplayMetadata");
 const { scoreCandidates } = require("../../../helpers/lavalink/candidateScoring");
@@ -49,6 +50,19 @@ function profile(overrides = {}) {
 }
 
 describe("Autoplay metadata without Spotify audio features", () => {
+  it("derives low-confidence mood hints without pretending they are measured audio features", () => {
+    const hints = deriveCatalogFeatureHints(
+      candidate("Summer Dance", "Artist", "id", {
+        genres: ["dance pop", "party"],
+        features: { tempo: 124, loudness: -7 },
+      })
+    );
+
+    assert.ok(hints.energy > 0.5 && hints.energy < 1);
+    assert.ok(hints.valence > 0.5);
+    assert.ok(hints.danceability > 0.4);
+  });
+
   it("normalizes Deezer catalog fields without inventing mood features", () => {
     const metadata = normalizeDeezerMetadata({
       id: 123,

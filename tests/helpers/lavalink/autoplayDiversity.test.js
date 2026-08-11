@@ -7,6 +7,7 @@ const {
   scoreCandidates,
 } = require("../../../helpers/lavalink/candidateScoring");
 const {
+  getTransitionQuality,
   getDiversifiedResolutionOrder,
   mergeCandidates,
 } = require("../../../helpers/lavalink/smartAutoplay");
@@ -100,7 +101,20 @@ describe("Autoplay diversity", () => {
     const selectedWithExplorationRoll = getDiversifiedResolutionOrder(ranked, () => 0.999999)[0];
 
     assert.strictEqual(selectedWithTopRoll.identifier, "top");
-    assert.strictEqual(selectedWithExplorationRoll.identifier, "close-two");
+    assert.strictEqual(selectedWithExplorationRoll.identifier, "close");
     assert.notStrictEqual(selectedWithExplorationRoll.identifier, "weak");
+  });
+
+  it("does not let a materially weaker candidate win without a better transition anchor", () => {
+    const ranked = [
+      { ...candidate("Top", "Artist A", "top", 100), transitionQuality: 4 },
+      { ...candidate("Weak", "Artist B", "weak", 94), transitionQuality: 1 },
+      { ...candidate("Bridge", "Artist C", "bridge", 94), transitionQuality: 8 },
+    ];
+
+    const selected = getDiversifiedResolutionOrder(ranked, () => 0.999999)[0];
+
+    assert.strictEqual(selected.identifier, "bridge");
+    assert.strictEqual(getTransitionQuality(ranked[2], profile()), 3);
   });
 });

@@ -1,6 +1,7 @@
 const Log = require("../logs/log");
 const { getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { playbackState } = require("./state");
+const { cleanArtistName } = require("./trackNormalization");
 
 const sessionStartTime = new Map();
 const genreCache = new Map();
@@ -14,15 +15,20 @@ function getTrackMetadata(track) {
   const identifier = track?.info?.identifier;
   const direct = track?.userData || {};
   const cached = genreCache.get(identifier) || {};
-  const artist = direct.autoplayReference?.artist || track?.info?.author;
+  const artist = cleanArtistName(direct.autoplayReference?.artist || track?.info?.author);
   const title = direct.autoplayReference?.title || track?.info?.title;
   const rawGenres = Array.isArray(direct.genres) && direct.genres.length > 0 ? direct.genres : cached.genres || [];
 
   return {
     genres: normalizeGenreTags(rawGenres, { artist, title }),
     features: direct.features || cached.features || null,
+    derivedFeatures: direct.derivedFeatures || cached.derivedFeatures || null,
     releaseYear: direct.releaseYear || cached.releaseYear || null,
   };
+}
+
+function getSessionArtist(track) {
+  return cleanArtistName(track?.userData?.autoplayReference?.artist || track?.info?.author || "Unknown") || "Unknown";
 }
 
 /**
@@ -68,6 +74,8 @@ function buildSessionProfile(guildId, referenceTrack) {
       referenceGenres: [],
       referenceGenreFamilies: [],
       referenceFeatures: null,
+      referenceDerivedFeatures: null,
+      avgDerivedFeatures: null,
       recentGenreFamilies: [],
       recentTracks: [],
       recentAutoplayTracks: [],
@@ -80,17 +88,18 @@ function buildSessionProfile(guildId, referenceTrack) {
   let totalDuration = 0;
   const identifiers = [];
   const featuresList = [];
+  const derivedFeaturesList = [];
   const tempos = [];
   const years = [];
   const energyValues = [];
   const valenceValues = [];
   const recentGenreFamilies = [];
-  let referenceMetadata = { genres: [], features: null, releaseYear: null };
+  let referenceMetadata = { genres: [], features: null, derivedFeatures: null, releaseYear: null };
 
   let profileWeightTotal = 0;
 
   recentTracks.forEach((track, index) => {
-    const artist = track.userData?.autoplayReference?.artist || track.info?.author || "Unknown";
+    const artist = getSessionArtist(track);
     const duration = track.info?.length || 0;
     const id = track.info?.identifier;
 
@@ -126,6 +135,8 @@ function buildSessionProfile(guildId, referenceTrack) {
       }
     }
 
+    if (metadata.derivedFeatures) derivedFeaturesList.push(metadata.derivedFeatures);
+
     if (cachedYear) {
       years.push(cachedYear);
     }
@@ -156,6 +167,20 @@ function buildSessionProfile(guildId, referenceTrack) {
       valence: averageFeature("valence"),
       acousticness: averageFeature("acousticness"),
       tempo: averageFeature("tempo"),
+    };
+  }
+
+  let avgDerivedFeatures = null;
+  if (derivedFeaturesList.length > 0) {
+    const averageDerivedFeature = (name) => {
+      const values = derivedFeaturesList.map((features) => features[name]).filter(Number.isFinite);
+      return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+    };
+
+    avgDerivedFeatures = {
+      energy: averageDerivedFeature("energy"),
+      danceability: averageDerivedFeature("danceability"),
+      valence: averageDerivedFeature("valence"),
     };
   }
 
@@ -206,7 +231,7 @@ function buildSessionProfile(guildId, referenceTrack) {
   // Track last 3 artists to prevent consecutive plays
   const lastThreeArtists = recentTracks
     .slice(-3)
-    .map((t) => t.userData?.autoplayReference?.artist || t.info?.author)
+    .map(getSessionArtist)
     .filter(Boolean);
 
   const cooldownIdentifiers = cooldownTracks.map((track) => track.info?.identifier).filter(Boolean);
@@ -228,6 +253,8 @@ function buildSessionProfile(guildId, referenceTrack) {
     referenceGenres: referenceMetadata.genres,
     referenceGenreFamilies: getGenreFamilies(referenceMetadata.genres),
     referenceFeatures: referenceMetadata.features,
+    referenceDerivedFeatures: referenceMetadata.derivedFeatures,
+    avgDerivedFeatures,
     recentGenreFamilies,
     recentTracks,
     recentAutoplayTracks,
