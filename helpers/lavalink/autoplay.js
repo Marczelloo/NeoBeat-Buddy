@@ -1,4 +1,5 @@
 const Log = require("../logs/log");
+const { recordAutoplayExposure } = require("./autoplayExposure");
 const { fetchSmartAutoplayTrack } = require("./smartAutoplay");
 const { cloneTrack, rememberAutoplayTrack } = require("./state");
 
@@ -56,6 +57,9 @@ async function queueAutoplayTrack(player, lastTrack, textChannelId) {
 
     await player.queue.add(cloned);
     rememberAutoplayTrack(player.guildId, cloned);
+    await recordAutoplayExposure(player.guildId, cloned, lastTrack).catch((error) => {
+      Log.warning("Autoplay exposure memory update failed", "", `guild=${player.guildId}`, `error=${error.message}`);
+    });
 
     Log.info(
       "➕ Autoplay queued",

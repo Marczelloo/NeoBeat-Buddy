@@ -1,5 +1,6 @@
 const { getGuildState } = require("../guildState");
 const Log = require("../logs/log");
+const { getAutoplayExposureSnapshot, getExposureKey, getExposureRecord } = require("./autoplayExposure");
 const { scoreCandidates, getTimeOfDayFactor } = require("./candidateScoring");
 const { areGenreFamiliesCompatible, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { getLastFmSimilarTracks, getLastFmTrackTags } = require("./lastfmClient");
@@ -16,6 +17,10 @@ const { filterValidSongs } = require("./trackValidation");
 
 const USE_SPOTIFY_AUTOPLAY = process.env.USE_SPOTIFY_AUTOPLAY === "true";
 const USE_SPOTIFY_METADATA = process.env.USE_SPOTIFY_METADATA === "true";
+const LASTFM_AUTOPLAY_FETCH_LIMIT = Number(process.env.LASTFM_AUTOPLAY_FETCH_LIMIT ?? 18);
+const LASTFM_AUTOPLAY_RESOLVE_LIMIT = Number(process.env.LASTFM_AUTOPLAY_RESOLVE_LIMIT ?? 12);
+const AUTOPLAY_DIVERSITY_POOL_SIZE = Number(process.env.AUTOPLAY_DIVERSITY_POOL_SIZE ?? 8);
+const AUTOPLAY_DIVERSITY_SCORE_BAND = Number(process.env.AUTOPLAY_DIVERSITY_SCORE_BAND ?? 12);
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
 const CONTROL_CHARACTER_PATTERN = new RegExp(
   `[${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]`,
@@ -58,11 +63,11 @@ async function loadLavalinkTracks(query) {
 }
 
 function candidateKey(candidate) {
-  const identifier = candidate?.identifier || candidate?.track?.info?.identifier;
-  if (identifier) return `id:${identifier}`;
+  const canonicalKey = getExposureKey(candidate);
+  if (canonicalKey) return `canonical:${canonicalKey}`;
 
-  const normalize = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-  return `text:${normalize(candidate?.artist)}:${normalize(candidate?.title)}`;
+  const identifier = candidate?.identifier || candidate?.track?.info?.identifier;
+  return identifier ? `id:${identifier}` : null;
 }
 
 function mergeCandidates(candidates) {
@@ -313,22 +318,54 @@ async function fetchSpotifyCandidates(referenceTrack, guildId, profile) {
   return candidates;
 }
 
-async function fetchLastFmCandidates(reference, guildId) {
+function getLastFmExposureWeight(track, reference, exposure, now = Date.now()) {
+  if (!exposure) return 0;
+
+  const ttlMs = Math.max(Number(exposure.ttlMs) || 0, 1);
+  const halfLifeMs = Math.max(ttlMs / 3, 60 * 60 * 1000);
+  const freshness = (entry) => {
+    if (!entry) return 0;
+    const ageMs = Math.max(0, now - Number(entry.lastSeen || 0));
+    return (Number(entry.count) || 1) * Math.exp(-ageMs / halfLifeMs);
+  };
+
+  const trackKey = getExposureKey(track);
+  const referenceKey = getExposureKey({ title: reference.cleanTitle, artist: reference.searchArtist });
+  const transitionKey = trackKey && referenceKey ? `${referenceKey}=>${trackKey}` : null;
+
+  return freshness(getExposureRecord(exposure, trackKey)) + freshness(getExposureRecord(exposure, transitionKey, "transitions"));
+}
+
+async function fetchLastFmCandidates(reference, guildId, exposure = null) {
   const candidates = [];
 
   try {
     const similarTracks = await getLastFmSimilarTracks({
       artist: reference.searchArtist,
       title: reference.cleanTitle,
-      limit: 12,
+      limit: Math.max(LASTFM_AUTOPLAY_FETCH_LIMIT, LASTFM_AUTOPLAY_RESOLVE_LIMIT),
     });
 
     const maximumMatch = Math.max(...similarTracks.map((track) => Number(track.match) || 0), 0);
 
+    // Last.fm returns a stable ordered list. Keep that order for fresh tracks,
+    // but move recently exposed neighbours behind unseen ones before paying
+    // the Lavalink resolution cost.
+    const orderedSimilar = similarTracks
+      .map((track, index) => ({ track, index }))
+      .sort((left, right) => {
+        const exposureDifference =
+          getLastFmExposureWeight(left.track, reference, exposure) - getLastFmExposureWeight(right.track, reference, exposure);
+        return exposureDifference || left.index - right.index;
+      })
+      .slice(0, Math.max(LASTFM_AUTOPLAY_RESOLVE_LIMIT, 1))
+      .map(({ track }) => track);
+
     // Tags add useful genre evidence but Last.fm is a shared service. Eight
-    // strong neighbours with a small worker pool are enough for a queue slot
-    // and keep the request pattern respectful under multiple guilds.
-    const resolved = await mapWithConcurrency(similarTracks.slice(0, 8), 2, async (similar) => {
+    // strong neighbours with a small worker pool are enough for a queue slot;
+    // the wider pool gives exposure penalties room to create variety without
+    // switching to an unrelated fallback.
+    const resolved = await mapWithConcurrency(orderedSimilar, 2, async (similar) => {
         try {
           const query = `${similar.artist} ${similar.title}`;
           const tracks = await loadLavalinkTracks(`ytsearch:${query}`);
@@ -597,7 +634,7 @@ async function collectCandidates(referenceTrack, guildId, profile, reference) {
   // completely different" incidents, so they are intentionally not used here.
   const candidateSources = [
     ["deezer", () => fetchDeezerCandidates(guildId, cleanTitle, searchArtist)],
-    ["lastfm", () => fetchLastFmCandidates(reference, guildId)],
+    ["lastfm", () => fetchLastFmCandidates(reference, guildId, profile.autoplayExposure)],
     ["youtubeMix", () => fetchYouTubeMixCandidates(identifier, guildId)],
   ];
   if (USE_SPOTIFY_AUTOPLAY) {
@@ -689,6 +726,34 @@ function partitionRankedCandidates(rankedCandidates) {
   }
 
   return { safe, deferred };
+}
+
+function getDiversifiedResolutionOrder(rankedCandidates, random = Math.random) {
+  const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
+  if (safe.length < 2 || AUTOPLAY_DIVERSITY_POOL_SIZE < 2) return rankedCandidates;
+
+  const topScore = safe[0].score;
+  const pool = safe
+    .filter((candidate) => candidate.score >= topScore - AUTOPLAY_DIVERSITY_SCORE_BAND)
+    .slice(0, AUTOPLAY_DIVERSITY_POOL_SIZE);
+  if (pool.length < 2) return rankedCandidates;
+
+  const floor = topScore - AUTOPLAY_DIVERSITY_SCORE_BAND;
+  const weights = pool.map((candidate) => Math.max(1, candidate.score - floor + 1));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const roll = Math.min(Math.max(Number(random()) || 0, 0), 0.999999) * totalWeight;
+  let cursor = 0;
+  let selected = pool[0];
+
+  for (let index = 0; index < pool.length; index += 1) {
+    cursor += weights[index];
+    if (roll < cursor) {
+      selected = pool[index];
+      break;
+    }
+  }
+
+  return [selected, ...safe.filter((candidate) => candidate !== selected), ...deferred];
 }
 
 function hasSessionVibeAnchor(profile = {}) {
@@ -821,6 +886,9 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
 
   const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
   const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
+  const resolutionOrder = getDiversifiedResolutionOrder(rankedCandidates);
+  const selectedCandidate = resolutionOrder[0];
+  const selectedRank = rankedCandidates.indexOf(selectedCandidate) + 1;
 
   for (const candidate of deferred) {
     Log.info(
@@ -838,6 +906,8 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
     "",
     `guild=${guildId}`,
     `winner=${rankedCandidates[0]?.artist} - ${rankedCandidates[0]?.title} (${rankedCandidates[0]?.score})`,
+    `selected=${selectedCandidate?.artist} - ${selectedCandidate?.title} (${selectedCandidate?.score})`,
+    `selectedRank=${selectedRank || "none"}`,
     `safe=${safe.length}`,
     `deferred=${deferred.length}`,
     `scoring=${rankedCandidates[0]?.scoringDetails?.join(", ") || "none"}`
@@ -849,7 +919,7 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
     `#3=${rankedCandidates[2]?.artist} - ${rankedCandidates[2]?.title} (${rankedCandidates[2]?.score})`
   );
 
-  return resolveRankedCandidates(rankedCandidates, guildId, context, resolutionOptions);
+  return resolveRankedCandidates(resolutionOrder, guildId, context, resolutionOptions);
 }
 
 async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
@@ -901,6 +971,8 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
 
   const profile = buildSessionProfile(guildId, referenceTrack);
   profile.guildId = guildId;
+  profile.autoplayReferenceKey = getExposureKey(referenceTrack);
+  profile.autoplayExposure = await getAutoplayExposureSnapshot(guildId);
 
   const timeOfDay = getTimeOfDayFactor();
 
@@ -968,6 +1040,7 @@ module.exports = {
   applyCandidateMetadata,
   selectTagEnrichmentTargets,
   partitionRankedCandidates,
+  getDiversifiedResolutionOrder,
   hasSessionVibeAnchor,
   getMetadataFreeYouTubeMixFallbackCandidates,
   resolveMetadataFreeYouTubeMixFallback,
@@ -976,4 +1049,6 @@ module.exports = {
   enrichCandidatesWithLastFmTags,
   getRelevantPlayableTrack,
   resolveToPlayable,
+  candidateKey,
+  mergeCandidates,
 };

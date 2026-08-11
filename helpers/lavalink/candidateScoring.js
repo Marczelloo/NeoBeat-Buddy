@@ -1,4 +1,5 @@
 const Log = require("../logs/log");
+const { getExposureKey, getExposureRecord } = require("./autoplayExposure");
 const { areGenreFamiliesCompatible, findGenreOverlap, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { sessionStartTime } = require("./sessionProfile");
 const { hasTrackIdentity } = require("./trackIdentity");
@@ -34,6 +35,40 @@ function getArtistWeight(artistCounts, artist) {
     (weight, [knownArtist, knownWeight]) => weight + (normalizeArtist(knownArtist) === candidateKey ? Number(knownWeight) || 0 : 0),
     0
   );
+}
+
+function getAutoplayExposurePenalty(candidate, profile, now = Date.now()) {
+  const snapshot = profile?.autoplayExposure;
+  const candidateKey = getExposureKey(candidate);
+  if (!snapshot || !candidateKey) return { penalty: 0, candidateKey, transitionKey: null };
+
+  const trackRecord = getExposureRecord(snapshot, candidateKey);
+  const ttlMs = Math.max(Number(snapshot.ttlMs) || 0, 1);
+  const halfLifeMs = Math.max(ttlMs / 3, 60 * 60 * 1000);
+  const ageFactor = (lastSeen) => {
+    const ageMs = Math.max(0, now - Number(lastSeen || 0));
+    return Math.exp(-ageMs / halfLifeMs);
+  };
+
+  let penalty = 0;
+  if (trackRecord) {
+    const freshness = ageFactor(trackRecord.lastSeen);
+    const repeatBonus = Math.min(Math.max(Number(trackRecord.count) || 1, 1) - 1, 4) * 4;
+    penalty += (10 + repeatBonus) * freshness;
+  }
+
+  const referenceKey = profile.autoplayReferenceKey;
+  const transitionKey = referenceKey ? `${referenceKey}=>${candidateKey}` : null;
+  const transitionRecord = getExposureRecord(snapshot, transitionKey, "transitions");
+  if (transitionRecord) {
+    penalty += 12 * ageFactor(transitionRecord.lastSeen);
+  }
+
+  return {
+    penalty: Math.min(36, Number(penalty.toFixed(2))),
+    candidateKey,
+    transitionKey,
+  };
 }
 
 function getCandidateVibeTrust(candidate, profile, candidateFamilies, referenceFamilies, referenceGenres) {
@@ -489,6 +524,19 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       });
     }
 
+    // Remembered exposure is intentionally a soft cross-session penalty. The
+    // current session's history still owns hard duplicate rejection below,
+    // while this layer prevents a freshly restarted room from replaying the
+    // same Last.fm path immediately.
+    const exposure = getAutoplayExposurePenalty(candidate, profile);
+    if (exposure.penalty > 0) {
+      score -= exposure.penalty;
+      scoringDetails.push(`exposure:-${exposure.penalty}`);
+      candidate.exposurePenalty = exposure.penalty;
+    } else {
+      candidate.exposurePenalty = 0;
+    }
+
     // Factor 12: Duplicate prevention (identifier-based)
     const isDuplicateById = candidate.identifier && (profile.recentIdentifiers || []).includes(candidate.identifier);
     if (isDuplicateById) {
@@ -552,4 +600,5 @@ module.exports = {
   getTimeOfDayFactor,
   normalizeArtist,
   getCandidateVibeTrust,
+  getAutoplayExposurePenalty,
 };

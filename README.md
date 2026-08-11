@@ -148,9 +148,24 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `PROGRESS_UPDATE_INTERVAL_MS` | `0` | Player-message update interval; `0` uses the built-in behavior. |
 | `LOUDNESS_NORMALIZATION` | `true` | Enables source-aware playback gain compensation. |
 | `LOUDNESS_<SOURCE>_DB` | provider default | Optional gain offset for a provider, e.g. `LOUDNESS_SOUNDCLOUD_DB=-3`. |
-| `AUTOPLAY_HISTORY_LIMIT` | `20` | Recent tracks remembered by autoplay for duplicate prevention. |
-| `TRACK_HISTORY_LIMIT` | `20` | Number of tracks retained in regular history. |
+| `AUTOPLAY_HISTORY_LIMIT` | `80` | Recent autoplay reservations remembered for hard duplicate prevention. |
+| `TRACK_HISTORY_LIMIT` | `80` | Number of tracks retained in the active playback history. |
+| `AUTOPLAY_EXPOSURE_TTL_MS` | `1209600000` | How long cross-session autoplay exposure is remembered (14 days). |
+| `AUTOPLAY_EXPOSURE_LIMIT` | `300` | Maximum canonical recommendations remembered per guild. |
+| `LASTFM_AUTOPLAY_FETCH_LIMIT` | `18` | Similar tracks requested from Last.fm for an adaptive candidate pool. |
+| `LASTFM_AUTOPLAY_RESOLVE_LIMIT` | `12` | Similar tracks resolved through Lavalink per autoplay cycle. |
+| `AUTOPLAY_DIVERSITY_POOL_SIZE` | `8` | Maximum near-top candidates eligible for weighted variety. |
+| `AUTOPLAY_DIVERSITY_SCORE_BAND` | `12` | Maximum score distance from the best candidate for diversity selection. |
 | `USE_SPOTIFY_AUTOPLAY` | `false` | Opt in to Spotify-derived autoplay candidates. Disabled by default because metadata and availability may vary. |
+
+Autoplay keeps two separate memories. The active playback history is a hard
+cooldown for exact recordings and provider variants during the current room
+session. A smaller persistent exposure ledger remembers canonical
+`artist + title` identities and `seed → recommendation` transitions for a
+limited time, so stopping and restarting a room does not immediately recreate
+the same radio path. The ledger is stored in `helpers/data/autoplayExposure.json`
+and is covered by the existing Compose data volume; it contains no track URLs,
+tokens, or full Lavalink payloads.
 
 ### Logs
 
