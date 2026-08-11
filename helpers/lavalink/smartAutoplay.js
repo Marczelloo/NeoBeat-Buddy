@@ -1,6 +1,10 @@
 const { getGuildState } = require("../guildState");
 const Log = require("../logs/log");
 const { getAutoplayExposureSnapshot, getExposureKey, getExposureRecord } = require("./autoplayExposure");
+const {
+  enrichCandidateWithDeezerMetadata,
+  enrichCandidatesWithDeezerMetadata,
+} = require("./autoplayMetadata");
 const { scoreCandidates, getTimeOfDayFactor } = require("./candidateScoring");
 const { areGenreFamiliesCompatible, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { getLastFmSimilarTracks, getLastFmTrackTags } = require("./lastfmClient");
@@ -21,6 +25,8 @@ const LASTFM_AUTOPLAY_FETCH_LIMIT = Number(process.env.LASTFM_AUTOPLAY_FETCH_LIM
 const LASTFM_AUTOPLAY_RESOLVE_LIMIT = Number(process.env.LASTFM_AUTOPLAY_RESOLVE_LIMIT ?? 12);
 const AUTOPLAY_DIVERSITY_POOL_SIZE = Number(process.env.AUTOPLAY_DIVERSITY_POOL_SIZE ?? 8);
 const AUTOPLAY_DIVERSITY_SCORE_BAND = Number(process.env.AUTOPLAY_DIVERSITY_SCORE_BAND ?? 12);
+const USE_DEEZER_METADATA = process.env.AUTOPLAY_DEEZER_METADATA !== "false";
+const AUTOPLAY_DEEZER_METADATA_LIMIT = Number(process.env.AUTOPLAY_DEEZER_METADATA_LIMIT ?? 18);
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
 const CONTROL_CHARACTER_PATTERN = new RegExp(
   `[${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]`,
@@ -94,7 +100,14 @@ function mergeCandidates(candidates) {
       artist: existing.artist,
       title: existing.title,
     });
-    existing.features ||= candidate.features;
+    const mergedFeatures = { ...(candidate.features || {}), ...(existing.features || {}) };
+    existing.features = Object.keys(mergedFeatures).length ? mergedFeatures : null;
+    existing.metadataChecked ||= candidate.metadataChecked;
+    existing.metadataConfidence = Math.max(existing.metadataConfidence || 0, candidate.metadataConfidence || 0);
+    existing.metadataProvider ||= candidate.metadataProvider;
+    existing.deezerId ||= candidate.deezerId;
+    existing.isrc ||= candidate.isrc;
+    existing.catalogRank ||= candidate.catalogRank;
     existing.similarity = Math.max(existing.similarity || 0, candidate.similarity || 0);
     existing.popularity = Math.max(existing.popularity || 0, candidate.popularity || 0);
     existing.releaseYear ||= candidate.releaseYear;
@@ -161,6 +174,9 @@ function applyCandidateMetadata(track, candidate) {
   const normalizedGenres = normalizeGenreTags(candidate.genres, { artist: candidate.artist, title: candidate.title });
   if (normalizedGenres.length) track.userData.genres = normalizedGenres;
   if (candidate.features) track.userData.features = candidate.features;
+  if (candidate.metadataChecked) track.userData.metadataChecked = true;
+  if (Number.isFinite(candidate.metadataConfidence)) track.userData.metadataConfidence = candidate.metadataConfidence;
+  if (candidate.metadataProvider) track.userData.metadataProvider = candidate.metadataProvider;
   if (candidate.releaseYear) track.userData.releaseYear = candidate.releaseYear;
 
   return track;
@@ -644,6 +660,9 @@ async function collectCandidates(referenceTrack, guildId, profile, reference) {
   const sourceResults = await Promise.allSettled(candidateSources.map(([, load]) => load()));
   const allCandidates = sourceResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
   const deduplicatedCandidates = await enrichCandidatesWithLastFmTags(mergeCandidates(allCandidates), guildId);
+  if (USE_DEEZER_METADATA) {
+    await enrichCandidatesWithDeezerMetadata(deduplicatedCandidates, AUTOPLAY_DEEZER_METADATA_LIMIT);
+  }
 
   Log.info(
     "📊 Candidate collection complete",
@@ -651,6 +670,8 @@ async function collectCandidates(referenceTrack, guildId, profile, reference) {
     `guild=${guildId}`,
     `raw=${allCandidates.length}`,
     `unique=${deduplicatedCandidates.length}`,
+    `metadata=${deduplicatedCandidates.filter((candidate) => candidate.metadataConfidence > 0).length}`,
+    `tempo=${deduplicatedCandidates.filter((candidate) => Number.isFinite(candidate.features?.tempo)).length}`,
     `sources=${[...new Set(allCandidates.map((candidate) => candidate.source))].join(",") || "none"}`
   );
 
@@ -949,10 +970,13 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
   const referenceMetadata = {
     artist: reference.searchArtist,
     title: reference.cleanTitle,
+    identifier: referenceTrack.info?.identifier,
+    track: referenceTrack,
     genres: referenceTrack.userData?.genres || [],
     features: referenceTrack.userData?.features || null,
   };
   if (referenceTags.length > 0) referenceMetadata.genres = referenceTags;
+  if (USE_DEEZER_METADATA) await enrichCandidateWithDeezerMetadata(referenceMetadata);
   if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata([referenceMetadata], 1);
   referenceTrack.userData = {
     ...(referenceTrack.userData || {}),

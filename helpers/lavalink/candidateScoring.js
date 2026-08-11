@@ -1,5 +1,6 @@
 const Log = require("../logs/log");
 const { getExposureKey, getExposureRecord } = require("./autoplayExposure");
+const { getFeatureCoverage, getTempoDistance } = require("./autoplayMetadata");
 const { areGenreFamiliesCompatible, findGenreOverlap, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { sessionStartTime } = require("./sessionProfile");
 const { hasTrackIdentity } = require("./trackIdentity");
@@ -87,6 +88,14 @@ function getCandidateVibeTrust(candidate, profile, candidateFamilies, referenceF
   }
 
   return trust;
+}
+
+function getMetadataConfidence(candidate) {
+  const coverage = getFeatureCoverage(candidate?.features);
+  if (coverage >= 3) return 1;
+  if (coverage > 0) return Math.max(Number(candidate?.metadataConfidence) || 0, 0.45);
+  if (candidate?.metadataChecked) return Math.max(Number(candidate?.metadataConfidence) || 0, 0.05);
+  return null;
 }
 
 function getProfileGenres(topGenres = []) {
@@ -278,9 +287,29 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       scoringDetails.push(`genre:+${cappedGenreBonus}(total-capped)`);
     }
 
+    // Spotify audio features are unavailable to many Development Mode apps.
+    // A Deezer catalog probe can still provide BPM/gain, so prefer candidates
+    // with measured audio metadata and make an explicitly checked miss less
+    // competitive than a candidate with a real tempo anchor. This is a soft
+    // penalty: obscure uploads remain eligible when every provider is sparse.
+    const metadataConfidence = getMetadataConfidence(candidate);
+    const featureCoverage = getFeatureCoverage(candidate.features);
+    if (metadataConfidence !== null) {
+      if (featureCoverage >= 3) {
+        score += 8;
+        scoringDetails.push("metadata:+8(audio-profile)");
+      } else if (hasNumber(candidate.features?.tempo)) {
+        score += 5;
+        scoringDetails.push("metadata:+5(tempo-anchor)");
+      } else if (candidate.metadataChecked && profile.referenceFeatures) {
+        score -= 12;
+        scoringDetails.push("metadata:-12(no-tempo-anchor)");
+      }
+    }
+
     // Factor 5: Tempo/BPM consistency
     if (hasNumber(candidate.features?.tempo) && hasNumber(profile.avgTempo)) {
-      const tempoDiff = Math.abs(candidate.features.tempo - profile.avgTempo);
+      const tempoDiff = getTempoDistance(candidate.features.tempo, profile.avgTempo);
 
       if (tempoDiff < 15) {
         score += 15;
@@ -288,7 +317,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       } else if (tempoDiff < 30) {
         score += 8;
         scoringDetails.push("tempo:+8");
-      } else if (tempoDiff > 60) {
+      } else if (tempoDiff > 45) {
         score -= 5;
         scoringDetails.push("tempo:-5");
       }
@@ -299,16 +328,19 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     const referenceFeatures = profile.referenceFeatures;
     if (candidate.features && referenceFeatures) {
       if (hasNumber(candidate.features.tempo) && hasNumber(referenceFeatures.tempo)) {
-        const tempoDiff = Math.abs(candidate.features.tempo - referenceFeatures.tempo);
+        const tempoDiff = getTempoDistance(candidate.features.tempo, referenceFeatures.tempo);
         if (tempoDiff < 10) {
           score += 18;
           scoringDetails.push("continuity:+18(tempo)");
         } else if (tempoDiff < 22) {
           score += 10;
           scoringDetails.push("continuity:+10(tempo)");
-        } else if (tempoDiff > 55) {
+        } else if (tempoDiff > 40) {
           score -= 20;
           scoringDetails.push("continuity:-20(tempo)");
+        } else if (tempoDiff > 26) {
+          score -= 8;
+          scoringDetails.push("continuity:-8(tempo)");
         }
       }
 
@@ -601,4 +633,5 @@ module.exports = {
   normalizeArtist,
   getCandidateVibeTrust,
   getAutoplayExposurePenalty,
+  getMetadataConfidence,
 };

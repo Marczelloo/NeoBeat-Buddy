@@ -133,6 +133,7 @@ All secrets belong in `.env`, `.env.dev`, or `.env.prod`—never in this reposit
 | `SPOTIFY_SP_DC` | Optional | Spotify web session cookie where required by the resolver. Treat as a secret. |
 | `DEEZER_ARL_TOKEN` | Optional | Deezer access cookie. Treat as a secret. |
 | `DEEZER_MASTER_KEY` | Optional | Deezer resolver configuration; the default is supplied in the example. |
+| `AUTOPLAY_DEEZER_METADATA` | `true` | Uses Deezer's public catalog metadata as a Spotify-independent autoplay signal. It can provide BPM, gain, ISRC, and release data when available. |
 | `GENIUS_API_KEY` | Optional | Better lyrics lookup coverage. |
 | `LASTFM_API_KEY` | Strongly recommended for autoplay | Similar-artist data and tags for DJ mode. |
 | `LASTFM_APPLICATION_NAME` / `LASTFM_SHARED_SECRET` | Optional | Application metadata for Last.fm integrations. |
@@ -156,6 +157,9 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `LASTFM_AUTOPLAY_RESOLVE_LIMIT` | `12` | Similar tracks resolved through Lavalink per autoplay cycle. |
 | `AUTOPLAY_DIVERSITY_POOL_SIZE` | `8` | Maximum near-top candidates eligible for weighted variety. |
 | `AUTOPLAY_DIVERSITY_SCORE_BAND` | `12` | Maximum score distance from the best candidate for diversity selection. |
+| `AUTOPLAY_DEEZER_METADATA_LIMIT` | `18` | Maximum candidates enriched with Deezer metadata during one autoplay cycle. |
+| `AUTOPLAY_DEEZER_METADATA_CACHE_TTL_MS` | `604800000` | In-memory cache lifetime for Deezer catalog metadata (7 days). |
+| `AUTOPLAY_METADATA_TIMEOUT_MS` | `3500` | Timeout for non-critical metadata requests; playback continues if the lookup fails. |
 | `USE_SPOTIFY_AUTOPLAY` | `false` | Opt in to Spotify-derived autoplay candidates. Disabled by default because metadata and availability may vary. |
 
 Autoplay keeps two separate memories. The active playback history is a hard
@@ -295,12 +299,12 @@ Autoplay is designed to act like a conservative DJ rather than a random recommen
 - It reads the current track and recent listening window.
 - It finds candidates from Last.fm, Deezer, available provider data, and (when explicitly enabled) Spotify.
 - It normalizes titles and artists before checking history, so the same song from another provider, a reupload, a remaster tag, or a small punctuation difference is not treated as a new recommendation.
-- It prefers compatible genre/vibe/tempo/energy signals and penalizes abrupt family changes.
+- It prefers compatible genre/vibe/tempo/energy signals and penalizes abrupt family changes. When Spotify audio features are unavailable, it uses Deezer's public catalog metadata as an additional tempo/loudness anchor and lowers confidence for candidates whose audio profile could not be verified.
 - It limits artist streaks, but does not ban a fitting artist permanently.
 - It preserves an already-good autoplay candidate rather than replacing it each time state updates.
 - If no metadata-backed candidate exists for a low-information track, it may use a direct YouTube Mix result; this path is deliberately constrained by duplicate and artist checks.
 
-Spotify autoplay is optional (`USE_SPOTIFY_AUTOPLAY=false` by default). Spotify data can be useful, but a catalog match may resolve to a different playable upload; Last.fm and provider-native signals remain the default foundation.
+Spotify autoplay is optional (`USE_SPOTIFY_AUTOPLAY=false` by default). Spotify audio-features access is restricted for many Development Mode apps, so MewBit does not depend on it: Spotify metadata is opportunistic, while Last.fm, Deezer catalog metadata, provider-native signals, and the confidence-aware scorer remain usable without a higher Spotify tier.
 
 ## Slash commands
 
