@@ -12,7 +12,7 @@ const { areGenreFamiliesCompatible, getGenreFamilies, normalizeGenreTags } = req
 const { getLastFmSimilarTracks, getLastFmTrackTags } = require("./lastfmClient");
 const { getPoru } = require("./players");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
-const { buildSessionProfile, genreCache } = require("./sessionProfile");
+const { buildSessionProfile, genreCache, isAutoplayTrack } = require("./sessionProfile");
 const { getSkipPatterns } = require("./skipLearning");
 const {
   getSpotifyBasedSuggestions,
@@ -172,6 +172,36 @@ function getTokenCoverage(needle, haystack) {
   return needleTokens.filter((token) => haystackTokens.has(token)).length / needleTokens.length;
 }
 
+const UNEXPECTED_MASHUP_MARKER_PATTERN = /\b(?:mash\s*up|bootleg|blend|megamix|flip|ale\s+to|versus|vs\.?)(?:\b|$)/i;
+const PROVIDER_UPLOADER_ALIAS_PATTERN = /\b(?:topic|vevo|official|records?|music|audio|channel|entertainment|lyrics?)\b/i;
+
+function getProviderValidationIssue(candidate, track) {
+  const candidateKinds = getVariantKinds(candidate?.title || "");
+  const resolvedTitle = track?.info?.title || "";
+  const resolvedKinds = getVariantKinds(resolvedTitle);
+  const unexpectedKinds = resolvedKinds.filter((kind) => !candidateKinds.includes(kind));
+  if (unexpectedKinds.length > 0) return `unexpected-version:${unexpectedKinds.join(",")}`;
+
+  if (
+    UNEXPECTED_MASHUP_MARKER_PATTERN.test(resolvedTitle) &&
+    !UNEXPECTED_MASHUP_MARKER_PATTERN.test(candidate?.title || "")
+  ) {
+    return "unexpected-mashup-or-edit";
+  }
+
+  const expectedArtist = normalizeComparableText(candidate?.artist || "");
+  const resolvedAuthor = normalizeComparableText(track?.info?.author || "");
+  const resolvedText = `${resolvedAuthor} ${normalizeComparableText(resolvedTitle)}`.trim();
+  const authorCoverage = getTokenCoverage(expectedArtist, resolvedAuthor);
+  const combinedCoverage = getTokenCoverage(expectedArtist, resolvedText);
+  const isUploaderAlias = PROVIDER_UPLOADER_ALIAS_PATTERN.test(resolvedAuthor);
+  if (expectedArtist && authorCoverage < 0.5 && !(isUploaderAlias && combinedCoverage >= 0.5)) {
+    return "provider-author-mismatch";
+  }
+
+  return null;
+}
+
 function matchesAutoplayCandidate(candidate, track) {
   const candidateTitle = getBaseTitle(candidate?.title || "");
   const candidateArtist = normalizeComparableText(candidate?.artist || "");
@@ -179,9 +209,11 @@ function matchesAutoplayCandidate(candidate, track) {
   const trackArtist = normalizeComparableText(track?.info?.author || "");
   const combinedTrackText = `${trackArtist} ${trackTitle}`.trim();
   const titleCoverage = getTokenCoverage(candidateTitle, trackTitle);
-  const artistCoverage = getTokenCoverage(candidateArtist, combinedTrackText);
+  const artistCoverage = getTokenCoverage(candidateArtist, trackArtist);
+  const combinedArtistCoverage = getTokenCoverage(candidateArtist, combinedTrackText);
+  const uploaderAlias = PROVIDER_UPLOADER_ALIAS_PATTERN.test(trackArtist);
 
-  return titleCoverage >= 0.75 && artistCoverage >= 0.5;
+  return titleCoverage >= 0.75 && (artistCoverage >= 0.5 || (uploaderAlias && combinedArtistCoverage >= 0.5));
 }
 
 /**
@@ -223,6 +255,51 @@ function applyCandidateMetadata(track, candidate) {
   if (candidate.releaseYear) track.userData.releaseYear = candidate.releaseYear;
 
   return track;
+}
+
+async function enrichManualAnchorTracks(tracks, guildId) {
+  const anchors = (Array.isArray(tracks) ? tracks : []).filter((track) => track && !isAutoplayTrack(track)).slice(0, 4);
+  if (!anchors.length) return anchors;
+
+  await mapWithConcurrency(anchors, 2, async (track) => {
+    const reference = getAutoplayReference(track);
+    if (!reference.cleanTitle || !reference.searchArtist) return;
+
+    const candidate = {
+      artist: reference.searchArtist,
+      title: reference.cleanTitle,
+      genres: track.userData?.genres || [],
+      features: track.userData?.features || null,
+      derivedFeatures: track.userData?.derivedFeatures || null,
+      releaseYear: track.userData?.releaseYear || null,
+    };
+
+    if (!candidate.genres.length) {
+      const tags = await getLastFmTrackTags({
+        artist: reference.searchArtist,
+        title: reference.cleanTitle,
+        limit: 8,
+      });
+      if (tags.length) candidate.genres = tags;
+    }
+    if (USE_DEEZER_METADATA) await enrichCandidateWithDeezerMetadata(candidate);
+
+    applyCandidateMetadata(track, candidate);
+    track.userData.manual = true;
+    track.userData.autoplay = false;
+
+    if (track.info?.identifier && (candidate.genres?.length || candidate.features || candidate.derivedFeatures)) {
+      genreCache.set(track.info.identifier, {
+        genres: candidate.genres || [],
+        features: candidate.features || null,
+        derivedFeatures: candidate.derivedFeatures || null,
+        releaseYear: candidate.releaseYear || null,
+      });
+    }
+  });
+
+  Log.debug("Manual autoplay anchors enriched", "", `guild=${guildId}`, `count=${anchors.length}`);
+  return anchors;
 }
 
 async function resolveCanonicalReference(cleanTitle, searchArtist, guildId) {
@@ -752,6 +829,17 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "" } = {
       );
       return null;
     }
+    const directProviderIssue = getProviderValidationIssue(candidate, candidate.track);
+    if (directProviderIssue) {
+      Log.debug(
+        "Skipping provider track with suspicious autoplay identity",
+        "",
+        `guild=${guildId}`,
+        `reason=${directProviderIssue}`,
+        `resolved=${formatLogValue(`${candidate.track.info?.author} - ${candidate.track.info?.title}`)}`
+      );
+      return null;
+    }
     if (!matchesAutoplayCandidate(candidate, candidate.track)) {
       Log.debug(
         "Skipping provider track with mismatched canonical identity",
@@ -784,6 +872,17 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "" } = {
           `guild=${guildId}`,
           `resolved=${formatLogValue(track.info?.title)}`,
           `requested=${formatLogValue(candidate.title)}`
+        );
+        return null;
+      }
+      const providerIssue = getProviderValidationIssue(candidate, track);
+      if (providerIssue) {
+        Log.debug(
+          "Skipping resolved autoplay track with suspicious identity",
+          "",
+          `guild=${guildId}`,
+          `reason=${providerIssue}`,
+          `resolved=${formatLogValue(`${track.info?.author} - ${track.info?.title}`)}`
         );
         return null;
       }
@@ -920,6 +1019,7 @@ function hasSessionVibeAnchor(profile = {}) {
   return Boolean(
     profile.referenceGenreFamilies?.length ||
       profile.referenceGenres?.length ||
+      profile.manualAnchorGenreFamilies?.length ||
       profile.referenceFeatures ||
       profile.topGenres?.length ||
       profile.avgFeatures
@@ -986,11 +1086,14 @@ async function resolveRankedCandidates(
   rankedCandidates,
   guildId,
   context = "primary",
-  { deferredOnly = false, referenceTitle = "" } = {}
+  { deferredOnly = false, referenceTitle = "", requireManualAnchor = false } = {}
 ) {
   const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
 
-  const pools = deferredOnly ? [["artist-streak emergency", deferred]] : [["safe", safe]];
+  const emergencyPool = deferred
+    .filter((candidate) => candidate.emergencyEligible !== false)
+    .filter((candidate) => !requireManualAnchor || candidate.manualAnchorEvidence);
+  const pools = deferredOnly ? [["artist-streak emergency", emergencyPool]] : [["safe", safe]];
   for (const [pool, candidates] of pools) {
     for (const candidate of candidates) {
       const playableTrack = await resolveToPlayable(candidate, guildId, { referenceTitle });
@@ -998,7 +1101,7 @@ async function resolveRankedCandidates(
 
       if (pool !== "safe") {
         Log.warning(
-          "Autoplay used deferred same-artist candidate",
+          "Autoplay used deferred candidate",
           "",
           `guild=${guildId}`,
           `track=${candidate.artist} - ${candidate.title}`,
@@ -1031,9 +1134,13 @@ async function resolveRankedCandidates(
 function getStableFallbackAnchor(profile, referenceTrack) {
   const current = getAutoplayReference(referenceTrack);
   const previousTracks = (profile.recentTracks || []).slice(0, -1).reverse();
+  const orderedAnchors = [
+    ...previousTracks.filter((track) => !isAutoplayTrack(track)),
+    ...previousTracks.filter(isAutoplayTrack),
+  ];
   const sessionFamilies = getGenreFamilies((profile.topGenres || []).map((genre) => genre.genre));
 
-  return previousTracks.find((track) => {
+  return orderedAnchors.find((track) => {
     const reference = getAutoplayReference(track);
     const anchorGenres = track?.userData?.genres || [];
     const hasMetadata = Boolean(anchorGenres.length || track?.userData?.features);
@@ -1051,7 +1158,10 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
   if (!candidates.length) return null;
   if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata(candidates, candidates.length);
 
-  const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
+  const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId, {
+    ...(resolutionOptions || {}),
+    anchorTrusted: context === "stable-anchor-fallback",
+  });
   rankedCandidates.forEach((candidate) => {
     candidate.transitionQuality = getTransitionQuality(candidate, profile);
   });
@@ -1062,7 +1172,9 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
 
   for (const candidate of deferred) {
     Log.info(
-      "Autoplay deferred repeated artist",
+      candidate.deferredReason === "manual-anchor-unverified"
+        ? "Autoplay deferred low-confidence drift candidate"
+        : "Autoplay deferred repeated artist",
       "",
       `guild=${guildId}`,
       `track=${candidate.artist} - ${candidate.title}`,
@@ -1098,7 +1210,7 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
   });
 }
 
-async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
+async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualTracks = [] } = {}) {
   if (!referenceTrack?.info) return null;
 
   const guildSettings = getGuildState(guildId);
@@ -1150,7 +1262,9 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
     });
   }
 
-  const profile = buildSessionProfile(guildId, referenceTrack);
+  await enrichManualAnchorTracks(pendingManualTracks, guildId);
+
+  const profile = buildSessionProfile(guildId, referenceTrack, { pendingManualTracks });
   profile.guildId = guildId;
   profile.referenceTitleRaw = referenceTrack.info?.title || reference.cleanTitle;
   profile.autoplayReferenceKey = getExposureKey(referenceTrack);
@@ -1171,6 +1285,9 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
     `avgTempo=${profile.avgTempo ? Math.round(profile.avgTempo) : "unknown"}BPM`,
     `avgYear=${profile.avgYear || "unknown"}`,
     `energyTrend=${profile.energyTrend || "unknown"}`,
+    `manualAnchors=${profile.manualAnchorRecords?.length || 0}`,
+    `pendingManual=${profile.pendingManualTracks?.length || 0}`,
+    `autoplayStreak=${profile.autoplayStreak || 0}`,
     `timeOfDay=${timeOfDay.period}`
   );
 
@@ -1208,6 +1325,7 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId) {
   // safe candidate from both the current and stable-anchor pools failed.
   const emergencyTrack = await scoreAndResolveCandidates(candidates, profile, skipPatterns, guildId, "artist-streak-emergency", {
     deferredOnly: true,
+    requireManualAnchor: profile.autoplayStreak >= 1,
   });
   if (emergencyTrack) return emergencyTrack;
 
@@ -1232,6 +1350,7 @@ module.exports = {
   enrichCandidatesWithLastFmTags,
   getRelevantPlayableTrack,
   matchesAutoplayCandidate,
+  getProviderValidationIssue,
   resolveToPlayable,
   candidateKey,
   mergeCandidates,

@@ -24,13 +24,15 @@ describe("Queue ordering", () => {
 
   it("keeps several manual tracks in their requested order", () => {
     const player = { queue: [track("Auto 1", true)] };
+    const requested = [track("Manual 1"), track("Manual 2")];
 
-    addManualTracksToQueue(player, [track("Manual 1"), track("Manual 2")]);
+    addManualTracksToQueue(player, requested);
 
     assert.deepStrictEqual(
       player.queue.map((item) => item.info.title),
       ["Manual 1", "Manual 2", "Auto 1"]
     );
+    assert.ok(requested.every((item) => item.userData.manual === true));
   });
 
   it("appends normally when there is no autoplay track", () => {

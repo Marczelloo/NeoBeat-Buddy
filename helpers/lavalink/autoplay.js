@@ -1,10 +1,17 @@
 const Log = require("../logs/log");
 const { recordAutoplayExposure } = require("./autoplayExposure");
+const { isAutoplayTrack } = require("./queueOrdering");
 const { fetchSmartAutoplayTrack } = require("./smartAutoplay");
 const { cloneTrack, rememberAutoplayTrack } = require("./state");
 
 const AUTOPLAY_PREFETCH_QUEUE_THRESHOLD = 1;
 const autoplayInFlight = new Set();
+
+function getPendingManualTracks(player) {
+  return Array.from(player?.queue || [])
+    .filter((track) => !isAutoplayTrack(track))
+    .slice(0, 4);
+}
 
 async function queueAutoplayTrack(player, lastTrack, textChannelId) {
   if (!player || !lastTrack) {
@@ -20,7 +27,9 @@ async function queueAutoplayTrack(player, lastTrack, textChannelId) {
   autoplayInFlight.add(player.guildId);
 
   try {
-    const relatedTrack = await fetchSmartAutoplayTrack(lastTrack, player.guildId);
+    const relatedTrack = await fetchSmartAutoplayTrack(lastTrack, player.guildId, {
+      pendingManualTracks: getPendingManualTracks(player),
+    });
 
     if (!relatedTrack) {
       Log.warning("Smart autoplay could not find a related track", "", `guild=${player.guildId}`);

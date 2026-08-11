@@ -6,9 +6,47 @@ const { cleanArtistName } = require("./trackNormalization");
 const sessionStartTime = new Map();
 const genreCache = new Map();
 const AUTOPLAY_VIBE_WEIGHT = 0.3;
+const MANUAL_CONTEXT_LIMIT = Math.max(Number(process.env.AUTOPLAY_MANUAL_CONTEXT_LIMIT ?? 12), 1);
+const PENDING_MANUAL_CONTEXT_LIMIT = Math.max(Number(process.env.AUTOPLAY_PENDING_MANUAL_CONTEXT_LIMIT ?? 4), 1);
 
 function isAutoplayTrack(track) {
   return Boolean(track?.userData?.autoplay || track?.info?.autoplayed);
+}
+
+function isManualTrack(track) {
+  return Boolean(track) && !isAutoplayTrack(track);
+}
+
+function getTrackContextKey(track) {
+  const identifier = track?.info?.identifier;
+  if (identifier) return `id:${identifier}`;
+  return `text:${String(track?.info?.author || "").toLowerCase()}|${String(track?.info?.title || "").toLowerCase()}`;
+}
+
+function uniqueTracks(tracks) {
+  const seen = new Set();
+  return tracks.filter((track) => {
+    if (!track) return false;
+    const key = getTrackContextKey(track);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildManualAnchorRecords(manualHistory, pendingManualTracks) {
+  const played = uniqueTracks(manualHistory.slice(-MANUAL_CONTEXT_LIMIT)).map((track, index, tracks) => ({
+    track,
+    type: "played",
+    weight: Number((0.85 + ((index + 1) / Math.max(tracks.length, 1)) * 0.2).toFixed(2)),
+  }));
+  const queued = uniqueTracks(pendingManualTracks.slice(0, PENDING_MANUAL_CONTEXT_LIMIT)).map((track) => ({
+    track,
+    type: "queued",
+    weight: 1.35,
+  }));
+
+  return [...queued, ...played];
 }
 
 function getTrackMetadata(track) {
@@ -37,10 +75,12 @@ function getSessionArtist(track) {
  * @param {Object} referenceTrack - Current or last played track
  * @returns {Object} Session profile with artists, genres, features, trends
  */
-function buildSessionProfile(guildId, referenceTrack) {
+function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = [] } = {}) {
   const state = playbackState.get(guildId);
   const history = state?.history || [];
   const recentAutoplayTracks = (state?.autoplayHistory || []).map((entry) => entry.track).filter(Boolean).slice(-20);
+  const manualHistory = Array.isArray(state?.manualHistory) ? state.manualHistory : history.filter(isManualTrack);
+  const pendingManual = pendingManualTracks.filter(isManualTrack).slice(0, PENDING_MANUAL_CONTEXT_LIMIT);
 
   Log.debug(
     "Building session profile",
@@ -56,6 +96,17 @@ function buildSessionProfile(guildId, referenceTrack) {
 
   const recentTracks = [...history.slice(-14), referenceTrack].filter(Boolean);
   const cooldownTracks = [...history, referenceTrack, ...recentAutoplayTracks].filter(Boolean).slice(-160);
+  const manualHistoryWithReference = isManualTrack(referenceTrack) ? [...manualHistory, referenceTrack] : manualHistory;
+  const manualAnchorRecords = buildManualAnchorRecords(manualHistoryWithReference, pendingManual);
+  const manualAnchorTracks = manualAnchorRecords.map((record) => record.track);
+  const manualAnchorGenreFamilies = [
+    ...new Set(manualAnchorRecords.flatMap((record) => getGenreFamilies(getTrackMetadata(record.track).genres))),
+  ];
+  let autoplayStreak = 0;
+  for (let index = recentTracks.length - 1; index >= 0; index -= 1) {
+    if (!isAutoplayTrack(recentTracks[index])) break;
+    autoplayStreak += 1;
+  }
 
   if (recentTracks.length === 0) {
     return {
@@ -80,6 +131,12 @@ function buildSessionProfile(guildId, referenceTrack) {
       recentTracks: [],
       recentAutoplayTracks: [],
       cooldownTracks: [],
+      manualHistory: [],
+      pendingManualTracks: pendingManual,
+      manualAnchorTracks: pendingManual,
+      manualAnchorRecords: buildManualAnchorRecords([], pendingManual),
+      manualAnchorGenreFamilies: [],
+      autoplayStreak: 0,
     };
   }
 
@@ -259,6 +316,12 @@ function buildSessionProfile(guildId, referenceTrack) {
     recentTracks,
     recentAutoplayTracks,
     cooldownTracks,
+    manualHistory: manualHistory.slice(-MANUAL_CONTEXT_LIMIT),
+    pendingManualTracks: pendingManual,
+    manualAnchorTracks,
+    manualAnchorRecords,
+    manualAnchorGenreFamilies,
+    autoplayStreak,
   };
 }
 
@@ -266,6 +329,7 @@ module.exports = {
   buildSessionProfile,
   getTrackMetadata,
   isAutoplayTrack,
+  isManualTrack,
   sessionStartTime,
   genreCache,
 };

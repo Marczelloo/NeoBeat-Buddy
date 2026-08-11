@@ -7,11 +7,14 @@ const playbackState = new Map();
 const lyricsState = new Map();
 const AUTOPLAY_HISTORY_LIMIT = Number(process.env.AUTOPLAY_HISTORY_LIMIT ?? 80);
 
+const isAutoplayTrack = (track) => Boolean(track?.info?.autoplayed || track?.userData?.autoplay);
+
 const ensurePlaybackState = (guildId) => {
   const state = playbackState.get(guildId) || {};
 
   if (!state.history) state.history = [];
   if (!state.autoplayHistory) state.autoplayHistory = [];
+  if (!state.manualHistory) state.manualHistory = [];
 
   playbackState.set(guildId, state);
   return state;
@@ -58,7 +61,15 @@ const pushTrackHistory = (guildId, track) => {
 
   const state = ensurePlaybackState(guildId);
   const history = state.history;
-  history.push(cloneTrack(track));
+  const snapshot = cloneTrack(track);
+  history.push(snapshot);
+
+  if (!isAutoplayTrack(track)) {
+    state.manualHistory.push(cloneTrack(track));
+    if (TRACK_HISTORY_LIMIT > 0 && state.manualHistory.length > TRACK_HISTORY_LIMIT) {
+      state.manualHistory.splice(0, state.manualHistory.length - TRACK_HISTORY_LIMIT);
+    }
+  }
 
   if (TRACK_HISTORY_LIMIT > 0 && history.length > TRACK_HISTORY_LIMIT) {
     history.splice(0, history.length - TRACK_HISTORY_LIMIT);

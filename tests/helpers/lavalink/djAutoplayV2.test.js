@@ -14,6 +14,7 @@ const {
   selectTagEnrichmentTargets,
   getStableFallbackAnchor,
   getRelevantPlayableTrack,
+  getProviderValidationIssue,
   resolveToPlayable,
 } = require("../../../helpers/lavalink/smartAutoplay");
 const { playbackState, pushTrackHistory, resolveEndedTrack } = require("../../../helpers/lavalink/state");
@@ -390,6 +391,53 @@ describe("DJ autoplay v2", () => {
 
     const session = buildSessionProfile(GUILD_ID, manual);
     assert.strictEqual(session.topGenres[0].genre, "hiphop");
+  });
+
+  it("remembers manual tracks and pending manual queue items as autoplay anchors", () => {
+    const manual = track("Manual rap", "Listener", "manual-anchor", { genres: ["hip hop"] });
+    const currentAutoplay = track("Autoplay rap", "Radio Artist", "auto-current", {
+      autoplay: true,
+      genres: ["hip hop"],
+    });
+    const queuedManual = track("Queued pop", "Listener", "manual-queued", { genres: ["pop"] });
+    playbackState.set(GUILD_ID, { history: [manual], manualHistory: [manual], autoplayHistory: [] });
+
+    const session = buildSessionProfile(GUILD_ID, currentAutoplay, { pendingManualTracks: [queuedManual] });
+
+    assert.strictEqual(session.autoplayStreak, 1);
+    assert.strictEqual(session.pendingManualTracks[0].info.identifier, "manual-queued");
+    assert.strictEqual(session.manualAnchorRecords[0].type, "queued");
+    assert.ok(session.manualAnchorGenreFamilies.includes("hiphop"));
+  });
+
+  it("rejects a candidate that contradicts the upcoming manual queue", () => {
+    const manual = track("Manual rap", "Listener", "manual-queue-anchor", { genres: ["hip hop"] });
+    const currentAutoplay = track("Autoplay rap", "Radio Artist", "auto-queue-current", {
+      autoplay: true,
+      genres: ["hip hop"],
+    });
+    const queuedManual = track("Queued rap", "Listener", "manual-queue-next", { genres: ["hip hop"] });
+    playbackState.set(GUILD_ID, { history: [manual], manualHistory: [manual], autoplayHistory: [] });
+    const session = buildSessionProfile(GUILD_ID, currentAutoplay, { pendingManualTracks: [queuedManual] });
+
+    const [ranked] = scoreCandidates(
+      [candidate("Metal detour", "Metal Artist", "metal-detour", { genres: ["metal"], similarity: 0.9 })],
+      session,
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked.hardRejected, true);
+    assert.strictEqual(ranked.rejectionReason, "queued-manual-vibe-mismatch");
+  });
+
+  it("rejects a provider mirror or mashup that changes the resolved artist lane", () => {
+    const issue = getProviderValidationIssue(
+      candidate("Ej, mała!", "club2020", "club-candidate"),
+      track("club2020 - Ej, mała! ale to Usher - Yeah!", "grabovski", "club-mashup")
+    );
+
+    assert.strictEqual(issue, "unexpected-mashup-or-edit");
   });
 
   it("blocks a provider variant of a track that appeared much earlier in the session", () => {

@@ -3,7 +3,7 @@ const djStore = require("../../helpers/dj/store");
 const { errorEmbed, successEmbed } = require("../../helpers/embeds");
 const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { createPoru, getPlayer } = require("../../helpers/lavalink");
-const { addManualTracksToQueue } = require("../../helpers/lavalink/queueOrdering");
+const { addManualTracksToQueue, markManualTrack } = require("../../helpers/lavalink/queueOrdering");
 const { searchAcrossSources } = require("../../helpers/lavalink/searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("../../helpers/lavalink/searchRanking");
 const { generateShareCode, importFromCode, shareWithUser } = require("../../helpers/playlists/sharing");
@@ -583,6 +583,7 @@ async function handlePlay(interaction, userId, guildId) {
 
   // Add requester info
   tracks.forEach((track) => {
+    markManualTrack(track);
     track.info = {
       title: track.title,
       author: track.author,

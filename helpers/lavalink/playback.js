@@ -15,7 +15,7 @@ const {
   stopLyricsSession,
 } = require("./lyricsFormatter");
 const { getPlayer, getPoru } = require("./players");
-const { addManualTracksToQueue } = require("./queueOrdering");
+const { addManualTracksToQueue, markManualTrack } = require("./queueOrdering");
 const { parseSearchIdentifier } = require("./searchIdentifier");
 const { buildSearchQueries } = require("./searchQueryVariants");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
@@ -284,6 +284,7 @@ async function lavalinkPlay({ guildId, voiceId, textId, query, requester, prepen
   for (const track of queueTargets) {
     if (!track) continue;
 
+    markManualTrack(track);
     track.info = { ...(track.info || {}), ...requesterMeta, requester: textId };
     track.userData = {
       ...(track.userData || {}),

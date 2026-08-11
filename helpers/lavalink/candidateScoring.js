@@ -2,13 +2,17 @@ const Log = require("../logs/log");
 const { getExposureKey, getExposureRecord } = require("./autoplayExposure");
 const { getFeatureCoverage, getTempoDistance } = require("./autoplayMetadata");
 const { areGenreFamiliesCompatible, findGenreOverlap, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
-const { sessionStartTime } = require("./sessionProfile");
+const { getTrackMetadata, sessionStartTime } = require("./sessionProfile");
 const { hasTrackIdentity } = require("./trackIdentity");
 const {
   cleanArtistName,
   getAutoplayVersionCompatibility,
   normalizeComparableText,
 } = require("./trackNormalization");
+
+const AUTOPLAY_DRIFT_GUARD_AFTER = Math.max(Number(process.env.AUTOPLAY_DRIFT_GUARD_AFTER ?? 2), 1);
+const AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE = Number(process.env.AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE ?? 42);
+const AUTOPLAY_UNVERIFIED_DRIFT_PENALTY = Number(process.env.AUTOPLAY_UNVERIFIED_DRIFT_PENALTY ?? 18);
 
 /**
  * Gets time-of-day factor for energy preferences
@@ -41,6 +45,131 @@ function getCandidateFeatures(candidate) {
   };
 }
 
+function getManualAnchorRecords(profile = {}) {
+  if (Array.isArray(profile.manualAnchorRecords)) return profile.manualAnchorRecords;
+  return (profile.manualAnchorTracks || []).map((track) => ({ track, type: "played", weight: 1 }));
+}
+
+function getManualAnchorVibe(candidate, profile = {}, { anchorTrusted = false } = {}) {
+  const records = getManualAnchorRecords(profile);
+  if (!records.length) {
+    return {
+      hasUsableAnchor: false,
+      hasEvidence: false,
+      bestScore: 0,
+      bestType: null,
+      bestQueuedScore: 0,
+      allComparableConflicting: false,
+      allQueuedConflicting: false,
+    };
+  }
+
+  const candidateGenres = normalizeGenreTags(candidate?.genres || [], {
+    artist: candidate?.artist,
+    title: candidate?.title,
+  });
+  const candidateFamilies = getGenreFamilies(candidateGenres);
+  const candidateFeatures = getCandidateFeatures(candidate);
+  const candidateArtist = normalizeArtist(candidate?.artist);
+  const similarity = normalizeSimilarity(candidate?.similarity);
+  const results = [];
+
+  for (const record of records) {
+    const track = record?.track;
+    const metadata = getTrackMetadata(track);
+    const anchorGenres = metadata.genres || [];
+    const anchorFamilies = getGenreFamilies(anchorGenres);
+    const anchorFeatures = {
+      ...(metadata.derivedFeatures || {}),
+      ...(metadata.features || {}),
+    };
+    const anchorArtist = normalizeArtist(track?.userData?.autoplayReference?.artist || track?.info?.author);
+    const genreCompatibility = areGenreFamiliesCompatible(anchorFamilies, candidateFamilies);
+    const sharedGenres = findGenreOverlap(anchorGenres, candidateGenres);
+    const comparableFields = [];
+    let score = 0;
+    let conflict = false;
+
+    if (genreCompatibility !== null) {
+      comparableFields.push("genre");
+      if (genreCompatibility === true) score += 36;
+      else {
+        score -= 34;
+        conflict = true;
+      }
+    }
+    if (sharedGenres.length > 0) {
+      comparableFields.push("subgenre");
+      score += 20;
+    }
+    if (candidateArtist && anchorArtist && candidateArtist === anchorArtist) {
+      comparableFields.push("artist");
+      score += 8;
+    }
+
+    for (const field of ["tempo", "energy", "valence", "danceability"]) {
+      if (!hasNumber(candidateFeatures[field]) || !hasNumber(anchorFeatures[field])) continue;
+      comparableFields.push(field);
+      const distance = field === "tempo"
+        ? getTempoDistance(candidateFeatures[field], anchorFeatures[field])
+        : Math.abs(candidateFeatures[field] - anchorFeatures[field]);
+      if (distance === null) continue;
+      const close = field === "tempo" ? distance < 22 : distance < 0.22;
+      const far = field === "tempo" ? distance > 45 : distance > 0.42;
+      if (close) score += field === "tempo" ? 16 : 12;
+      else if (far) {
+        score -= field === "tempo" ? 18 : 14;
+        conflict = true;
+      }
+    }
+
+    // Candidates scored from a stable manual anchor are already carrying a
+    // trusted similarity signal, even when the catalog has no tags/features.
+    if (anchorTrusted && similarity > 0) {
+      comparableFields.push("similarity");
+      score = Math.max(score, Math.round(similarity * 100));
+    }
+
+    if (!comparableFields.length) continue;
+
+    const normalizedScore = Math.max(0, Math.min(100, score * (Number(record.weight) || 1)));
+    results.push({
+      type: record.type || "played",
+      score: normalizedScore,
+      conflict,
+      comparable: comparableFields,
+    });
+  }
+
+  if (!results.length) {
+    return {
+      hasUsableAnchor: false,
+      hasEvidence: false,
+      bestScore: 0,
+      bestType: null,
+      bestQueuedScore: 0,
+      allComparableConflicting: false,
+      allQueuedConflicting: false,
+    };
+  }
+
+  const best = results.reduce((winner, result) => (result.score > winner.score ? result : winner), results[0]);
+  const queuedResults = results.filter((result) => result.type === "queued");
+  const queuedBest = queuedResults.sort((left, right) => right.score - left.score)[0];
+  const comparableConflicts = results.filter((result) => result.comparable.length > 0);
+  const queuedComparable = queuedResults.filter((result) => result.comparable.length > 0);
+
+  return {
+    hasUsableAnchor: true,
+    hasEvidence: true,
+    bestScore: Number(best.score.toFixed(2)),
+    bestType: best.type,
+    bestQueuedScore: queuedBest ? Number(queuedBest.score.toFixed(2)) : 0,
+    allComparableConflicting: comparableConflicts.length > 0 && comparableConflicts.every((result) => result.conflict && result.score < 20),
+    allQueuedConflicting: queuedComparable.length > 0 && queuedComparable.every((result) => result.conflict && result.score < 20),
+  };
+}
+
 function getReferenceFeatures(profile = {}) {
   return {
     ...(profile.avgDerivedFeatures || {}),
@@ -54,6 +183,7 @@ function hasSessionVibeAnchor(profile = {}) {
   return Boolean(
     profile.referenceGenreFamilies?.length ||
       profile.referenceGenres?.length ||
+      profile.manualAnchorGenreFamilies?.length ||
       Object.keys(getReferenceFeatures(profile)).length > 0 ||
       profile.topGenres?.length ||
       profile.avgFeatures
@@ -196,7 +326,7 @@ function getProfileGenres(topGenres = []) {
  * @param {string} guildId - Guild identifier
  * @returns {Array} Sorted candidates with scores
  */
-function scoreCandidates(candidates, profile, skipPatterns, guildId) {
+function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOptions = {}) {
   const timeOfDay = getTimeOfDayFactor();
 
   if (!sessionStartTime.has(guildId)) {
@@ -210,6 +340,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     candidate.hardRejected = false;
     candidate.deferred = false;
     candidate.deferredReason = null;
+    candidate.emergencyEligible = true;
+    candidate.manualAnchorUnverified = false;
 
     candidate.genres = normalizeGenreTags(candidate.genres, { artist: candidate.artist, title: candidate.title });
     const candidateFamilies = getGenreFamilies(candidate.genres);
@@ -245,6 +377,10 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     // song. Direct similarity, metadata, or audio features are required for
     // every automatic pick, including sessions whose reference has no tags.
     const vibeEvidence = getVibeEvidence(candidate, profile, candidateFamilies, referenceFamilies, referenceGenres);
+    const manualAnchorVibe = getManualAnchorVibe(candidate, profile, scoringOptions);
+    candidate.manualAnchorScore = manualAnchorVibe.bestScore;
+    candidate.manualAnchorType = manualAnchorVibe.bestType;
+    candidate.manualAnchorEvidence = manualAnchorVibe.hasEvidence;
     const hasMusicSignal =
       vibeEvidence.hasAnySimilarity ||
       vibeEvidence.hasCompatibleGenre ||
@@ -262,6 +398,41 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
       candidate.hardRejected = true;
       candidate.rejectionReason = candidate.isFallback ? "fallback-without-vibe-signal" : "unverified-provider-candidate";
       scoringDetails.push(`${candidate.isFallback ? "fallback" : "provider"}:-1000(no-vibe-signal)`);
+    }
+
+    if (!candidate.hardRejected && manualAnchorVibe.hasUsableAnchor) {
+      const anchorBonus = Math.min(18, Math.round(manualAnchorVibe.bestScore * 0.18));
+      if (anchorBonus > 0) {
+        score += anchorBonus;
+        scoringDetails.push(`manualAnchor:+${anchorBonus}(${manualAnchorVibe.bestType || "played"})`);
+      }
+
+      const hasPendingManual = (profile.pendingManualTracks || []).length > 0;
+      const driftGuardActive = Number(profile.autoplayStreak) >= AUTOPLAY_DRIFT_GUARD_AFTER;
+      if (hasPendingManual && Number(profile.autoplayStreak) >= 1 && manualAnchorVibe.allQueuedConflicting) {
+        score -= 1000;
+        candidate.hardRejected = true;
+        candidate.rejectionReason = "queued-manual-vibe-mismatch";
+        scoringDetails.push("manualQueue:-1000(vibe-mismatch)");
+      } else if (driftGuardActive && manualAnchorVibe.allComparableConflicting) {
+        score -= 1000;
+        candidate.hardRejected = true;
+        candidate.rejectionReason = "manual-anchor-drift";
+        scoringDetails.push("manualAnchor:-1000(drift)");
+      } else if (
+        driftGuardActive &&
+        !scoringOptions.anchorTrusted &&
+        manualAnchorVibe.bestScore < AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE
+      ) {
+        score -= AUTOPLAY_UNVERIFIED_DRIFT_PENALTY;
+        candidate.manualAnchorUnverified = true;
+        candidate.emergencyEligible = false;
+        if (!candidate.deferred) {
+          candidate.deferred = true;
+          candidate.deferredReason = "manual-anchor-unverified";
+        }
+        scoringDetails.push(`manualAnchor:-${AUTOPLAY_UNVERIFIED_DRIFT_PENALTY}(unverified)`);
+      }
     }
 
     // A provider recommendation without a bridge to the current track is not
@@ -284,7 +455,12 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     // The last track is the strongest signal. Do not allow a known genre-family
     // jump such as rap -> metal just because the source has a high quality bonus.
     const transitionCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
-    if (transitionCompatibility === false) {
+    const canRefineGenericRejection = [
+      "unverified-provider-candidate",
+      "fallback-without-vibe-signal",
+      "no-transition-bridge",
+    ].includes(candidate.rejectionReason);
+    if (transitionCompatibility === false && (!candidate.hardRejected || canRefineGenericRejection)) {
       score -= 90;
       candidate.hardRejected = true;
       candidate.rejectionReason = "incompatible-genre-family";

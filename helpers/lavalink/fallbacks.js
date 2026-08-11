@@ -3,6 +3,8 @@ const Log = require("../logs/log");
 const { MAX_FALLBACK_ATTEMPTS } = require("./constants");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 
+const isAutoplayTrack = (track) => Boolean(track?.info?.autoplayed || track?.userData?.autoplay);
+
 const describeTrack = (track) => {
   if (!track) return "unknown";
   const info = track.info || {};
@@ -78,6 +80,12 @@ async function tryQueueFallbackTrack(player, failedTrack) {
         ...(fallbackTrack.userData || {}),
         fallbackParent: describeTrack(failedTrack),
         fallbackAttempts: previousAttempts + 1,
+        autoplay: isAutoplayTrack(failedTrack),
+        manual: !isAutoplayTrack(failedTrack),
+      };
+      fallbackTrack.info = {
+        ...(fallbackTrack.info || {}),
+        autoplayed: isAutoplayTrack(failedTrack),
       };
 
       player.queue.unshift(fallbackTrack);
