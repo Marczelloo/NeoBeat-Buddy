@@ -4,6 +4,7 @@ const { describe, it } = require("node:test");
 const { normalizeGenreTags } = require("../../../helpers/lavalink/genreUtils");
 const {
   cleanTrackMetadata,
+  getAutoplayVersionCompatibility,
   getBaseTitle,
   getVariantKinds,
   isUnrequestedAlternateVersion,
@@ -28,6 +29,14 @@ describe("Autoplay track normalization", () => {
     assert.strictEqual(isUnrequestedAlternateVersion("Pink Pony Club (Acoustic)", "Pink Pony Club acoustic"), false);
     assert.strictEqual(isUnrequestedAlternateVersion("Pink Pony Club (Live)", "Pink Pony Club acoustic"), true);
     assert.strictEqual(isUnrequestedAlternateVersion("Song (Acoustic Remix)", "Song Remix"), true);
+  });
+
+  it("keeps tempo styles available to autoplay without opening unrelated alternates", () => {
+    assert.strictEqual(getAutoplayVersionCompatibility("Song (Nightcore)").allowed, true);
+    assert.strictEqual(getAutoplayVersionCompatibility("Song (Slowed + Reverb)").mode, "tempo-style");
+    assert.strictEqual(getAutoplayVersionCompatibility("Song (Nightcore)", "Reference (Nightcore)").mode, "tempo-consistent");
+    assert.strictEqual(getAutoplayVersionCompatibility("Song (Remix)").allowed, false);
+    assert.strictEqual(getAutoplayVersionCompatibility("Song (Remix)", "Reference (Remix)").allowed, true);
   });
 
   it("keeps base identity stable across Unicode, provider noise, and variants", () => {

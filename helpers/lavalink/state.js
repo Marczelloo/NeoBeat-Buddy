@@ -22,7 +22,7 @@ const rememberAutoplayTrack = (guildId, track) => {
 
   const state = ensurePlaybackState(guildId);
   const identity = getTrackIdentity(track);
-  const identityKey = identity.textKey || (identity.identifier ? `id:${identity.identifier}` : null);
+  const identityKey = identity.preferredKey;
   if (!identityKey) return;
 
   state.autoplayHistory = state.autoplayHistory.filter((entry) => entry.identityKey !== identityKey);

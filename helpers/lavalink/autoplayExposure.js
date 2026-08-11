@@ -16,6 +16,7 @@ let saveTimer = null;
 
 function getExposureKey(trackLike) {
   const identity = getTrackIdentity(trackLike);
+  if (identity.isrc) return `isrc:${identity.isrc}`;
   if (identity.textKey) return identity.textKey;
   return identity.identifier ? `id:${identity.identifier}` : null;
 }

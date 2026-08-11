@@ -131,4 +131,24 @@ describe("Autoplay metadata without Spotify audio features", () => {
 
     assert.ok(ranked.scoringDetails.includes("metadata:-12(no-tempo-anchor)"));
   });
+
+  it("uses derived catalog energy as a continuity signal", () => {
+    const ranked = scoreCandidates(
+      [
+        candidate("Derived bridge", "Bridge Artist", "derived-bridge", {
+          features: { tempo: 110 },
+        }),
+      ].map((item) => ({ ...item, derivedFeatures: { energy: 0.7, valence: 0.6 } })),
+      profile({
+        avgFeatures: { tempo: 108 },
+        referenceFeatures: { tempo: 108 },
+        referenceDerivedFeatures: { energy: 0.68, valence: 0.58 },
+      }),
+      noSkips,
+      "autoplay-derived-feature-continuity"
+    );
+
+    assert.ok(ranked[0].scoringDetails.includes("continuity:+18(energy)"));
+    assert.notStrictEqual(ranked[0].vibeConfidence, "low");
+  });
 });

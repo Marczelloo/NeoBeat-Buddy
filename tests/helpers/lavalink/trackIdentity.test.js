@@ -59,4 +59,14 @@ describe("Autoplay track identity", () => {
     assert.strictEqual(hasTrackIdentity([original], remixMetadata, { includeIdentifier: false }), true);
     assert.strictEqual(hasTrackIdentity([original], unrelatedCover, { includeIdentifier: false }), false);
   });
+
+  it("uses ISRC as a provider-independent identity when available", () => {
+    const youtube = {
+      info: { title: "Save Your Tears", author: "The Weeknd - Topic", identifier: "youtube-save", isrc: "USUG12001870" },
+    };
+    const deezer = { title: "Save Your Tears", artist: "The Weeknd", identifier: "deezer-save", isrc: "US-UG1-20-01870" };
+
+    assert.strictEqual(getTrackIdentity(youtube).preferredKey, "isrc:USUG12001870");
+    assert.strictEqual(hasTrackIdentity([youtube], deezer, { includeIdentifier: false }), true);
+  });
 });

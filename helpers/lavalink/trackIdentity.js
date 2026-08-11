@@ -51,10 +51,22 @@ function normalizeTitle(value, artistKeys) {
 
 function getTrackIdentity(trackLike) {
   const info = trackLike?.info || {};
+  const pluginInfo = trackLike?.pluginInfo || {};
   const canonical = trackLike?.userData?.autoplayReference || {};
   const title = canonical.title || trackLike?.title || info.title || "";
   const artist = canonical.artist || trackLike?.artist || info.author || "";
   const identifier = trackLike?.identifier || info.identifier || "";
+  const rawIsrc =
+    trackLike?.isrc ||
+    info.isrc ||
+    pluginInfo.isrc ||
+    trackLike?.userData?.isrc ||
+    trackLike?.userData?.autoplayIsrc ||
+    "";
+  const isrc = String(rawIsrc || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
   const artistKeys = getArtistKeys(artist);
   const canonicalTitle = normalizeTitle(title, artistKeys);
   const normalizedArtist = artistKeys[0] || "";
@@ -62,11 +74,13 @@ function getTrackIdentity(trackLike) {
 
   return {
     identifier: String(identifier || "").trim(),
+    isrc: isrc || null,
     title: canonicalTitle,
     artist: normalizedArtist,
     artistKeys,
     textKey: canonicalTitle && normalizedArtist ? `text:${normalizedArtist}|${canonicalTitle}` : null,
     textKeys: canonicalTitle ? textKeys : [],
+    preferredKey: isrc ? `isrc:${isrc}` : canonicalTitle && normalizedArtist ? `text:${normalizedArtist}|${canonicalTitle}` : identifier ? `id:${identifier}` : null,
   };
 }
 
@@ -74,6 +88,7 @@ function getTrackIdentityKeys(trackLike, { includeIdentifier = true } = {}) {
   const identity = getTrackIdentity(trackLike);
   const keys = [];
 
+  if (identity.isrc) keys.push(`isrc:${identity.isrc}`);
   if (includeIdentifier && identity.identifier) keys.push(`id:${identity.identifier}`);
   keys.push(...identity.textKeys);
 

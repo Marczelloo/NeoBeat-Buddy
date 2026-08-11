@@ -125,6 +125,39 @@ function isUnrequestedAlternateVersion(candidateTitle, query) {
   return !queryRequestsVariant(query, candidateTitle);
 }
 
+/**
+ * Autoplay has a different version policy than an explicit user search.
+ *
+ * Tempo styles (nightcore, slowed, sped-up) are valid listening lanes and
+ * should be allowed to form their own radio session. Other alternate versions
+ * are only carried forward when the current reference is already in the same
+ * lane; this prevents an original recording from silently turning into a
+ * random remix/cover while preserving remix and live sessions.
+ */
+function getAutoplayVersionCompatibility(candidateTitle, referenceTitle = "") {
+  const candidateKinds = getVariantKinds(candidateTitle);
+  if (!candidateKinds.length) return { allowed: true, mode: "original", candidateKinds, referenceKinds: [] };
+
+  const referenceKinds = getVariantKinds(referenceTitle);
+  const tempoOnly = candidateKinds.every((kind) => kind === "tempo");
+  if (tempoOnly) {
+    return {
+      allowed: true,
+      mode: referenceKinds.includes("tempo") ? "tempo-consistent" : "tempo-style",
+      candidateKinds,
+      referenceKinds,
+    };
+  }
+
+  const matchesReference = candidateKinds.every((kind) => referenceKinds.includes(kind));
+  return {
+    allowed: matchesReference,
+    mode: matchesReference ? "reference-consistent" : "unmatched-alternate",
+    candidateKinds,
+    referenceKinds,
+  };
+}
+
 function cleanTrackMetadata(title, author) {
   const rawTitle = String(title || "").trim();
   const suppliedArtist = cleanArtistName(author);
@@ -152,6 +185,7 @@ module.exports = {
   cleanArtistName,
   cleanTrackMetadata,
   getBaseTitle,
+  getAutoplayVersionCompatibility,
   getVariantKinds,
   isUnrequestedAlternateVersion,
   normalizeComparableText,

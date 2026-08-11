@@ -33,9 +33,10 @@ MewBit is a Discord music bot with a shared listening **Discord Activity**. It u
 
 - Pre-fetches compatible tracks before the queue runs dry.
 - Scores candidates using track title/artist normalization, Last.fm similarity and tags, genre families, energy/tempo signals when available, source reliability, and recent listening context.
-- Rejects alternate uploads of tracks that have already appeared, including the same song from a different provider.
+- Rejects alternate uploads of tracks that have already appeared, including the same song from a different provider; ISRC is used when available and normalized artist/title identity remains the fallback.
 - Avoids loops, over-repetition, and weak fallback results while still allowing a fitting artist to return after a sensible cooldown.
-- Uses direct YouTube Mix candidates only as a constrained fallback for tracks with insufficient metadata (for example niche or meme uploads), rather than broad unrelated search.
+- Keeps tempo styles such as nightcore, slowed, and sped-up available as valid autoplay lanes, while requiring remix/live/acoustic/cover variants to match the current version lane.
+- Uses direct YouTube Mix candidates only as a constrained, score-gated fallback for tracks with insufficient metadata (for example niche or meme uploads), rather than broad unrelated search.
 - Places manually queued tracks ahead of autoplay tracks; a manually added track goes after other manual items and before the autoplay tail.
 
 ### Discord Activity
@@ -159,6 +160,7 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_DIVERSITY_SCORE_BAND` | `6` | Maximum score distance from the best candidate for diversity selection. |
 | `AUTOPLAY_SELECTION_MAX_SCORE_DROP` | `4` | Strict score gate for exploration; candidates below it need a stronger transition anchor. |
 | `AUTOPLAY_SELECTION_QUALITY_ADVANTAGE` | `3` | Transition-quality advantage required for a wider exploration pick. |
+| `AUTOPLAY_MIX_FALLBACK_MIN_SCORE` | `58` | Minimum fit score for metadata-free YouTube Mix fallback candidates; Mix never enters the normal safe pool. |
 | `AUTOPLAY_DEEZER_METADATA_LIMIT` | `18` | Maximum candidates enriched with Deezer metadata during one autoplay cycle. |
 | `AUTOPLAY_DEEZER_METADATA_CACHE_TTL_MS` | `604800000` | In-memory cache lifetime for Deezer catalog metadata (7 days). |
 | `AUTOPLAY_METADATA_TIMEOUT_MS` | `3500` | Timeout for non-critical metadata requests; playback continues if the lookup fails. |
@@ -301,13 +303,14 @@ Autoplay is designed to act like a conservative DJ rather than a random recommen
 - It reads the current track and recent listening window.
 - It finds candidates from Last.fm, Deezer, available provider data, and (when explicitly enabled) Spotify.
 - It normalizes titles and artists before checking history, so the same song from another provider, a reupload, a remaster tag, or a small punctuation difference is not treated as a new recommendation.
+- When resolving a recommendation to playable audio, it verifies that the provider result still matches the canonical artist/title; a provider failure or unrelated result does not silently become the next song.
 - It prefers compatible genre/vibe/tempo/energy signals and penalizes abrupt family changes. When Spotify audio features are unavailable, it uses Deezer's public catalog metadata as an additional tempo/loudness anchor and lowers confidence for candidates whose audio profile could not be verified.
 - It uses a narrow exploration pool (four candidates within six score points by default) and a transition-quality gate, so variety cannot select a materially weaker song unless it has a clearly better tempo/mood bridge.
 - YouTube channel suffixes such as `Vevo`, `Topic`, and `Official Artist Channel` are normalized before artist history and cooldown checks. Noisy Last.fm listener sentences, radio names, playlist fragments, and year tags are excluded from genre anchors.
 - If only Deezer BPM/gain and genre cues are available, MewBit creates low-confidence catalog-derived energy/mood hints for tie-breaking. These are not treated as measured audio features; true waveform analysis still requires fetching/decoding the audio and is intentionally not part of the normal autoplay request path.
 - It limits artist streaks, but does not ban a fitting artist permanently.
 - It preserves an already-good autoplay candidate rather than replacing it each time state updates.
-- If no metadata-backed candidate exists for a low-information track, it may use a direct YouTube Mix result; this path is deliberately constrained by duplicate and artist checks.
+- Derived Deezer catalog hints are included in the scorer as low-confidence continuity signals, not just logged metadata. If no metadata-backed candidate exists, MewBit first retries from a stable session anchor and only then may use a direct YouTube Mix result; Mix is fallback-only and must pass `AUTOPLAY_MIX_FALLBACK_MIN_SCORE`.
 
 Spotify autoplay is optional (`USE_SPOTIFY_AUTOPLAY=false` by default). Spotify audio-features access is restricted for many Development Mode apps, so MewBit does not depend on it: Spotify metadata is opportunistic, while Last.fm, Deezer catalog metadata, provider-native signals, and the confidence-aware scorer remain usable without a higher Spotify tier.
 

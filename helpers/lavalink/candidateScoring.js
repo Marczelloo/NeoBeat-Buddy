@@ -4,7 +4,11 @@ const { getFeatureCoverage, getTempoDistance } = require("./autoplayMetadata");
 const { areGenreFamiliesCompatible, findGenreOverlap, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { sessionStartTime } = require("./sessionProfile");
 const { hasTrackIdentity } = require("./trackIdentity");
-const { cleanArtistName, normalizeComparableText } = require("./trackNormalization");
+const {
+  cleanArtistName,
+  getAutoplayVersionCompatibility,
+  normalizeComparableText,
+} = require("./trackNormalization");
 
 /**
  * Gets time-of-day factor for energy preferences
@@ -28,6 +32,79 @@ function normalizeSimilarity(value) {
 
 function normalizeArtist(value) {
   return normalizeComparableText(cleanArtistName(value)).replace(/\s+/g, "");
+}
+
+function getCandidateFeatures(candidate) {
+  return {
+    ...(candidate?.derivedFeatures || {}),
+    ...(candidate?.features || {}),
+  };
+}
+
+function getReferenceFeatures(profile = {}) {
+  return {
+    ...(profile.avgDerivedFeatures || {}),
+    ...(profile.avgFeatures || {}),
+    ...(profile.referenceDerivedFeatures || {}),
+    ...(profile.referenceFeatures || {}),
+  };
+}
+
+function hasSessionVibeAnchor(profile = {}) {
+  return Boolean(
+    profile.referenceGenreFamilies?.length ||
+      profile.referenceGenres?.length ||
+      Object.keys(getReferenceFeatures(profile)).length > 0 ||
+      profile.topGenres?.length ||
+      profile.avgFeatures
+  );
+}
+
+function getVibeEvidence(candidate, profile, candidateFamilies, referenceFamilies, referenceGenres) {
+  const similarity = normalizeSimilarity(candidate?.similarity);
+  const features = getCandidateFeatures(candidate);
+  const referenceFeatures = getReferenceFeatures(profile);
+  const genreCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
+  const sharedGenres = findGenreOverlap(referenceGenres, candidate?.genres || []);
+  const featureDistances = [];
+
+  if (hasNumber(features.tempo) && hasNumber(referenceFeatures.tempo)) {
+    featureDistances.push({ field: "tempo", distance: getTempoDistance(features.tempo, referenceFeatures.tempo) });
+  }
+  for (const field of ["energy", "valence", "danceability"]) {
+    if (hasNumber(features[field]) && hasNumber(referenceFeatures[field])) {
+      featureDistances.push({ field, distance: Math.abs(features[field] - referenceFeatures[field]) });
+    }
+  }
+
+  const closeFeatureCount = featureDistances.filter(({ field, distance }) =>
+    field === "tempo" ? distance < 30 : distance < 0.3
+  ).length;
+  const hasFeatureContinuity = closeFeatureCount > 0;
+  const hasCompatibleGenre = genreCompatibility === true || sharedGenres.length > 0;
+  const hasStrongSimilarity = similarity >= 0.72;
+  const hasAnySimilarity = similarity > 0.12;
+  const noAnchorMix = candidate?.source === "youtube_mix" && !hasSessionVibeAnchor(profile);
+
+  return {
+    similarity,
+    featureCoverage: getFeatureCoverage(features),
+    genreCompatibility,
+    sharedGenres,
+    hasFeatureContinuity,
+    hasCompatibleGenre,
+    hasStrongSimilarity,
+    hasAnySimilarity,
+    noAnchorMix,
+    confidence:
+      hasCompatibleGenre || hasFeatureContinuity || hasStrongSimilarity
+        ? "high"
+        : hasAnySimilarity || getFeatureCoverage(features) > 0
+          ? "medium"
+          : noAnchorMix
+            ? "fallback"
+            : "low",
+  };
 }
 
 function getArtistWeight(artistCounts, artist) {
@@ -79,10 +156,11 @@ function getCandidateVibeTrust(candidate, profile, candidateFamilies, referenceF
   if (areGenreFamiliesCompatible(referenceFamilies, candidateFamilies) === true) trust = Math.max(trust, 45);
   if (findGenreOverlap(referenceGenres, candidate.genres || []).length > 0) trust = Math.max(trust, 55);
 
-  const referenceFeatures = profile.referenceFeatures;
-  if (candidate.features && referenceFeatures) {
+  const candidateFeatures = getCandidateFeatures(candidate);
+  const referenceFeatures = getReferenceFeatures(profile);
+  if (Object.keys(candidateFeatures).length && Object.keys(referenceFeatures).length) {
     const comparable = ["tempo", "energy", "valence"].filter(
-      (field) => hasNumber(candidate.features[field]) && hasNumber(referenceFeatures[field])
+      (field) => hasNumber(candidateFeatures[field]) && hasNumber(referenceFeatures[field])
     );
     if (comparable.length) trust = Math.max(trust, 70);
   }
@@ -91,7 +169,7 @@ function getCandidateVibeTrust(candidate, profile, candidateFamilies, referenceF
 }
 
 function getMetadataConfidence(candidate) {
-  const coverage = getFeatureCoverage(candidate?.features);
+  const coverage = getFeatureCoverage(getCandidateFeatures(candidate));
   if (coverage >= 3) return 1;
   if (coverage > 0) return Math.max(Number(candidate?.metadataConfidence) || 0, 0.45);
   if (candidate?.metadataChecked) return Math.max(Number(candidate?.metadataConfidence) || 0, 0.05);
@@ -135,21 +213,72 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
 
     candidate.genres = normalizeGenreTags(candidate.genres, { artist: candidate.artist, title: candidate.title });
     const candidateFamilies = getGenreFamilies(candidate.genres);
-    const referenceFamilies = profile.referenceGenreFamilies || [];
-    const referenceGenres = normalizeGenreTags(profile.referenceGenres || []);
+    const sessionGenres = (profile.topGenres || []).map((item) => item.genre).filter(Boolean);
+    const referenceFamilies = profile.referenceGenreFamilies?.length
+      ? profile.referenceGenreFamilies
+      : getGenreFamilies(sessionGenres);
+    const referenceGenres = normalizeGenreTags([...(profile.referenceGenres || []), ...sessionGenres]);
+    const candidateFeatures = getCandidateFeatures(candidate);
+    const referenceFeatures = getReferenceFeatures(profile);
     candidate.genreFamilies = candidateFamilies;
+
+    const versionCompatibility = getAutoplayVersionCompatibility(
+      candidate.title,
+      profile.referenceTitleRaw || ""
+    );
+    candidate.versionMode = versionCompatibility.mode;
+    if (!versionCompatibility.allowed) {
+      score -= 1000;
+      candidate.hardRejected = true;
+      candidate.rejectionReason = "unmatched-alternate-version";
+      scoringDetails.push(`version:-1000(${versionCompatibility.mode})`);
+    } else if (versionCompatibility.mode === "tempo-style") {
+      score += 4;
+      scoringDetails.push("version:+4(tempo-style)");
+    } else if (versionCompatibility.mode === "tempo-consistent") {
+      score += 8;
+      scoringDetails.push("version:+8(tempo-consistent)");
+    }
 
     // A loose provider search is never allowed to become the escape hatch
     // that turns an empty recommendation pool into a completely unrelated
     // song. Direct similarity, metadata, or audio features are required for
     // every automatic pick, including sessions whose reference has no tags.
-    const hasReliableSignal =
-      normalizeSimilarity(candidate.similarity) > 0 || candidateFamilies.length > 0 || Boolean(candidate.features);
-    if (!hasReliableSignal) {
+    const vibeEvidence = getVibeEvidence(candidate, profile, candidateFamilies, referenceFamilies, referenceGenres);
+    const hasMusicSignal =
+      vibeEvidence.hasAnySimilarity ||
+      vibeEvidence.hasCompatibleGenre ||
+      vibeEvidence.hasFeatureContinuity;
+    const isMetadataFreeMix = vibeEvidence.noAnchorMix && !hasMusicSignal;
+    const hasReliableSignal = hasMusicSignal || isMetadataFreeMix;
+    candidate.vibeConfidence = vibeEvidence.confidence;
+    candidate.fallbackOnly = false;
+    if (isMetadataFreeMix) {
+      candidate.fallbackOnly = true;
+      candidate.rejectionReason = "metadata-free-mix-fallback";
+      scoringDetails.push("fallback-only(metadata-free-mix)");
+    } else if (!hasReliableSignal) {
       score -= 1000;
       candidate.hardRejected = true;
       candidate.rejectionReason = candidate.isFallback ? "fallback-without-vibe-signal" : "unverified-provider-candidate";
       scoringDetails.push(`${candidate.isFallback ? "fallback" : "provider"}:-1000(no-vibe-signal)`);
+    }
+
+    // A provider recommendation without a bridge to the current track is not
+    // a safe autoplay pick. Keep direct Mix tracks for the explicit fallback
+    // lane, but do not let a random Deezer/Last.fm catalog result win merely
+    // because it has a generic tag or a source bonus.
+    if (
+      !candidate.hardRejected &&
+      hasSessionVibeAnchor(profile) &&
+      !vibeEvidence.hasCompatibleGenre &&
+      !vibeEvidence.hasFeatureContinuity &&
+      !vibeEvidence.hasStrongSimilarity
+    ) {
+      score -= 1000;
+      candidate.hardRejected = true;
+      candidate.rejectionReason = "no-transition-bridge";
+      scoringDetails.push("transition:-1000(no-bridge)");
     }
 
     // The last track is the strongest signal. Do not allow a known genre-family
@@ -293,23 +422,23 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     // competitive than a candidate with a real tempo anchor. This is a soft
     // penalty: obscure uploads remain eligible when every provider is sparse.
     const metadataConfidence = getMetadataConfidence(candidate);
-    const featureCoverage = getFeatureCoverage(candidate.features);
+    const featureCoverage = getFeatureCoverage(candidateFeatures);
     if (metadataConfidence !== null) {
       if (featureCoverage >= 3) {
         score += 8;
         scoringDetails.push("metadata:+8(audio-profile)");
-      } else if (hasNumber(candidate.features?.tempo)) {
+      } else if (hasNumber(candidateFeatures.tempo)) {
         score += 5;
         scoringDetails.push("metadata:+5(tempo-anchor)");
-      } else if (candidate.metadataChecked && profile.referenceFeatures) {
+      } else if (candidate.metadataChecked && Object.keys(referenceFeatures).length) {
         score -= 12;
         scoringDetails.push("metadata:-12(no-tempo-anchor)");
       }
     }
 
     // Factor 5: Tempo/BPM consistency
-    if (hasNumber(candidate.features?.tempo) && hasNumber(profile.avgTempo)) {
-      const tempoDiff = getTempoDistance(candidate.features.tempo, profile.avgTempo);
+    if (hasNumber(candidateFeatures.tempo) && hasNumber(profile.avgTempo)) {
+      const tempoDiff = getTempoDistance(candidateFeatures.tempo, profile.avgTempo);
 
       if (tempoDiff < 15) {
         score += 15;
@@ -325,10 +454,9 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
 
     // Direct transition continuity is more important than a long-term average;
     // it prevents an otherwise good recommendation from feeling like a hard cut.
-    const referenceFeatures = profile.referenceFeatures;
-    if (candidate.features && referenceFeatures) {
-      if (hasNumber(candidate.features.tempo) && hasNumber(referenceFeatures.tempo)) {
-        const tempoDiff = getTempoDistance(candidate.features.tempo, referenceFeatures.tempo);
+    if (Object.keys(candidateFeatures).length && Object.keys(referenceFeatures).length) {
+      if (hasNumber(candidateFeatures.tempo) && hasNumber(referenceFeatures.tempo)) {
+        const tempoDiff = getTempoDistance(candidateFeatures.tempo, referenceFeatures.tempo);
         if (tempoDiff < 10) {
           score += 18;
           scoringDetails.push("continuity:+18(tempo)");
@@ -344,8 +472,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
         }
       }
 
-      if (hasNumber(candidate.features.energy) && hasNumber(referenceFeatures.energy)) {
-        const energyDiff = Math.abs(candidate.features.energy - referenceFeatures.energy);
+      if (hasNumber(candidateFeatures.energy) && hasNumber(referenceFeatures.energy)) {
+        const energyDiff = Math.abs(candidateFeatures.energy - referenceFeatures.energy);
         if (energyDiff < 0.12) {
           score += 18;
           scoringDetails.push("continuity:+18(energy)");
@@ -358,8 +486,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
         }
       }
 
-      if (hasNumber(candidate.features.valence) && hasNumber(referenceFeatures.valence)) {
-        const valenceDiff = Math.abs(candidate.features.valence - referenceFeatures.valence);
+      if (hasNumber(candidateFeatures.valence) && hasNumber(referenceFeatures.valence)) {
+        const valenceDiff = Math.abs(candidateFeatures.valence - referenceFeatures.valence);
         if (valenceDiff < 0.15) {
           score += 12;
           scoringDetails.push("continuity:+12(mood)");
@@ -371,8 +499,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
     }
 
     // Factor 6: Time-of-day awareness
-    if (candidate.features?.energy !== undefined) {
-      const energyDiff = Math.abs(candidate.features.energy - timeOfDay.factor);
+    if (candidateFeatures.energy !== undefined) {
+      const energyDiff = Math.abs(candidateFeatures.energy - timeOfDay.factor);
 
       if (energyDiff < 0.15) {
         score += 12;
@@ -397,19 +525,19 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
 
     // Factor 8: Mood progression
     if (
-      candidate.features?.valence !== undefined &&
+      candidateFeatures.valence !== undefined &&
       profile.valenceTrend &&
       profile.avgFeatures?.valence !== undefined &&
       profile.avgFeatures?.valence !== null
     ) {
-      if (profile.valenceTrend === "increasing" && candidate.features.valence > profile.avgFeatures.valence) {
+      if (profile.valenceTrend === "increasing" && candidateFeatures.valence > profile.avgFeatures.valence) {
         score += 12;
         scoringDetails.push("mood:+12(rising)");
-      } else if (profile.valenceTrend === "decreasing" && candidate.features.valence < profile.avgFeatures.valence) {
+      } else if (profile.valenceTrend === "decreasing" && candidateFeatures.valence < profile.avgFeatures.valence) {
         score += 12;
         scoringDetails.push("mood:+12(falling)");
       } else if (profile.valenceTrend === "stable") {
-        const valenceDiff = Math.abs(candidate.features.valence - profile.avgFeatures.valence);
+        const valenceDiff = Math.abs(candidateFeatures.valence - profile.avgFeatures.valence);
         if (valenceDiff < 0.15) {
           score += 8;
           scoringDetails.push("mood:+8(stable)");
@@ -419,19 +547,19 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId) {
 
     // Factor 9: Energy arc management
     if (
-      candidate.features?.energy !== undefined &&
+      candidateFeatures.energy !== undefined &&
       profile.energyTrend &&
       profile.avgFeatures?.energy !== undefined &&
       profile.avgFeatures?.energy !== null
     ) {
-      if (profile.energyTrend === "increasing" && candidate.features.energy > profile.avgFeatures.energy) {
+      if (profile.energyTrend === "increasing" && candidateFeatures.energy > profile.avgFeatures.energy) {
         score += 15;
         scoringDetails.push("energyArc:+15(building)");
-      } else if (profile.energyTrend === "decreasing" && candidate.features.energy < profile.avgFeatures.energy) {
+      } else if (profile.energyTrend === "decreasing" && candidateFeatures.energy < profile.avgFeatures.energy) {
         score += 15;
         scoringDetails.push("energyArc:+15(winding)");
       } else if (profile.energyTrend === "stable") {
-        const energyDiff = Math.abs(candidate.features.energy - profile.avgFeatures.energy);
+        const energyDiff = Math.abs(candidateFeatures.energy - profile.avgFeatures.energy);
         if (energyDiff < 0.15) {
           score += 10;
           scoringDetails.push("energyArc:+10(plateau)");

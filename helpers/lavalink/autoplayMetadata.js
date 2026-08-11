@@ -1,4 +1,5 @@
 const Log = require("../logs/log");
+const { getBaseTitle, normalizeComparableText } = require("./trackNormalization");
 
 const metadataCache = new Map();
 const METADATA_CACHE_TTL_MS = Math.max(
@@ -14,7 +15,7 @@ function isFinitePositive(value) {
 function getTrackIdentity(candidate) {
   const artist = candidate?.artist || candidate?.track?.info?.author || "";
   const title = candidate?.title || candidate?.track?.info?.title || "";
-  return `${String(artist).trim().toLowerCase()}|${String(title).trim().toLowerCase()}`;
+  return `${normalizeComparableText(artist)}|${getBaseTitle(title)}`;
 }
 
 function getDeezerTrackId(candidate) {
@@ -131,7 +132,13 @@ async function fetchDeezerMetadata(candidate) {
   const query = encodeURIComponent(`artist:"${artist}" track:"${title}"`);
   const payload = await fetchJson(`https://api.deezer.com/search/track?q=${query}&limit=5`);
   const results = Array.isArray(payload?.data) ? payload.data : [];
-  const match = results.find((track) => String(track?.artist?.name || "").toLowerCase() === artist.toLowerCase()) || results[0];
+  const normalizedArtist = normalizeComparableText(artist);
+  const normalizedTitle = getBaseTitle(title);
+  const match = results.find((track) => {
+    const resultArtist = normalizeComparableText(track?.artist?.name || "");
+    const resultTitle = getBaseTitle(track?.title || "");
+    return resultArtist === normalizedArtist && resultTitle === normalizedTitle;
+  });
   if (!match?.id) return null;
 
   const details = await fetchJson(`https://api.deezer.com/track/${encodeURIComponent(match.id)}`);
