@@ -2,14 +2,14 @@ const { getGuildState } = require("../guildState");
 const Log = require("../logs/log");
 const { getAutoplayExposureSnapshot, getExposureKey, getExposureRecord } = require("./autoplayExposure");
 const {
-  enrichCandidateWithDeezerMetadata,
+  enrichCandidateWithAutoplayMetadata,
   enrichCandidatesWithDeezerMetadata,
   getFeatureCoverage,
   getTempoDistance,
 } = require("./autoplayMetadata");
-const { scoreCandidates, getTimeOfDayFactor } = require("./candidateScoring");
+const { scoreCandidates, getTimeOfDayFactor, hasReliableSessionVibe } = require("./candidateScoring");
 const { areGenreFamiliesCompatible, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
-const { getLastFmSimilarTracks, getLastFmTrackTags } = require("./lastfmClient");
+const { getLastFmSimilarTracks, getLastFmTagProfile } = require("./lastfmClient");
 const { getPoru } = require("./players");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 const { buildSessionProfile, genreCache, isAutoplayTrack } = require("./sessionProfile");
@@ -245,11 +245,13 @@ function applyCandidateMetadata(track, candidate) {
   }
   const normalizedGenres = normalizeGenreTags(candidate.genres, { artist: candidate.artist, title: candidate.title });
   if (normalizedGenres.length) track.userData.genres = normalizedGenres;
+  if (candidate.moodTags?.length) track.userData.moodTags = normalizeGenreTags(candidate.moodTags, { artist: candidate.artist, title: candidate.title });
   if (candidate.features) track.userData.features = candidate.features;
   if (candidate.derivedFeatures) track.userData.derivedFeatures = candidate.derivedFeatures;
   if (candidate.metadataChecked) track.userData.metadataChecked = true;
   if (Number.isFinite(candidate.metadataConfidence)) track.userData.metadataConfidence = candidate.metadataConfidence;
   if (candidate.metadataProvider) track.userData.metadataProvider = candidate.metadataProvider;
+  if (candidate.metadataSources?.length) track.userData.metadataSources = candidate.metadataSources;
   if (candidate.isrc) {
     track.userData.isrc = candidate.isrc;
     track.userData.autoplayIsrc = candidate.isrc;
@@ -274,17 +276,24 @@ async function enrichManualAnchorTracks(tracks, guildId) {
       features: track.userData?.features || null,
       derivedFeatures: track.userData?.derivedFeatures || null,
       releaseYear: track.userData?.releaseYear || null,
+      moodTags: track.userData?.moodTags || [],
+      album: track.info?.albumName || track.info?.album?.name || "",
     };
 
     if (!candidate.genres.length) {
-      const tags = await getLastFmTrackTags({
+      const tagProfile = await getLastFmTagProfile({
         artist: reference.searchArtist,
         title: reference.cleanTitle,
+        album: candidate.album,
         limit: 8,
       });
-      if (tags.length) candidate.genres = tags;
+      if (tagProfile.tags.length) {
+        candidate.genres = tagProfile.tags;
+        candidate.metadataConfidence = tagProfile.confidence;
+        candidate.metadataProvider = tagProfile.source;
+      }
     }
-    if (USE_DEEZER_METADATA) await enrichCandidateWithDeezerMetadata(candidate);
+    if (USE_DEEZER_METADATA) await enrichCandidateWithAutoplayMetadata(candidate);
 
     applyCandidateMetadata(track, candidate);
     track.userData.manual = true;
@@ -295,6 +304,7 @@ async function enrichManualAnchorTracks(tracks, guildId) {
         genres: candidate.genres || [],
         features: candidate.features || null,
         derivedFeatures: candidate.derivedFeatures || null,
+        metadataConfidence: candidate.metadataConfidence || 0,
         releaseYear: candidate.releaseYear || null,
       });
     }
@@ -340,7 +350,11 @@ async function fetchDeezerCandidates(guildId, cleanTitle, searchArtist) {
     const deezerSearchTracks = await loadLavalinkTracks(deezerSearchQuery);
 
     if (deezerSearchTracks.length > 0) {
-      const deezerTrack = deezerSearchTracks[0];
+      const deezerTrack = getRelevantPlayableTrack(deezerSearchTracks, `${searchArtist} ${cleanTitle}`);
+      if (!deezerTrack || !matchesAutoplayCandidate({ artist: searchArtist, title: cleanTitle }, deezerTrack)) {
+        Log.debug("Rejected Deezer recommendation seed with mismatched identity", "", `guild=${guildId}`);
+        return candidates;
+      }
       let deezerTrackId = deezerTrack.info?.identifier;
 
       // Check if we got a Deezer track or YouTube fallback
@@ -510,7 +524,7 @@ async function fetchLastFmCandidates(reference, guildId, exposure = null) {
           const track = getRelevantPlayableTrack(tracks, query);
           if (!track) return null;
 
-          const genres = await getLastFmTrackTags({ artist: similar.artist, title: similar.title, limit: 8 });
+          const tagProfile = await getLastFmTagProfile({ artist: similar.artist, title: similar.title, limit: 8 });
 
           return {
             artist: similar.artist,
@@ -519,7 +533,9 @@ async function fetchLastFmCandidates(reference, guildId, exposure = null) {
             duration: track.info?.length,
             source: "lastfm_similar",
             track,
-            genres,
+            genres: tagProfile.tags,
+            metadataConfidence: tagProfile.confidence,
+            metadataProvider: tagProfile.source,
             // This is a collaborative-similarity signal, not catalog
             // popularity. Keeping it separate prevents a great match from
             // being penalized as an overplayed track.
@@ -573,8 +589,12 @@ async function enrichCandidatesWithLastFmTags(candidates, guildId, limit = 9) {
   if (!targets.length) return candidates;
 
   await mapWithConcurrency(targets, 2, async (candidate) => {
-    const tags = await getLastFmTrackTags({ artist: candidate.artist, title: candidate.title, limit: 8 });
-    if (tags.length) candidate.genres = tags;
+    const tagProfile = await getLastFmTagProfile({ artist: candidate.artist, title: candidate.title, limit: 8 });
+    if (tagProfile.tags.length) {
+      candidate.genres = tagProfile.tags;
+      candidate.metadataConfidence = Math.max(candidate.metadataConfidence || 0, tagProfile.confidence);
+      candidate.metadataProvider ||= tagProfile.source;
+    }
   });
 
   Log.info(
@@ -906,6 +926,7 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "" } = {
           genres: candidate.genres || [],
           features: candidate.features || null,
           derivedFeatures: candidate.derivedFeatures || null,
+          metadataConfidence: candidate.metadataConfidence || 0,
           releaseYear: candidate.releaseYear || null,
         });
       }
@@ -956,15 +977,24 @@ function getTransitionQuality(candidate, profile = {}) {
   const referenceFamilies = profile.referenceGenreFamilies || [];
   const candidateFamilies = candidate?.genreFamilies || getGenreFamilies(candidate?.genres || []);
   let quality = 0;
+  let evidenceSignals = 0;
 
   const genreCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
-  if (genreCompatibility === true) quality += 3;
+  if (genreCompatibility === true) {
+    quality += 3;
+    evidenceSignals += 1;
+  }
   if (genreCompatibility === false) quality -= 6;
 
   if (hasReferenceFeatures && Number.isFinite(Number(candidateFeatures.tempo)) && Number.isFinite(Number(referenceFeatures.tempo))) {
     const tempoDistance = getTempoDistance(candidateFeatures.tempo, referenceFeatures.tempo);
-    if (tempoDistance < 10) quality += 6;
-    else if (tempoDistance < 22) quality += 3;
+    if (tempoDistance < 10) {
+      quality += 6;
+      evidenceSignals += 1;
+    } else if (tempoDistance < 22) {
+      quality += 3;
+      evidenceSignals += 1;
+    }
     else if (tempoDistance > 40) quality -= 6;
   }
 
@@ -974,11 +1004,18 @@ function getTransitionQuality(candidate, profile = {}) {
   ]) {
     if (!hasReferenceFeatures || !Number.isFinite(Number(candidateFeatures[field])) || !Number.isFinite(Number(referenceFeatures[field]))) continue;
     const difference = Math.abs(Number(candidateFeatures[field]) - Number(referenceFeatures[field]));
-    if (difference < 0.15) quality += good;
+    if (difference < 0.15) {
+      quality += good;
+      evidenceSignals += 1;
+    }
     else if (difference > 0.4) quality += bad;
   }
 
+  if (Number(candidate?.similarity) >= 0.72) evidenceSignals += 1;
   if (getFeatureCoverage(candidate?.features) > 0) quality += 1;
+  // Do not label a transition as high quality from a lone BPM reading or a
+  // generic provider score. It needs two independent pieces of evidence.
+  if (evidenceSignals < 2) quality = Math.min(quality, AUTOPLAY_TRANSITION_QUALITY_MIN - 1);
   return quality;
 }
 
@@ -1043,15 +1080,7 @@ function getDiversifiedResolutionOrder(rankedCandidates, random = Math.random) {
 }
 
 function hasSessionVibeAnchor(profile = {}) {
-  return Boolean(
-    profile.referenceGenreFamilies?.length ||
-      profile.referenceGenres?.length ||
-      profile.manualAnchorGenreFamilies?.length ||
-      profile.manualTasteGenreFamilies?.length ||
-      profile.referenceFeatures ||
-      profile.topGenres?.length ||
-      profile.avgFeatures
-  );
+  return hasReliableSessionVibe(profile);
 }
 
 /**
@@ -1075,7 +1104,7 @@ function getMetadataFreeYouTubeMixFallbackCandidates(rankedCandidates, profile) 
   );
 }
 
-async function resolveMetadataFreeYouTubeMixFallback(candidates, profile, skipPatterns, guildId) {
+async function resolveMetadataFreeYouTubeMixFallback(candidates, profile, skipPatterns, guildId, fallbackAnchor = null) {
   if (!candidates.length || hasSessionVibeAnchor(profile)) return null;
 
   const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
@@ -1103,7 +1132,7 @@ async function resolveMetadataFreeYouTubeMixFallback(candidates, profile, skipPa
       `canonical=${candidate.artist} - ${candidate.title}`,
       `source=${candidate.source}`
     );
-    return playableTrack;
+    return attachFallbackOrigin(playableTrack, fallbackAnchor);
   }
 
   Log.warning("Metadata-free YouTube Mix fallback exhausted", "", `guild=${guildId}`, `candidates=${mixCandidates.length}`);
@@ -1160,12 +1189,10 @@ async function resolveRankedCandidates(
 }
 
 function getStableFallbackAnchor(profile, referenceTrack) {
+  if (!hasReliableSessionVibe(profile)) return null;
   const current = getAutoplayReference(referenceTrack);
   const previousTracks = (profile.recentTracks || []).slice(0, -1).reverse();
-  const orderedAnchors = [
-    ...previousTracks.filter((track) => !isAutoplayTrack(track)),
-    ...previousTracks.filter(isAutoplayTrack),
-  ];
+  const orderedAnchors = previousTracks.filter((track) => !isAutoplayTrack(track));
   const sessionFamilies = profile.manualTasteGenreFamilies?.length
     ? profile.manualTasteGenreFamilies
     : getGenreFamilies((profile.topGenres || []).map((genre) => genre.genre));
@@ -1173,7 +1200,11 @@ function getStableFallbackAnchor(profile, referenceTrack) {
   return orderedAnchors.find((track) => {
     const reference = getAutoplayReference(track);
     const anchorGenres = track?.userData?.genres || [];
-    const hasMetadata = Boolean(anchorGenres.length || track?.userData?.features);
+    const featureCoverage = getFeatureCoverage({ ...(track?.userData?.derivedFeatures || {}), ...(track?.userData?.features || {}) });
+    const metadataConfidence = Number(track?.userData?.metadataConfidence) || 0;
+    const hasMetadata = Boolean(
+      normalizeGenreTags(anchorGenres).length || featureCoverage >= 2 || (featureCoverage >= 1 && metadataConfidence >= 0.8)
+    );
     const compatibleWithSession =
       !sessionFamilies.length || areGenreFamiliesCompatible(sessionFamilies, getGenreFamilies(anchorGenres)) !== false;
     const isSameTrack =
@@ -1184,13 +1215,55 @@ function getStableFallbackAnchor(profile, referenceTrack) {
   }) || null;
 }
 
+function getFallbackOriginAnchor(referenceTrack) {
+  const anchor = referenceTrack?.userData?.autoplayFallbackAnchor;
+  if (!anchor?.info?.title || !anchor?.info?.author) return null;
+
+  return {
+    info: { ...anchor.info },
+    userData: { ...(anchor.userData || {}) },
+  };
+}
+
+function createFallbackAnchor(track) {
+  if (!track?.info?.title || !track?.info?.author) return null;
+  return {
+    info: {
+      title: track.info.title,
+      author: track.info.author,
+      identifier: track.info.identifier,
+      sourceName: track.info.sourceName,
+      uri: track.info.uri,
+      length: track.info.length,
+    },
+    userData: {
+      autoplayReference: track.userData?.autoplayReference,
+      genres: track.userData?.genres || [],
+      features: track.userData?.features || null,
+      derivedFeatures: track.userData?.derivedFeatures || null,
+      metadataConfidence: track.userData?.metadataConfidence || 0,
+    },
+  };
+}
+
+function attachFallbackOrigin(track, fallbackAnchor) {
+  const anchor = createFallbackAnchor(fallbackAnchor);
+  if (!track || !anchor) return track;
+  track.userData = {
+    ...(track.userData || {}),
+    autoplayFallback: "youtube-mix",
+    autoplayFallbackAnchor: anchor,
+  };
+  return track;
+}
+
 async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guildId, context, resolutionOptions) {
   if (!candidates.length) return null;
   if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata(candidates, candidates.length);
 
   const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId, {
     ...(resolutionOptions || {}),
-    anchorTrusted: context === "stable-anchor-fallback",
+    anchorTrusted: Boolean(resolutionOptions?.anchorTrusted),
   });
   rankedCandidates.forEach((candidate) => {
     candidate.transitionQuality = getTransitionQuality(candidate, profile);
@@ -1261,41 +1334,60 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualT
   const guildSettings = getGuildState(guildId);
   if (!guildSettings?.autoplay) return null;
 
-  Log.info("Starting smart autoplay", "", `guild=${guildId}`, `reference=${referenceTrack.info.title}`);
+  const fallbackOrigin = getFallbackOriginAnchor(referenceTrack);
+  Log.info(
+    "Starting smart autoplay",
+    "",
+    `guild=${guildId}`,
+    `reference=${referenceTrack.info.title}`,
+    fallbackOrigin ? `fallbackAnchor=${fallbackOrigin.info.author} - ${fallbackOrigin.info.title}` : ""
+  );
 
   // Last.fm tags are the default genre anchor because the Spotify endpoints
   // needed for audio metadata are unavailable to most development-mode apps.
-  let reference = getAutoplayReference(referenceTrack);
-  let referenceTags = await getLastFmTrackTags({
+  // A metadata-free Mix selection is a transport layer, not a new taste
+  // anchor. Keep querying from the original manual/stable track until a
+  // catalog-backed recommendation can establish a real next reference.
+  const referenceSource = fallbackOrigin || referenceTrack;
+  let reference = getAutoplayReference(referenceSource);
+  let referenceTagProfile = await getLastFmTagProfile({
     artist: reference.searchArtist,
     title: reference.cleanTitle,
     limit: 10,
   });
-  if (!referenceTags.length) {
+  if (!referenceTagProfile.tags.length) {
     const canonicalReference = await resolveCanonicalReference(reference.cleanTitle, reference.searchArtist, guildId);
     if (canonicalReference) {
       reference = canonicalReference;
-      referenceTags = await getLastFmTrackTags({ artist: reference.searchArtist, title: reference.cleanTitle, limit: 10 });
+      referenceTagProfile = await getLastFmTagProfile({ artist: reference.searchArtist, title: reference.cleanTitle, limit: 10 });
     }
   }
 
   const referenceMetadata = {
     artist: reference.searchArtist,
     title: reference.cleanTitle,
-    identifier: referenceTrack.info?.identifier,
-    track: referenceTrack,
-    genres: referenceTrack.userData?.genres || [],
-    features: referenceTrack.userData?.features || null,
+    identifier: referenceSource.info?.identifier,
+    track: referenceSource,
+    genres: referenceSource.userData?.genres || [],
+    features: referenceSource.userData?.features || null,
   };
-  if (referenceTags.length > 0) referenceMetadata.genres = referenceTags;
-  if (USE_DEEZER_METADATA) await enrichCandidateWithDeezerMetadata(referenceMetadata);
+  if (referenceTagProfile.tags.length > 0) {
+    referenceMetadata.genres = referenceTagProfile.tags;
+    referenceMetadata.metadataConfidence = referenceTagProfile.confidence;
+    referenceMetadata.metadataProvider = referenceTagProfile.source;
+  }
+  if (USE_DEEZER_METADATA) await enrichCandidateWithAutoplayMetadata(referenceMetadata);
   if (USE_SPOTIFY_METADATA) await enrichCandidatesWithSpotifyMetadata([referenceMetadata], 1);
   referenceTrack.userData = {
     ...(referenceTrack.userData || {}),
     autoplayReference: { title: reference.cleanTitle, artist: reference.searchArtist },
     genres: referenceMetadata.genres,
+    moodTags: referenceMetadata.moodTags || [],
     features: referenceMetadata.features,
     derivedFeatures: referenceMetadata.derivedFeatures || null,
+    metadataConfidence: referenceMetadata.metadataConfidence || 0,
+    metadataProvider: referenceMetadata.metadataProvider || null,
+    metadataSources: referenceMetadata.metadataSources || [],
     releaseYear: referenceMetadata.releaseYear,
   };
   if (referenceMetadata.genres?.length || referenceMetadata.features || referenceMetadata.derivedFeatures) {
@@ -1303,6 +1395,7 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualT
       genres: referenceMetadata.genres,
       features: referenceMetadata.features,
       derivedFeatures: referenceMetadata.derivedFeatures || null,
+      metadataConfidence: referenceMetadata.metadataConfidence || 0,
       releaseYear: referenceMetadata.releaseYear,
     });
   }
@@ -1344,7 +1437,10 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualT
   const playableTrack = await scoreAndResolveCandidates(candidates, profile, skipPatterns, guildId, "reference");
   if (playableTrack) return playableTrack;
 
-  const fallbackAnchor = getStableFallbackAnchor(profile, referenceTrack);
+  // A metadata-free Mix result is not allowed to become the next radio seed.
+  // Its stored manual/stable origin remains the anchor until the catalog can
+  // verify a normal transition again.
+  const fallbackAnchor = getFallbackOriginAnchor(referenceTrack) || getStableFallbackAnchor(profile, referenceTrack);
   if (fallbackAnchor) {
     const fallbackReference = getAutoplayReference(fallbackAnchor);
     Log.warning(
@@ -1357,13 +1453,22 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualT
     const fallbackCandidates = await collectCandidates(fallbackAnchor, guildId, profile, fallbackReference);
     const fallbackTrack = await scoreAndResolveCandidates(fallbackCandidates, profile, skipPatterns, guildId, "stable-anchor-fallback");
     if (fallbackTrack) return fallbackTrack;
+
+    const anchoredMixTrack = await resolveMetadataFreeYouTubeMixFallback(
+      fallbackCandidates,
+      profile,
+      skipPatterns,
+      guildId,
+      fallbackAnchor
+    );
+    if (anchoredMixTrack) return anchoredMixTrack;
   }
 
   // Obscure uploads (especially meme music) can be absent from Last.fm and
   // audio-feature catalogs. In that fully metadata-free case, YouTube's own
   // Mix is the closest available radio signal. It is deliberately the last
   // non-emergency lane so it cannot override a stable, already-vetted anchor.
-  const mixFallbackTrack = await resolveMetadataFreeYouTubeMixFallback(candidates, profile, skipPatterns, guildId);
+  const mixFallbackTrack = await resolveMetadataFreeYouTubeMixFallback(candidates, profile, skipPatterns, guildId, referenceTrack);
   if (mixFallbackTrack) return mixFallbackTrack;
 
   // A same-artist third track may keep a room alive, but only after every
@@ -1393,6 +1498,8 @@ module.exports = {
   resolveMetadataFreeYouTubeMixFallback,
   resolveRankedCandidates,
   getStableFallbackAnchor,
+  getFallbackOriginAnchor,
+  attachFallbackOrigin,
   enrichCandidatesWithLastFmTags,
   getRelevantPlayableTrack,
   matchesAutoplayCandidate,

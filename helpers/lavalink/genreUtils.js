@@ -39,6 +39,20 @@ const GENRE_ALIASES = [
   [/\bj[\s-]?pop\b/gi, "jpop"],
 ];
 
+// These tags are useful to prevent a completely unrelated jump, but they are
+// too broad to prove that two tracks belong in the same DJ transition.
+const GENERIC_GENRE_TAGS = new Set([
+  "alternative",
+  "dance",
+  "electronic",
+  "hiphop",
+  "indie",
+  "metal",
+  "pop",
+  "rap",
+  "rock",
+]);
+
 const NON_MUSIC_TAG_PATTERN = /^(?:\d{4}s?|\d{2}s|\d{4}\s+music|seen\s+live|favorite(?:s)?|favourites?|my\s+(?:favorites?|favourites?|music|shit)|female\s+vocalists?|male\s+vocalists?|under\s+\d+\s+listeners|awesome|love|loved|beautiful|cool|best|good|bad|spotify|last\s*fm|scrobble(?:d)?|heard\s+on|playlist|indie\s+playlist|english|polish|american|british|german|french|swedish|canadian)$/i;
 const LOW_SIGNAL_CONTEXT_TAG_PATTERN = /^(?:mortality|freedom\s+vs\s+conformity|jazz\s+elements?|rain|clipe|estudo|violao|official(?:\s+audio)?|music\s+video)$/i;
 
@@ -141,6 +155,26 @@ function findGenreOverlap(left = [], right = []) {
   );
 }
 
+function findSpecificGenreOverlap(left = [], right = []) {
+  const normalizedLeft = normalizeGenreTags(left).filter((genre) => !GENERIC_GENRE_TAGS.has(genre));
+  const normalizedRight = normalizeGenreTags(right).filter((genre) => !GENERIC_GENRE_TAGS.has(genre));
+
+  return normalizedLeft.filter((genre) =>
+    normalizedRight.some((other) => genre === other || genre.includes(other) || other.includes(genre))
+  );
+}
+
+function getGenreBridgeStrength(left = [], right = []) {
+  const specificOverlap = findSpecificGenreOverlap(left, right);
+  if (specificOverlap.length > 0) return { strength: 3, specificOverlap };
+
+  const overlap = findGenreOverlap(left, right);
+  if (overlap.length > 0) return { strength: 2, specificOverlap: [] };
+
+  const compatible = areGenreFamiliesCompatible(getGenreFamilies(left), getGenreFamilies(right));
+  return { strength: compatible === true ? 1 : 0, specificOverlap: [] };
+}
+
 module.exports = {
   normalizeGenre,
   normalizeGenreTags,
@@ -148,4 +182,6 @@ module.exports = {
   getGenreFamilies,
   areGenreFamiliesCompatible,
   findGenreOverlap,
+  findSpecificGenreOverlap,
+  getGenreBridgeStrength,
 };

@@ -8,3 +8,7 @@ docker-compose.yml
 Dockerfile
 env/
 *.log
+*.tar
+.env
+.env.*
+!.env-example

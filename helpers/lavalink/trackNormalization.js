@@ -1,5 +1,6 @@
 const PRESENTATION_LABEL_PATTERN = /^(?:official(?:\s+(?:music\s+)?(?:video|audio|mv|lyric\s+video))?|lyrics?|lyric\s+video|audio|video|visuali[sz]er|hq|hd|4k|8k)$/i;
 const NEUTRAL_TITLE_LABEL_PATTERN = /^(?:original|original\s+version|single(?:\s+version)?|album(?:\s+version)?|clean|explicit)\s*$/i;
+const UPLOADER_CHANNEL_PATTERN = /\b(?:clean\s+songs?|que\s+quality|topic|vevo|official(?:\s+artist)?\s+channel|lyrics?(?:\s+channel)?|music\s+lyrics)\b/i;
 const TRAILING_VARIANT_LABEL_PATTERN = /^(.*?)(?:\s+)(?:remix|remixed|rework|bootleg|acoustic|unplugged|stripped|demo|rehearsal|cover|tribute|instrumental|karaoke|nightcore|slowed|sped\s*up|speed\s*up|chopped\s*(?:and\s*)?(?:screwed|slopped)|choppednotslopped|radio\s*edit|extended(?:\s+(?:mix|version))?|club\s+mix|dj\s+mix|remaster(?:ed)?|anniversary\s+edition)(?:\s+(?:version|mix))?\s*$/i;
 
 const VARIANT_DEFINITIONS = [
@@ -169,7 +170,7 @@ function cleanTrackMetadata(title, author) {
     const prefix = cleanArtistName(parts[0]);
     const normalizedPrefix = normalizeComparableText(prefix).replace(/\s/g, "");
     const normalizedArtist = normalizeComparableText(suppliedArtist).replace(/\s/g, "");
-    if (!normalizedArtist || normalizedPrefix === normalizedArtist) {
+    if (!normalizedArtist || normalizedPrefix === normalizedArtist || UPLOADER_CHANNEL_PATTERN.test(suppliedArtist)) {
       searchArtist = prefix || suppliedArtist;
       cleanTitle = parts.slice(1).join(" - ").trim();
     }

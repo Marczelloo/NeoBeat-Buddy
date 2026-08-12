@@ -3,6 +3,7 @@ activity/dist
 .env
 .env.dev
 .env.prod
+.env.live
 *.tar
 /logs
 helpers/lavalink/youtube-cookies.txt

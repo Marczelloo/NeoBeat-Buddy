@@ -1,4 +1,6 @@
 const Log = require("../logs/log");
+const { getCommunityMetadata } = require("./communityMetadata");
+const { normalizeGenreTags } = require("./genreUtils");
 const { getBaseTitle, normalizeComparableText } = require("./trackNormalization");
 
 const metadataCache = new Map();
@@ -43,7 +45,7 @@ function clamp01(value) {
 }
 
 function getMetadataMoodCues(candidate) {
-  return [candidate?.artist, candidate?.title, ...(candidate?.genres || [])]
+  return [candidate?.artist, candidate?.title, ...(candidate?.genres || []), ...(candidate?.moodTags || [])]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -181,6 +183,27 @@ function mergeAudioMetadata(candidate, metadata, { checked = true } = {}) {
   return candidate;
 }
 
+function mergeCommunityMetadata(candidate, metadata) {
+  if (!candidate) return candidate;
+  candidate.communityMetadataChecked = true;
+  if (!metadata) return candidate;
+
+  candidate.genres = normalizeGenreTags([...(candidate.genres || []), ...(metadata.genres || [])], {
+    artist: candidate.artist,
+    title: candidate.title,
+  });
+  candidate.moodTags = normalizeGenreTags([...(candidate.moodTags || []), ...(metadata.moodTags || [])], {
+    artist: candidate.artist,
+    title: candidate.title,
+  });
+  candidate.metadataSources = [...new Set([...(candidate.metadataSources || []), ...(metadata.metadataSources || [])])];
+  candidate.metadataProvider ||= candidate.metadataSources.join("+") || null;
+  candidate.metadataConfidence = Math.max(candidate.metadataConfidence || 0, metadata.metadataConfidence || 0);
+  candidate.releaseYear ||= metadata.releaseYear;
+  candidate.isrc ||= metadata.isrc;
+  return candidate;
+}
+
 async function enrichCandidateWithDeezerMetadata(candidate) {
   if (!candidate) return candidate;
   const existingCoverage = getFeatureCoverage(candidate.features);
@@ -193,6 +216,14 @@ async function enrichCandidateWithDeezerMetadata(candidate) {
 
   const metadata = await getDeezerMetadata(candidate);
   mergeAudioMetadata(candidate, metadata);
+  candidate.derivedFeatures = deriveCatalogFeatureHints(candidate);
+  return candidate;
+}
+
+async function enrichCandidateWithAutoplayMetadata(candidate, { community = true } = {}) {
+  if (!candidate) return candidate;
+  await enrichCandidateWithDeezerMetadata(candidate);
+  if (community) mergeCommunityMetadata(candidate, await getCommunityMetadata(candidate));
   candidate.derivedFeatures = deriveCatalogFeatureHints(candidate);
   return candidate;
 }
@@ -254,6 +285,7 @@ function clearAutoplayMetadataCache() {
 module.exports = {
   clearAutoplayMetadataCache,
   enrichCandidateWithDeezerMetadata,
+  enrichCandidateWithAutoplayMetadata,
   enrichCandidatesWithDeezerMetadata,
   getDeezerMetadata,
   deriveCatalogFeatureHints,
@@ -261,5 +293,6 @@ module.exports = {
   getTempoDistance,
   getTempoVariants,
   mergeAudioMetadata,
+  mergeCommunityMetadata,
   normalizeDeezerMetadata,
 };

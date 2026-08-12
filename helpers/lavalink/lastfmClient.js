@@ -8,6 +8,14 @@ function getCacheKey(artist, title, limit) {
   return `${String(artist || "").trim().toLowerCase()}|${String(title || "").trim().toLowerCase()}|${Number(limit) || 0}`;
 }
 
+function getArtistCacheKey(artist, limit) {
+  return `artist:${String(artist || "").trim().toLowerCase()}|${Number(limit) || 0}`;
+}
+
+function getAlbumCacheKey(artist, album, limit) {
+  return `album:${String(artist || "").trim().toLowerCase()}|${String(album || "").trim().toLowerCase()}|${Number(limit) || 0}`;
+}
+
 async function callLastFm(params) {
   const apiKey = process.env.LASTFM_API_KEY;
   if (!apiKey) return null;
@@ -79,8 +87,91 @@ async function getLastFmTrackTags({ artist, title, limit = 8 } = {}) {
   }
 }
 
+async function getLastFmArtistTags({ artist, limit = 8 } = {}) {
+  if (!process.env.LASTFM_API_KEY || !artist) return [];
+
+  const cacheKey = getArtistCacheKey(artist, limit);
+  const cached = tagCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < TAG_CACHE_TTL_MS) return cached.tags;
+
+  try {
+    const data = await callLastFm({
+      method: "artist.gettoptags",
+      artist,
+      limit: String(Math.max(Number(limit) * 3, 24)),
+    });
+    const tags = (data?.toptags?.tag || [])
+      .filter((tag) => tag?.name)
+      .sort((left, right) => Number(right.count || 0) - Number(left.count || 0))
+      .map((tag) => String(tag.name).trim())
+      .filter(Boolean);
+    const normalizedTags = normalizeGenreTags(tags, { artist }).slice(0, limit);
+    tagCache.set(cacheKey, { timestamp: Date.now(), tags: normalizedTags });
+    return normalizedTags;
+  } catch (error) {
+    Log.debug("Last.fm artist-tag lookup failed", error.message);
+    return [];
+  }
+}
+
+async function getLastFmAlbumTags({ artist, album, limit = 8 } = {}) {
+  if (!process.env.LASTFM_API_KEY || !artist || !album) return [];
+
+  const cacheKey = getAlbumCacheKey(artist, album, limit);
+  const cached = tagCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < TAG_CACHE_TTL_MS) return cached.tags;
+
+  try {
+    const data = await callLastFm({
+      method: "album.gettoptags",
+      artist,
+      album,
+      limit: String(Math.max(Number(limit) * 3, 24)),
+    });
+    const tags = (data?.toptags?.tag || [])
+      .filter((tag) => tag?.name)
+      .sort((left, right) => Number(right.count || 0) - Number(left.count || 0))
+      .map((tag) => String(tag.name).trim())
+      .filter(Boolean);
+    const normalizedTags = normalizeGenreTags(tags, { artist, title: album }).slice(0, limit);
+    tagCache.set(cacheKey, { timestamp: Date.now(), tags: normalizedTags });
+    return normalizedTags;
+  } catch (error) {
+    Log.debug("Last.fm album-tag lookup failed", error.message);
+    return [];
+  }
+}
+
+/**
+ * Returns the strongest compact tag profile available for a recording. Track
+ * tags are preferred; album/artist tags only backfill sparse catalog entries.
+ * This prevents a broad artist tag from overwriting a recording-specific lane.
+ */
+async function getLastFmTagProfile({ artist, title, album = "", limit = 8 } = {}) {
+  const trackTags = await getLastFmTrackTags({ artist, title, limit });
+  if (trackTags.length >= 2) return { tags: trackTags, source: "lastfm-track", confidence: 0.68 };
+
+  const albumTags = album ? await getLastFmAlbumTags({ artist, album, limit }) : [];
+  const combined = normalizeGenreTags([...trackTags, ...albumTags], { artist, title }).slice(0, limit);
+  if (combined.length >= 2) return { tags: combined, source: "lastfm-album", confidence: 0.56 };
+
+  const artistTags = await getLastFmArtistTags({ artist, limit });
+  const fallback = normalizeGenreTags([...combined, ...artistTags], { artist, title }).slice(0, limit);
+  if (fallback.length) {
+    return { tags: fallback, source: trackTags.length ? "lastfm-track+artist" : "lastfm-artist", confidence: trackTags.length ? 0.58 : 0.42 };
+  }
+  return { tags: [], source: null, confidence: 0 };
+}
+
 function clearLastFmTagCache() {
   tagCache.clear();
 }
 
-module.exports = { getLastFmSimilarTracks, getLastFmTrackTags, clearLastFmTagCache };
+module.exports = {
+  getLastFmSimilarTracks,
+  getLastFmTrackTags,
+  getLastFmArtistTags,
+  getLastFmAlbumTags,
+  getLastFmTagProfile,
+  clearLastFmTagCache,
+};

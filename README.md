@@ -168,11 +168,19 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_UNVERIFIED_DRIFT_PENALTY` | `18` | Penalty for candidates without enough evidence against the manual listening context. |
 | `AUTOPLAY_ARTIST_WINDOW` | `5` | Recent automatic tracks considered for artist repetition control. |
 | `AUTOPLAY_ARTIST_MAX_IN_WINDOW` | `2` | Maximum automatic appearances by one artist in that window before deferral. |
+| `AUTOPLAY_TEMPO_CORRIDOR_MAX` | `38` | Maximum verified half/double-time-aware BPM jump before an established session rejects the transition. |
+| `AUTOPLAY_ENERGY_CORRIDOR_MAX` | `0.36` | Maximum verified energy jump before an established session rejects the transition. |
+| `AUTOPLAY_VALENCE_CORRIDOR_MAX` | `0.48` | Maximum verified valence/mood jump before an established session rejects the transition. |
 | `AUTOPLAY_TRANSITION_QUALITY_MIN` | `6` | Minimum transition-quality score preferred when a better safe alternative exists. |
 | `AUTOPLAY_TRANSITION_QUALITY_GUARD_AFTER` | `2` | Autoplay streak after which low-quality transitions are deferred. |
 | `AUTOPLAY_DEEZER_METADATA_LIMIT` | `18` | Maximum candidates enriched with Deezer metadata during one autoplay cycle. |
 | `AUTOPLAY_DEEZER_METADATA_CACHE_TTL_MS` | `604800000` | In-memory cache lifetime for Deezer catalog metadata (7 days). |
 | `AUTOPLAY_METADATA_TIMEOUT_MS` | `3500` | Timeout for non-critical metadata requests; playback continues if the lookup fails. |
+| `AUTOPLAY_COMMUNITY_METADATA` | `true` | Uses one bounded metadata aggregator for active/manual autoplay anchors. It prefers Last.fm track tags, verifies sparse recordings with MusicBrainz, then uses TheAudioDB only when genre/mood information is still missing. |
+| `AUTOPLAY_COMMUNITY_METADATA_CACHE_TTL_MS` | `2592000000` | In-memory lifetime for community metadata (30 days). |
+| `AUTOPLAY_COMMUNITY_METADATA_MIN_TAGS` | `2` | Number of usable tags that stops lower-priority community lookups. |
+| `AUTOPLAY_MUSICBRAINZ` | `true` | Enables MusicBrainz recording verification; no API key is needed and calls are throttled to one per ~1.1 seconds. |
+| `AUTOPLAY_THEAUDIODB` | `true` | Enables TheAudioDB genre/mood fallback. The public key `2` is used unless `THEAUDIODB_API_KEY` is set. |
 | `USE_SPOTIFY_AUTOPLAY` | `false` | Opt in to Spotify-derived autoplay candidates. Disabled by default because metadata and availability may vary. |
 
 Autoplay keeps two separate memories. The active playback history is a hard
@@ -324,7 +332,8 @@ Autoplay is designed to act like a conservative DJ rather than a random recommen
 - When a higher-quality transition exists, low-quality transitions are deferred; automatic artists are also limited within a rolling window while still remaining available as an emergency fallback.
 - Provider results are validated again after resolution so an unrelated uploader, mashup, or unexpected edit does not masquerade as the requested recommendation.
 - It preserves an already-good autoplay candidate rather than replacing it each time state updates.
-- Derived Deezer catalog hints are included in the scorer as low-confidence continuity signals, not just logged metadata. If no metadata-backed candidate exists, MewBit first retries from a stable session anchor and only then may use a direct YouTube Mix result; Mix is fallback-only and must pass `AUTOPLAY_MIX_FALLBACK_MIN_SCORE`.
+- Derived Deezer catalog hints are included in the scorer as low-confidence continuity signals, not just logged metadata. Sparse active/manual anchors are enriched through a single cached community-metadata layer: Last.fm track/album/artist tags first, MusicBrainz verification second, and TheAudioDB only as a final genre/mood backfill. The scorer never treats a lone BPM/gain value as a reliable vibe anchor.
+- If no metadata-backed candidate exists, MewBit only retries from a compatible, user-selected anchor with meaningful genre or multi-feature evidence. It never cascades through unverified autoplay fallbacks; a direct YouTube Mix result is the constrained last resort and must pass `AUTOPLAY_MIX_FALLBACK_MIN_SCORE`.
 
 Spotify autoplay is optional (`USE_SPOTIFY_AUTOPLAY=false` by default). Spotify audio-features access is restricted for many Development Mode apps, so MewBit does not depend on it: Spotify metadata is opportunistic, while Last.fm, Deezer catalog metadata, provider-native signals, and the confidence-aware scorer remain usable without a higher Spotify tier.
 
@@ -500,6 +509,17 @@ pnpm test:autoplay:soak -- --fixture tests/fixtures/autoplay/replay.example.json
 ```
 
 The simulator reuses the production session profile, candidate scorer, duplicate identity checks, manual-vibe corridor, transition-quality gate, artist rolling window, and deterministic exploration order. It reports unresolved cycles, provider-resolution failures, cross-provider duplicates, genre-family jumps, artist streaks, fallback usage, and source distribution. A non-zero exit code means the configured acceptance limits were exceeded.
+
+For a test that is much closer to the real bot, use the live soak runner after starting local Lavalink:
+
+```bash
+pnpm lavalink:dev
+pnpm test:autoplay:live -- --query "Tame Impala - Let It Happen" --steps 10
+pnpm test:autoplay:live -- --query "Kuki - Ciepłe Dranie" --steps 5 --delay-ms 1000 --json
+pnpm test:autoplay:live -- --query "Ariana Grande - Into You" --manual-query "The Weeknd - Save Your Tears" --steps 10
+```
+
+The live runner uses the actual Last.fm/Deezer/Spotify candidate collection, real Lavalink search and provider resolution, production scoring, fallback handling, exposure memory, duplicate history, and optional upcoming manual tracks. It now reports evidence quality, fallback selections, genre-bridge strength, and verified tempo/energy/valence transition distances. It does not log in to Discord, join a voice channel, add tracks to a real queue, or play audio. It loads `.env` when present and otherwise `.env.dev`; `AUTOPLAY_LIVE_ENV_FILE` can select another file. It requires local Lavalink and the provider credentials from that env file.
 
 Replay fixtures are JSON files with a `seedTrack` and either `replaySteps` or `candidatesByReference`. The latter maps a reference track identifier to the candidate list that was observed in a real run, making it possible to replay a captured queue locally. Provider/network resolution is represented with `playable: false`; the simulator then tests whether another candidate keeps the session alive.
 

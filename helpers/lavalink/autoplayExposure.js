@@ -183,6 +183,12 @@ function clearAutoplayExposureForTests() {
   saveTimer = null;
 }
 
+function clearAutoplayExposureForGuild(guildId) {
+  if (!guildId) return;
+  delete state.guilds[guildId];
+  schedulePersist();
+}
+
 module.exports = {
   DATA_FILE,
   EXPOSURE_TTL_MS,
@@ -192,4 +198,5 @@ module.exports = {
   getAutoplayExposureSnapshot,
   recordAutoplayExposure,
   clearAutoplayExposureForTests,
+  clearAutoplayExposureForGuild,
 };

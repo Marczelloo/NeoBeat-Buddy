@@ -63,7 +63,7 @@ function buildManualTasteProfile(manualTracks) {
       getGenreFamilies([genre]).forEach((family) => familySet.add(family));
     });
 
-    const features = metadata.features || metadata.derivedFeatures;
+    const features = getContinuityFeatures(metadata);
     if (!features) return;
     for (const field of ["tempo", "energy", "valence", "danceability"]) {
       if (Number.isFinite(features[field])) {
@@ -103,8 +103,26 @@ function getTrackMetadata(track) {
     genres: normalizeGenreTags(rawGenres, { artist, title }),
     features: direct.features || cached.features || null,
     derivedFeatures: direct.derivedFeatures || cached.derivedFeatures || null,
+    metadataConfidence: Math.max(Number(direct.metadataConfidence) || 0, Number(cached.metadataConfidence) || 0),
     releaseYear: direct.releaseYear || cached.releaseYear || null,
   };
+}
+
+function getContinuityFeatures(metadata = {}) {
+  return {
+    ...(metadata.derivedFeatures || {}),
+    ...(metadata.features || {}),
+  };
+}
+
+function getSmoothedTarget(values, trend) {
+  const recent = values.slice(-4).filter(Number.isFinite);
+  if (!recent.length) return null;
+
+  const weightTotal = recent.reduce((sum, _value, index) => sum + index + 1, 0);
+  const smoothed = recent.reduce((sum, value, index) => sum + value * (index + 1), 0) / weightTotal;
+  const direction = trend === "increasing" ? 0.06 : trend === "decreasing" ? -0.06 : 0;
+  return Math.max(0, Math.min(1, Number((smoothed + direction).toFixed(3))));
 }
 
 function getSessionArtist(track) {
@@ -179,10 +197,13 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
       avgYear: null,
       energyTrend: null,
       valenceTrend: null,
+      energyTarget: null,
+      valenceTarget: null,
       referenceGenres: [],
       referenceGenreFamilies: [],
       referenceFeatures: null,
       referenceDerivedFeatures: null,
+      referenceMetadataConfidence: 0,
       avgDerivedFeatures: null,
       recentGenreFamilies: [],
       recentTracks: [],
@@ -215,7 +236,7 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
   const energyValues = [];
   const valenceValues = [];
   const recentGenreFamilies = [];
-  let referenceMetadata = { genres: [], features: null, derivedFeatures: null, releaseYear: null };
+  let referenceMetadata = { genres: [], features: null, derivedFeatures: null, metadataConfidence: 0, releaseYear: null };
 
   let profileWeightTotal = 0;
 
@@ -236,6 +257,7 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     const metadata = getTrackMetadata(track);
     const cachedGenres = metadata.genres;
     const cachedFeatures = metadata.features;
+    const continuityFeatures = getContinuityFeatures(metadata);
     const cachedYear = metadata.releaseYear;
 
     if (index === recentTracks.length - 1) {
@@ -249,12 +271,13 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
 
     if (cachedFeatures) {
       featuresList.push(cachedFeatures);
-      if (Number.isFinite(cachedFeatures.energy)) energyValues.push(cachedFeatures.energy);
-      if (Number.isFinite(cachedFeatures.valence)) valenceValues.push(cachedFeatures.valence);
       if (Number.isFinite(cachedFeatures.tempo)) {
         tempos.push(cachedFeatures.tempo);
       }
     }
+
+    if (Number.isFinite(continuityFeatures.energy)) energyValues.push(continuityFeatures.energy);
+    if (Number.isFinite(continuityFeatures.valence)) valenceValues.push(continuityFeatures.valence);
 
     if (metadata.derivedFeatures) derivedFeaturesList.push(metadata.derivedFeatures);
 
@@ -335,6 +358,9 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     else valenceTrend = "stable";
   }
 
+  const energyTarget = getSmoothedTarget(energyValues, energyTrend);
+  const valenceTarget = getSmoothedTarget(valenceValues, valenceTrend);
+
   Log.debug(
     "Session profile with enhanced features",
     "",
@@ -346,7 +372,8 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     `avgTempo=${avgTempo ? Math.round(avgTempo) : "unknown"}`,
     `avgYear=${avgYear || "unknown"}`,
     `energyTrend=${energyTrend || "unknown"}`,
-    `valenceTrend=${valenceTrend || "unknown"}`
+    `valenceTrend=${valenceTrend || "unknown"}`,
+    `energyTarget=${energyTarget ?? "unknown"}`
   );
 
   // Track last 3 artists to prevent consecutive plays
@@ -371,10 +398,13 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     avgYear,
     energyTrend,
     valenceTrend,
+    energyTarget,
+    valenceTarget,
     referenceGenres: referenceMetadata.genres,
     referenceGenreFamilies: getGenreFamilies(referenceMetadata.genres),
     referenceFeatures: referenceMetadata.features,
     referenceDerivedFeatures: referenceMetadata.derivedFeatures,
+    referenceMetadataConfidence: referenceMetadata.metadataConfidence,
     avgDerivedFeatures,
     recentGenreFamilies,
     recentTracks,
@@ -403,4 +433,6 @@ module.exports = {
   isManualTrack,
   sessionStartTime,
   genreCache,
+  getContinuityFeatures,
+  getSmoothedTarget,
 };

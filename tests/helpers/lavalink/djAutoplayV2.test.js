@@ -1,18 +1,21 @@
 const assert = require("node:assert");
 const { beforeEach, describe, it } = require("node:test");
 
-const { scoreCandidates } = require("../../../helpers/lavalink/candidateScoring");
+const { hasReliableSessionVibe, scoreCandidates } = require("../../../helpers/lavalink/candidateScoring");
 const { buildSessionProfile } = require("../../../helpers/lavalink/sessionProfile");
 const {
   cleanTrackInfo,
   applyCandidateMetadata,
   getAutoplayReference,
+  getTransitionQuality,
   partitionRankedCandidates,
   getMetadataFreeYouTubeMixFallbackCandidates,
   resolveMetadataFreeYouTubeMixFallback,
   resolveRankedCandidates,
   selectTagEnrichmentTargets,
   getStableFallbackAnchor,
+  getFallbackOriginAnchor,
+  attachFallbackOrigin,
   getRelevantPlayableTrack,
   getProviderValidationIssue,
   resolveToPlayable,
@@ -30,6 +33,8 @@ function track(title, artist, identifier, options = {}) {
       autoplay: Boolean(options.autoplay),
       genres: options.genres || [],
       features: options.features || null,
+      derivedFeatures: options.derivedFeatures || null,
+      metadataConfidence: options.metadataConfidence || 0,
     },
   };
 }
@@ -43,6 +48,9 @@ function candidate(title, artist, identifier, options = {}) {
     source: options.source || "lastfm_similar",
     genres: options.genres || [],
     features: options.features || null,
+    derivedFeatures: options.derivedFeatures || null,
+    metadataConfidence: options.metadataConfidence || 0,
+    metadataProvider: options.metadataProvider || null,
     popularity: options.popularity || 0,
     similarity: options.similarity || 0,
     isFallback: Boolean(options.isFallback),
@@ -65,9 +73,12 @@ function profile(overrides = {}) {
     avgFeatures: null,
     energyTrend: null,
     valenceTrend: null,
+    energyTarget: null,
+    valenceTarget: null,
     referenceGenres: [],
     referenceGenreFamilies: [],
     referenceFeatures: null,
+    referenceMetadataConfidence: 0,
     recentGenreFamilies: [],
     ...overrides,
   };
@@ -250,6 +261,24 @@ describe("DJ autoplay v2", () => {
     assert.deepStrictEqual(getMetadataFreeYouTubeMixFallbackCandidates(ranked, profile()).map((item) => item.identifier), []);
   });
 
+  it("keeps an anchorless metadata-free Mix lane alive after the drift guard starts", () => {
+    const mix = candidate("Rare follow-up", "Meme Uploader", "mix-continuation", { source: "youtube_mix" });
+    mix.track = track("Rare follow-up", "Meme Uploader", "mix-continuation");
+    const anchor = track("Obscure original", "Obscure Artist", "obscure-origin");
+    const session = profile({
+      autoplayStreak: 3,
+      manualAnchorRecords: [{ track: anchor, type: "played" }],
+      manualTasteGenres: [],
+      manualTasteGenreFamilies: [],
+    });
+
+    const ranked = scoreCandidates([mix], session, noSkips, GUILD_ID);
+
+    assert.strictEqual(ranked[0].hardRejected, false);
+    assert.strictEqual(ranked[0].fallbackOnly, true);
+    assert.deepStrictEqual(getMetadataFreeYouTubeMixFallbackCandidates(ranked, session).map((item) => item.identifier), ["mix-continuation"]);
+  });
+
   it("allows a trusted consecutive same-artist continuation with a soft penalty", () => {
     const [ranked] = scoreCandidates(
       [candidate("Different song", "Same Artist", "same-artist-next", { similarity: 0.95 })],
@@ -304,6 +333,13 @@ describe("DJ autoplay v2", () => {
     assert.deepStrictEqual(
       cleanTrackInfo("The Weeknd - Save Your Tears (Official Music Video)", "TheWeekndVEVO"),
       { cleanTitle: "Save Your Tears", searchArtist: "The Weeknd" }
+    );
+  });
+
+  it("uses the title prefix when YouTube reports a known uploader channel instead of the artist", () => {
+    assert.deepStrictEqual(
+      cleanTrackInfo("Quebonafide - BUBBLETEA (CLEAN)", "Clean Songs PL"),
+      { cleanTitle: "BUBBLETEA", searchArtist: "Quebonafide" }
     );
   });
 
@@ -433,6 +469,51 @@ describe("DJ autoplay v2", () => {
     assert.strictEqual(fallback, stable);
   });
 
+  it("does not treat a lone BPM reading as a stable session vibe anchor", () => {
+    const sparseManual = track("Manual but sparse", "Listener", "manual-sparse", {
+      features: { tempo: 122 },
+      metadataConfidence: 0.45,
+    });
+    const failedReference = track("Unknown autoplay", "Uploader", "failed-auto", { autoplay: true });
+    const session = profile({
+      recentTracks: [sparseManual, failedReference],
+      referenceFeatures: { tempo: 122 },
+      referenceMetadataConfidence: 0.45,
+    });
+
+    assert.strictEqual(hasReliableSessionVibe(session), false);
+    assert.strictEqual(getStableFallbackAnchor(session, failedReference), null);
+  });
+
+  it("does not reuse an autoplay track as a catalog fallback anchor", () => {
+    const manual = track("Manual source", "Listener", "manual-source", { genres: ["synthpop"] });
+    const previousAutoplay = track("Unverified continuation", "Radio", "auto-previous", {
+      autoplay: true,
+      genres: ["synthpop"],
+    });
+    const failedReference = track("Failed continuation", "Radio", "auto-failed", { autoplay: true });
+    const session = profile({
+      recentTracks: [manual, previousAutoplay, failedReference],
+      referenceGenres: ["synthpop"],
+      referenceGenreFamilies: ["electronic", "pop"],
+    });
+
+    assert.strictEqual(getStableFallbackAnchor(session, failedReference), manual);
+  });
+
+  it("does not classify a lone BPM match as a high-quality transition", () => {
+    const quality = getTransitionQuality(
+      candidate("Tempo coincidence", "Different Artist", "tempo-only", {
+        features: { tempo: 120 },
+      }),
+      profile({
+        referenceFeatures: { tempo: 121 },
+        referenceMetadataConfidence: 0.45,
+      })
+    );
+    assert.ok(quality < 6);
+  });
+
   it("hard-rejects a genre jump even when a fallback is popular", () => {
     const [ranked] = scoreCandidates(
       [candidate("Heavy detour", "Metal Artist", "metal", { source: "deezer_recommendations", genres: ["metalcore"], popularity: 80 })],
@@ -552,5 +633,124 @@ describe("DJ autoplay v2", () => {
     assert.strictEqual(ranked.hardRejected, true);
     assert.strictEqual(ranked.rejectionReason, "recent-duplicate");
     assert.ok(ranked.scoringDetails.includes("duplicate:-1000(title)"));
+  });
+
+  it("rejects a verified large BPM jump even inside one specific genre lane", () => {
+    const [ranked] = scoreCandidates(
+      [
+        candidate("Far tempo detour", "Synth Artist", "tempo-detour", {
+          genres: ["synthpop"],
+          features: { tempo: 160, energy: 0.65, valence: 0.55 },
+          metadataConfidence: 1,
+          metadataProvider: "spotify",
+          similarity: 0.9,
+        }),
+      ],
+      profile({
+        referenceGenres: ["synthpop"],
+        referenceGenreFamilies: ["electronic", "pop"],
+        referenceFeatures: { tempo: 105, energy: 0.62, valence: 0.57 },
+        referenceMetadataConfidence: 1,
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked.hardRejected, true);
+    assert.strictEqual(ranked.rejectionReason, "transition-corridor");
+    assert.ok(ranked.scoringDetails.some((detail) => detail.startsWith("corridor:-1000(tempo:")));
+  });
+
+  it("rejects a verified energy cliff while preserving the genre lane", () => {
+    const [ranked] = scoreCandidates(
+      [
+        candidate("Energy cliff", "Synth Artist", "energy-detour", {
+          genres: ["synthpop"],
+          features: { tempo: 112, energy: 0.1, valence: 0.56 },
+          metadataConfidence: 1,
+          metadataProvider: "spotify",
+          similarity: 0.9,
+        }),
+      ],
+      profile({
+        referenceGenres: ["synthpop"],
+        referenceGenreFamilies: ["electronic", "pop"],
+        referenceFeatures: { tempo: 110, energy: 0.7, valence: 0.58 },
+        referenceMetadataConfidence: 1,
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked.hardRejected, true);
+    assert.strictEqual(ranked.rejectionReason, "transition-corridor");
+    assert.ok(ranked.scoringDetails.some((detail) => detail.includes("energy:")));
+  });
+
+  it("does not leave a known specific genre lane on one broad-family signal alone", () => {
+    const [ranked] = scoreCandidates(
+      [
+        candidate("Indie detour", "Indie Artist", "specific-lane-detour", {
+          genres: ["indie rock", "pop"],
+          features: { tempo: 111 },
+          metadataConfidence: 0.45,
+          metadataProvider: "deezer",
+          similarity: 0.9,
+        }),
+      ],
+      profile({
+        referenceGenres: ["synthpop", "pop"],
+        referenceGenreFamilies: ["electronic", "pop"],
+        referenceFeatures: { tempo: 110, energy: 0.62, valence: 0.55 },
+        referenceMetadataConfidence: 1,
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked.hardRejected, true);
+    assert.strictEqual(ranked.rejectionReason, "transition-corridor");
+    assert.ok(ranked.scoringDetails.includes("corridor:-1000(specific-genre-floor)"));
+  });
+
+  it("rewards a specific genre bridge over an equally similar broad family match", () => {
+    const ranked = scoreCandidates(
+      [
+        candidate("Specific bridge", "Synth Artist", "specific", {
+          genres: ["synthpop"],
+          features: { tempo: 110, energy: 0.62, valence: 0.55 },
+          metadataConfidence: 1,
+          metadataProvider: "spotify",
+          similarity: 0.72,
+        }),
+        candidate("Broad bridge", "Electronic Artist", "broad", {
+          genres: ["electronic"],
+          features: { tempo: 110, energy: 0.62, valence: 0.55 },
+          metadataConfidence: 1,
+          metadataProvider: "spotify",
+          similarity: 0.72,
+        }),
+      ],
+      profile({
+        referenceGenres: ["synthpop", "electronic"],
+        referenceGenreFamilies: ["electronic", "pop"],
+        referenceFeatures: { tempo: 110, energy: 0.62, valence: 0.55 },
+        referenceMetadataConfidence: 1,
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked[0].identifier, "specific");
+    assert.ok(ranked[0].scoringDetails.includes("transition:specific-bridge"));
+  });
+
+  it("keeps the original fallback anchor across repeated metadata-free Mix selections", () => {
+    const anchor = track("Rare Meme", "Original Artist", "origin", { genres: [] });
+    const firstMix = attachFallbackOrigin(track("Mix follow-up", "Uploader", "mix-one"), anchor);
+    const secondMix = attachFallbackOrigin(track("Another Mix follow-up", "Uploader", "mix-two"), getFallbackOriginAnchor(firstMix));
+
+    assert.deepStrictEqual(getFallbackOriginAnchor(secondMix).info, getFallbackOriginAnchor(firstMix).info);
+    assert.strictEqual(getFallbackOriginAnchor(secondMix).info.identifier, "origin");
   });
 });

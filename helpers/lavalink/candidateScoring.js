@@ -1,7 +1,14 @@
 const Log = require("../logs/log");
 const { getExposureKey, getExposureRecord } = require("./autoplayExposure");
 const { getFeatureCoverage, getTempoDistance } = require("./autoplayMetadata");
-const { areGenreFamiliesCompatible, findGenreOverlap, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
+const {
+  areGenreFamiliesCompatible,
+  findGenreOverlap,
+  findSpecificGenreOverlap,
+  getGenreBridgeStrength,
+  getGenreFamilies,
+  normalizeGenreTags,
+} = require("./genreUtils");
 const { getTrackMetadata, sessionStartTime } = require("./sessionProfile");
 const { hasTrackIdentity } = require("./trackIdentity");
 const {
@@ -15,6 +22,9 @@ const AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE = Number(process.env.AUTOPLAY_MANUAL_ANCH
 const AUTOPLAY_UNVERIFIED_DRIFT_PENALTY = Number(process.env.AUTOPLAY_UNVERIFIED_DRIFT_PENALTY ?? 18);
 const AUTOPLAY_ARTIST_WINDOW = Math.max(Number(process.env.AUTOPLAY_ARTIST_WINDOW ?? 5), 3);
 const AUTOPLAY_ARTIST_MAX_IN_WINDOW = Math.max(Number(process.env.AUTOPLAY_ARTIST_MAX_IN_WINDOW ?? 2), 1);
+const AUTOPLAY_TEMPO_CORRIDOR_MAX = Math.max(Number(process.env.AUTOPLAY_TEMPO_CORRIDOR_MAX ?? 38), 20);
+const AUTOPLAY_ENERGY_CORRIDOR_MAX = Math.min(Math.max(Number(process.env.AUTOPLAY_ENERGY_CORRIDOR_MAX ?? 0.36), 0.15), 0.8);
+const AUTOPLAY_VALENCE_CORRIDOR_MAX = Math.min(Math.max(Number(process.env.AUTOPLAY_VALENCE_CORRIDOR_MAX ?? 0.48), 0.2), 1);
 
 /**
  * Gets time-of-day factor for energy preferences
@@ -210,16 +220,31 @@ function getReferenceFeatures(profile = {}) {
   };
 }
 
-function hasSessionVibeAnchor(profile = {}) {
-  return Boolean(
+function hasReliableSessionVibe(profile = {}) {
+  const genreSignal = Boolean(
     profile.referenceGenreFamilies?.length ||
       profile.referenceGenres?.length ||
       profile.manualAnchorGenreFamilies?.length ||
       profile.manualTasteGenreFamilies?.length ||
-      Object.keys(getReferenceFeatures(profile)).length > 0 ||
-      profile.topGenres?.length ||
-      profile.avgFeatures
+      profile.topGenres?.length
   );
+  if (genreSignal) return true;
+
+  const referenceCoverage = getFeatureCoverage(getReferenceFeatures(profile));
+  const manualCoverage = getFeatureCoverage({
+    ...(profile.manualTasteDerivedFeatures || {}),
+    ...(profile.manualTasteFeatures || {}),
+  });
+  const confidence = Number(profile.referenceMetadataConfidence) || 0;
+
+  // A single BPM or gain reading is useful for a soft rank but cannot prove a
+  // mood lane. Requiring two measured dimensions prevents catalog fallbacks
+  // from treating a sparse Deezer lookup as a trusted DJ anchor.
+  return manualCoverage >= 2 || referenceCoverage >= 2 || (referenceCoverage >= 1 && confidence >= 0.8);
+}
+
+function hasSessionVibeAnchor(profile = {}) {
+  return hasReliableSessionVibe(profile);
 }
 
 function getVibeEvidence(candidate, profile, candidateFamilies, referenceFamilies, referenceGenres) {
@@ -338,6 +363,104 @@ function getMetadataConfidence(candidate) {
   return null;
 }
 
+function getFeatureConfidence(candidate, field) {
+  const metadataConfidence = Math.max(Number(candidate?.metadataConfidence) || 0, 0);
+  if (hasNumber(candidate?.features?.[field])) {
+    if (field === "tempo") return Math.max(metadataConfidence, 0.45);
+    return candidate?.metadataProvider === "spotify" || metadataConfidence >= 0.8 ? 1 : 0.65;
+  }
+  if (hasNumber(candidate?.derivedFeatures?.[field])) return Math.min(Math.max(metadataConfidence, 0.25), 0.45);
+  return 0;
+}
+
+function hasStrongSessionVibe(profile, referenceFeatures) {
+  return Boolean(
+    profile?.referenceGenreFamilies?.length ||
+      profile?.referenceGenres?.length ||
+      profile?.manualAnchorGenreFamilies?.length ||
+      Object.keys(referenceFeatures || {}).length >= 2
+  );
+}
+
+function getTransitionCorridor(candidate, profile, referenceFamilies, referenceGenres, candidateFamilies, candidateFeatures, referenceFeatures) {
+  const bridge = getGenreBridgeStrength(referenceGenres, candidate.genres || []);
+  const active = hasStrongSessionVibe(profile, referenceFeatures);
+  const violations = [];
+  const referenceConfidence = Math.max(Number(profile?.referenceMetadataConfidence) || 0, 0.45);
+  const referenceSpecificGenres = findSpecificGenreOverlap(referenceGenres, referenceGenres);
+  const closeFeatureSignals = [
+    hasNumber(candidateFeatures.tempo) &&
+      hasNumber(referenceFeatures.tempo) &&
+      getFeatureConfidence(candidate, "tempo") >= 0.45 &&
+      getTempoDistance(candidateFeatures.tempo, referenceFeatures.tempo) <= 24,
+    hasNumber(candidateFeatures.energy) &&
+      hasNumber(referenceFeatures.energy) &&
+      getFeatureConfidence(candidate, "energy") >= 0.6 &&
+      Math.abs(candidateFeatures.energy - referenceFeatures.energy) <= 0.2,
+    hasNumber(candidateFeatures.valence) &&
+      hasNumber(referenceFeatures.valence) &&
+      getFeatureConfidence(candidate, "valence") >= 0.6 &&
+      Math.abs(candidateFeatures.valence - referenceFeatures.valence) <= 0.25,
+  ].filter(Boolean).length;
+
+  // Broad labels such as "pop" or "rock" are safety rails, not proof that a
+  // synth-pop set should suddenly become an indie-rock radio stream. When we
+  // do know a specific current/manual lane, require either that lane itself
+  // or two independently close measured signals before crossing into another
+  // subgenre. Generic-only sessions remain flexible.
+  if (
+    active &&
+    referenceSpecificGenres.length > 0 &&
+    candidate.genres.length > 0 &&
+    bridge.strength < 3 &&
+    closeFeatureSignals < 2
+  ) {
+    violations.push("specific-genre-floor");
+  }
+
+  if (
+    active &&
+    hasNumber(candidateFeatures.tempo) &&
+    hasNumber(referenceFeatures.tempo) &&
+    getFeatureConfidence(candidate, "tempo") >= 0.45 &&
+    referenceConfidence >= 0.45
+  ) {
+    const tempoDistance = getTempoDistance(candidateFeatures.tempo, referenceFeatures.tempo);
+    const maxDistance = bridge.strength >= 2 ? AUTOPLAY_TEMPO_CORRIDOR_MAX + 10 : AUTOPLAY_TEMPO_CORRIDOR_MAX;
+    if (tempoDistance !== null && tempoDistance > maxDistance) violations.push(`tempo:${Math.round(tempoDistance)}`);
+  }
+
+  for (const field of ["energy", "valence"]) {
+    const maxDistance = field === "energy" ? AUTOPLAY_ENERGY_CORRIDOR_MAX : AUTOPLAY_VALENCE_CORRIDOR_MAX;
+    if (
+      active &&
+      hasNumber(candidateFeatures[field]) &&
+      hasNumber(referenceFeatures[field]) &&
+      getFeatureConfidence(candidate, field) >= 0.6 &&
+      referenceConfidence >= 0.6
+    ) {
+      const distance = Math.abs(candidateFeatures[field] - referenceFeatures[field]);
+      if (distance > maxDistance) violations.push(`${field}:${distance.toFixed(2)}`);
+    }
+  }
+
+  const familyCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
+  return {
+    active,
+    bridgeStrength: bridge.strength,
+    specificOverlap: bridge.specificOverlap,
+    violations,
+    shouldReject: violations.length > 0 && familyCompatibility !== false,
+  };
+}
+
+function getDjRunwayScore(candidate, bridgeStrength) {
+  const metadata = getMetadataConfidence(candidate) || 0;
+  const providerSignal = candidate.source === "lastfm_similar" ? 2 : candidate.source === "deezer_recommendations" ? 1.5 : 0;
+  const fallbackPenalty = candidate.source === "youtube_mix" ? 2 : 0;
+  return Number((bridgeStrength * 2 + metadata * 4 + providerSignal - fallbackPenalty).toFixed(2));
+}
+
 function getProfileGenres(topGenres = []) {
   const weights = new Map();
 
@@ -383,9 +506,20 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       ? profile.referenceGenreFamilies
       : getGenreFamilies(sessionGenres);
     const referenceGenres = normalizeGenreTags([...(profile.referenceGenres || []), ...sessionGenres]);
+    const transitionReferenceGenres = normalizeGenreTags(profile.referenceGenres?.length ? profile.referenceGenres : sessionGenres);
     const candidateFeatures = getCandidateFeatures(candidate);
     const referenceFeatures = getReferenceFeatures(profile);
     candidate.genreFamilies = candidateFamilies;
+    const transitionCorridor = getTransitionCorridor(
+      candidate,
+      profile,
+      referenceFamilies,
+      transitionReferenceGenres,
+      candidateFamilies,
+      candidateFeatures,
+      referenceFeatures
+    );
+    candidate.transitionCorridor = transitionCorridor;
 
     const versionCompatibility = getAutoplayVersionCompatibility(
       candidate.title,
@@ -439,7 +573,19 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       scoringDetails.push(`${candidate.isFallback ? "fallback" : "provider"}:-1000(no-vibe-signal)`);
     }
 
-    if (!candidate.hardRejected && manualAnchorVibe.hasUsableAnchor) {
+    // Once the room has a reliable current identity, a large verified tempo,
+    // energy, or mood jump is a bad transition even if both songs happen to
+    // live under a broad family such as pop or electronic. Direct Mix tracks
+    // without any session metadata stay available in the dedicated fallback
+    // path above, preserving niche and meme-music sessions.
+    if (!candidate.hardRejected && transitionCorridor.shouldReject) {
+      score -= 1000;
+      candidate.hardRejected = true;
+      candidate.rejectionReason = "transition-corridor";
+      scoringDetails.push(`corridor:-1000(${transitionCorridor.violations.join("/")})`);
+    }
+
+    if (!candidate.hardRejected && !isMetadataFreeMix && manualAnchorVibe.hasUsableAnchor) {
       const anchorBonus = Math.min(18, Math.round(manualAnchorVibe.bestScore * 0.18));
       if (anchorBonus > 0) {
         score += anchorBonus;
@@ -488,6 +634,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     // by arriving with sparse metadata.
     if (
       !candidate.hardRejected &&
+      !isMetadataFreeMix &&
       driftGuardActive &&
       !scoringOptions.anchorTrusted &&
       hasManualTasteContext &&
@@ -535,9 +682,20 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     }
 
     const exactReferenceOverlap = findGenreOverlap(referenceGenres, candidate.genres || []);
+    const specificReferenceOverlap = findSpecificGenreOverlap(referenceGenres, candidate.genres || []);
     if (exactReferenceOverlap.length > 0) {
       genreBonus += 8;
       scoringDetails.push("transition:shared-subgenre");
+    }
+    if (specificReferenceOverlap.length > 0) {
+      genreBonus += 8;
+      scoringDetails.push("transition:specific-bridge");
+    }
+
+    candidate.runwayScore = getDjRunwayScore(candidate, transitionCorridor.bridgeStrength);
+    if (!candidate.hardRejected && candidate.runwayScore > 0) {
+      score += Math.min(candidate.runwayScore, 8);
+      scoringDetails.push(`runway:+${Math.min(candidate.runwayScore, 8)}`);
     }
 
     // Softly discourage leaving the dominant session family while still
@@ -740,16 +898,18 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       }
     }
 
-    // Factor 6: Time-of-day awareness
-    if (candidateFeatures.energy !== undefined) {
+    // Time of day is deliberately a weak cold-start tie-breaker. Listener
+    // selections and the active transition must always outrank it.
+    const hasListenerVibe = hasStrongSessionVibe(profile, referenceFeatures) || getManualAnchorRecords(profile).length > 0;
+    if (!hasListenerVibe && candidateFeatures.energy !== undefined) {
       const energyDiff = Math.abs(candidateFeatures.energy - timeOfDay.factor);
 
       if (energyDiff < 0.15) {
-        score += 12;
-        scoringDetails.push(`timeOfDay:+12(${timeOfDay.period})`);
+        score += 3;
+        scoringDetails.push(`timeOfDay:+3(${timeOfDay.period})`);
       } else if (energyDiff < 0.3) {
-        score += 6;
-        scoringDetails.push(`timeOfDay:+6(${timeOfDay.period})`);
+        score += 1;
+        scoringDetails.push(`timeOfDay:+1(${timeOfDay.period})`);
       }
     }
 
@@ -784,6 +944,34 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
           score += 8;
           scoringDetails.push("mood:+8(stable)");
         }
+      }
+    }
+
+    // A DJ usually holds a stable plateau and only moves energy in deliberate,
+    // small steps. The target is a recency-weighted estimate from the set, not
+    // a clock-based preference.
+    if (hasNumber(candidateFeatures.energy) && hasNumber(profile.energyTarget)) {
+      const energyDiff = Math.abs(candidateFeatures.energy - profile.energyTarget);
+      if (energyDiff < 0.14) {
+        score += 12;
+        scoringDetails.push("djEnergy:+12(target)");
+      } else if (energyDiff < 0.24) {
+        score += 5;
+        scoringDetails.push("djEnergy:+5(target)");
+      } else if (energyDiff > 0.38 && getFeatureConfidence(candidate, "energy") >= 0.6) {
+        score -= 16;
+        scoringDetails.push("djEnergy:-16(step-too-large)");
+      }
+    }
+
+    if (hasNumber(candidateFeatures.valence) && hasNumber(profile.valenceTarget)) {
+      const valenceDiff = Math.abs(candidateFeatures.valence - profile.valenceTarget);
+      if (valenceDiff < 0.16) {
+        score += 7;
+        scoringDetails.push("djMood:+7(target)");
+      } else if (valenceDiff > 0.42 && getFeatureConfidence(candidate, "valence") >= 0.6) {
+        score -= 10;
+        scoringDetails.push("djMood:-10(step-too-large)");
       }
     }
 
@@ -1024,4 +1212,8 @@ module.exports = {
   getCandidateVibeTrust,
   getAutoplayExposurePenalty,
   getMetadataConfidence,
+  getFeatureConfidence,
+  getTransitionCorridor,
+  getDjRunwayScore,
+  hasReliableSessionVibe,
 };
