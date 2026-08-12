@@ -166,6 +166,10 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_DRIFT_GUARD_AFTER` | `2` | Consecutive autoplay tracks after which the manual-anchor corridor is enforced. |
 | `AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE` | `42` | Minimum normalized fit to a manual anchor while drift protection is active. |
 | `AUTOPLAY_UNVERIFIED_DRIFT_PENALTY` | `18` | Penalty for candidates without enough evidence against the manual listening context. |
+| `AUTOPLAY_ARTIST_WINDOW` | `5` | Recent automatic tracks considered for artist repetition control. |
+| `AUTOPLAY_ARTIST_MAX_IN_WINDOW` | `2` | Maximum automatic appearances by one artist in that window before deferral. |
+| `AUTOPLAY_TRANSITION_QUALITY_MIN` | `6` | Minimum transition-quality score preferred when a better safe alternative exists. |
+| `AUTOPLAY_TRANSITION_QUALITY_GUARD_AFTER` | `2` | Autoplay streak after which low-quality transitions are deferred. |
 | `AUTOPLAY_DEEZER_METADATA_LIMIT` | `18` | Maximum candidates enriched with Deezer metadata during one autoplay cycle. |
 | `AUTOPLAY_DEEZER_METADATA_CACHE_TTL_MS` | `604800000` | In-memory cache lifetime for Deezer catalog metadata (7 days). |
 | `AUTOPLAY_METADATA_TIMEOUT_MS` | `3500` | Timeout for non-critical metadata requests; playback continues if the lookup fails. |
@@ -315,7 +319,9 @@ Autoplay is designed to act like a conservative DJ rather than a random recommen
 - If only Deezer BPM/gain and genre cues are available, MewBit creates low-confidence catalog-derived energy/mood hints for tie-breaking. These are not treated as measured audio features; true waveform analysis still requires fetching/decoding the audio and is intentionally not part of the normal autoplay request path.
 - It limits artist streaks, but does not ban a fitting artist permanently.
 - It keeps manual listening history separate from autoplay history, treats manual tracks as the strongest taste signal, and inspects the next manual queue items before prefetching a recommendation.
+- It keeps a separate manual taste fingerprint so autoplay recommendations cannot gradually rewrite the room's genre profile.
 - After a configurable autoplay streak, it enforces a manual-anchor corridor and refuses candidates that contradict the queued/user-selected vibe; low-confidence drift candidates cannot enter the emergency same-artist lane.
+- When a higher-quality transition exists, low-quality transitions are deferred; automatic artists are also limited within a rolling window while still remaining available as an emergency fallback.
 - Provider results are validated again after resolution so an unrelated uploader, mashup, or unexpected edit does not masquerade as the requested recommendation.
 - It preserves an already-good autoplay candidate rather than replacing it each time state updates.
 - Derived Deezer catalog hints are included in the scorer as low-confidence continuity signals, not just logged metadata. If no metadata-backed candidate exists, MewBit first retries from a stable session anchor and only then may use a direct YouTube Mix result; Mix is fallback-only and must pass `AUTOPLAY_MIX_FALLBACK_MIN_SCORE`.

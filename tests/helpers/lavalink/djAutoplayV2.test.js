@@ -76,6 +76,72 @@ function profile(overrides = {}) {
 describe("DJ autoplay v2", () => {
   beforeEach(() => playbackState.clear());
 
+  it("keeps manual taste separate from the current autoplay transition", () => {
+    const manual = track("Manual pick", "Listener Artist", "manual-rnb", { genres: ["rnb"] });
+    const autoplayOne = track("Autoplay one", "Radio Artist", "auto-metal-1", {
+      autoplay: true,
+      genres: ["metal"],
+    });
+    const autoplayTwo = track("Autoplay two", "Radio Artist", "auto-metal-2", {
+      autoplay: true,
+      genres: ["metal"],
+    });
+
+    playbackState.set(GUILD_ID, {
+      history: [manual, autoplayOne],
+      manualHistory: [manual],
+      autoplayHistory: [{ track: autoplayOne }],
+    });
+
+    const session = buildSessionProfile(GUILD_ID, autoplayTwo);
+
+    assert.deepStrictEqual(session.manualTasteGenres.map(({ genre }) => genre), ["rnb"]);
+    assert.deepStrictEqual(session.manualTasteGenreFamilies, ["rnb"]);
+    assert.deepStrictEqual(session.referenceGenreFamilies, ["metal"]);
+    assert.strictEqual(session.referenceIsAutoplay, true);
+    assert.strictEqual(session.autoplayStreak, 2);
+  });
+
+  it("hard-rejects a sparse candidate outside the manual taste corridor", () => {
+    const [ranked] = scoreCandidates(
+      [candidate("Metal detour", "New Artist", "metal-detour", { genres: ["metal"], similarity: 0.95 })],
+      profile({
+        manualAnchorRecords: [{ track: track("Manual pick", "Listener Artist", "manual-rnb"), type: "played" }],
+        manualTasteGenres: [{ genre: "rnb", count: 1, weight: 1 }],
+        manualTasteGenreFamilies: ["rnb"],
+        referenceGenres: ["metal"],
+        referenceGenreFamilies: ["metal"],
+        referenceIsAutoplay: true,
+        autoplayStreak: 2,
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked.hardRejected, true);
+    assert.strictEqual(ranked.rejectionReason, "manual-anchor-drift");
+    assert.ok(ranked.scoringDetails.includes("manualAnchor:-1000(unverified-drift)"));
+  });
+
+  it("defers an artist that already fills the autoplay rolling window", () => {
+    const [ranked] = scoreCandidates(
+      [candidate("Another good song", "Repeat Artist", "repeat-artist-4", { genres: ["pop"], similarity: 0.8 })],
+      profile({
+        referenceGenres: ["pop"],
+        referenceGenreFamilies: ["pop"],
+        referenceIsAutoplay: true,
+        recentAutoplayArtists: ["Repeat Artist", "Other Artist", "Repeat Artist", "Third Artist", "Repeat Artist"],
+        lastThreeArtists: ["Other Artist", "Third Artist", "Fresh Artist"],
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked.hardRejected, false);
+    assert.strictEqual(ranked.deferred, true);
+    assert.strictEqual(ranked.deferredReason, "artist-window-3");
+  });
+
   it("treats Last.fm similarity as a positive signal, not catalog popularity", () => {
     const ranked = scoreCandidates(
       [

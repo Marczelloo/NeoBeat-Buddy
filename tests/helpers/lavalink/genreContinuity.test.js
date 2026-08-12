@@ -22,6 +22,16 @@ describe("Autoplay genre continuity", () => {
     );
   });
 
+  it("removes low-signal context tags without removing real listening styles", () => {
+    const genres = normalizeGenreTags(["nightcore", "vaporwave", "rain", "music video", "official audio"]);
+
+    assert.ok(genres.includes("nightcore"));
+    assert.ok(genres.includes("vaporwave"));
+    assert.ok(!genres.includes("rain"));
+    assert.ok(!genres.includes("music video"));
+    assert.ok(!genres.includes("official audio"));
+  });
+
   it("hard-rejects a known incompatible transition from the current track", () => {
     const candidates = [
       {

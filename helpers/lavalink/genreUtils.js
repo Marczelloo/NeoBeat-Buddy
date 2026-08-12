@@ -40,6 +40,7 @@ const GENRE_ALIASES = [
 ];
 
 const NON_MUSIC_TAG_PATTERN = /^(?:\d{4}s?|\d{2}s|\d{4}\s+music|seen\s+live|favorite(?:s)?|favourites?|my\s+(?:favorites?|favourites?|music|shit)|female\s+vocalists?|male\s+vocalists?|under\s+\d+\s+listeners|awesome|love|loved|beautiful|cool|best|good|bad|spotify|last\s*fm|scrobble(?:d)?|heard\s+on|playlist|indie\s+playlist|english|polish|american|british|german|french|swedish|canadian)$/i;
+const LOW_SIGNAL_CONTEXT_TAG_PATTERN = /^(?:mortality|freedom\s+vs\s+conformity|jazz\s+elements?|rain|clipe|estudo|violao|official(?:\s+audio)?|music\s+video)$/i;
 
 function isNoisyGenreTag(genre) {
   const tag = normalizeGenre(genre);
@@ -52,6 +53,7 @@ function isNoisyGenreTag(genre) {
   if (/\b(?:fm|radio|listeners?|scrobble|playlist|station|channel)\b/i.test(tag)) return true;
   if (/\d/.test(tag) && !/^\d{4}s?$/.test(tag)) return true;
   if (/^(?:my|the)\s+(?:pussy|favorite|favourite|personal|own)\b/i.test(tag)) return true;
+  if (LOW_SIGNAL_CONTEXT_TAG_PATTERN.test(tag)) return true;
 
   return false;
 }

@@ -36,6 +36,8 @@ const AUTOPLAY_DIVERSITY_SCORE_BAND = Number(process.env.AUTOPLAY_DIVERSITY_SCOR
 const AUTOPLAY_SELECTION_MAX_SCORE_DROP = Number(process.env.AUTOPLAY_SELECTION_MAX_SCORE_DROP ?? 4);
 const AUTOPLAY_SELECTION_QUALITY_ADVANTAGE = Number(process.env.AUTOPLAY_SELECTION_QUALITY_ADVANTAGE ?? 3);
 const AUTOPLAY_MIX_FALLBACK_MIN_SCORE = Number(process.env.AUTOPLAY_MIX_FALLBACK_MIN_SCORE ?? 58);
+const AUTOPLAY_TRANSITION_QUALITY_MIN = Number(process.env.AUTOPLAY_TRANSITION_QUALITY_MIN ?? 6);
+const AUTOPLAY_TRANSITION_QUALITY_GUARD_AFTER = Math.max(Number(process.env.AUTOPLAY_TRANSITION_QUALITY_GUARD_AFTER ?? 2), 1);
 const USE_DEEZER_METADATA = process.env.AUTOPLAY_DEEZER_METADATA !== "false";
 const AUTOPLAY_DEEZER_METADATA_LIMIT = Number(process.env.AUTOPLAY_DEEZER_METADATA_LIMIT ?? 18);
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
@@ -1020,6 +1022,7 @@ function hasSessionVibeAnchor(profile = {}) {
     profile.referenceGenreFamilies?.length ||
       profile.referenceGenres?.length ||
       profile.manualAnchorGenreFamilies?.length ||
+      profile.manualTasteGenreFamilies?.length ||
       profile.referenceFeatures ||
       profile.topGenres?.length ||
       profile.avgFeatures
@@ -1138,7 +1141,9 @@ function getStableFallbackAnchor(profile, referenceTrack) {
     ...previousTracks.filter((track) => !isAutoplayTrack(track)),
     ...previousTracks.filter(isAutoplayTrack),
   ];
-  const sessionFamilies = getGenreFamilies((profile.topGenres || []).map((genre) => genre.genre));
+  const sessionFamilies = profile.manualTasteGenreFamilies?.length
+    ? profile.manualTasteGenreFamilies
+    : getGenreFamilies((profile.topGenres || []).map((genre) => genre.genre));
 
   return orderedAnchors.find((track) => {
     const reference = getAutoplayReference(track);
@@ -1165,16 +1170,39 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
   rankedCandidates.forEach((candidate) => {
     candidate.transitionQuality = getTransitionQuality(candidate, profile);
   });
+
+  const initialPools = partitionRankedCandidates(rankedCandidates);
+  const qualityGuardActive =
+    Number(profile.autoplayStreak) >= AUTOPLAY_TRANSITION_QUALITY_GUARD_AFTER && initialPools.safe.length > 0;
+  const hasHighQualityAlternative = initialPools.safe.some(
+    (candidate) => Number(candidate.transitionQuality) >= AUTOPLAY_TRANSITION_QUALITY_MIN
+  );
+  if (qualityGuardActive && hasHighQualityAlternative) {
+    for (const candidate of initialPools.safe) {
+      if (
+        Number(candidate.transitionQuality) < AUTOPLAY_TRANSITION_QUALITY_MIN &&
+        !candidate.manualAnchorEvidence
+      ) {
+        candidate.deferred = true;
+        candidate.deferredReason = "transition-quality-low";
+        candidate.emergencyEligible = false;
+        candidate.scoringDetails.push(`transition:defer(<${AUTOPLAY_TRANSITION_QUALITY_MIN})`);
+      }
+    }
+  }
+
   const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
   const resolutionOrder = getDiversifiedResolutionOrder(rankedCandidates);
-  const selectedCandidate = resolutionOrder[0];
-  const selectedRank = rankedCandidates.indexOf(selectedCandidate) + 1;
+  const resolutionProbe = resolutionOrder[0];
+  const selectedRank = rankedCandidates.indexOf(resolutionProbe) + 1;
 
   for (const candidate of deferred) {
     Log.info(
       candidate.deferredReason === "manual-anchor-unverified"
         ? "Autoplay deferred low-confidence drift candidate"
-        : "Autoplay deferred repeated artist",
+        : candidate.deferredReason === "transition-quality-low"
+          ? "Autoplay deferred low-quality transition"
+          : "Autoplay deferred repeated artist",
       "",
       `guild=${guildId}`,
       `track=${candidate.artist} - ${candidate.title}`,
@@ -1188,10 +1216,10 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
     "",
     `guild=${guildId}`,
     `winner=${rankedCandidates[0]?.artist} - ${rankedCandidates[0]?.title} (${rankedCandidates[0]?.score})`,
-    `selected=${selectedCandidate?.artist} - ${selectedCandidate?.title} (${selectedCandidate?.score})`,
+    `resolutionProbe=${resolutionProbe?.artist} - ${resolutionProbe?.title} (${resolutionProbe?.score})`,
     `selectedRank=${selectedRank || "none"}`,
-    `scoreDelta=${selectedCandidate ? Number((rankedCandidates[0].score - selectedCandidate.score).toFixed(2)) : "none"}`,
-    `transitionQuality=${selectedCandidate?.transitionQuality ?? "unknown"}`,
+    `scoreDelta=${resolutionProbe ? Number((rankedCandidates[0].score - resolutionProbe.score).toFixed(2)) : "none"}`,
+    `transitionQuality=${resolutionProbe?.transitionQuality ?? "unknown"}`,
     `safe=${safe.length}`,
     `deferred=${deferred.length}`,
     `scoring=${rankedCandidates[0]?.scoringDetails?.join(", ") || "none"}`
@@ -1204,10 +1232,20 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
     `#3=${formatCandidateDiagnostic(rankedCandidates[2])}`
   );
 
-  return resolveRankedCandidates(resolutionOrder, guildId, context, {
+  const resolvedTrack = await resolveRankedCandidates(resolutionOrder, guildId, context, {
     ...(resolutionOptions || {}),
     referenceTitle: profile.referenceTitleRaw || "",
   });
+  if (resolvedTrack) {
+    Log.info(
+      "Autoplay final resolution",
+      "",
+      `guild=${guildId}`,
+      `track=${formatLogValue(resolvedTrack.info?.author)} - ${formatLogValue(resolvedTrack.info?.title)}`,
+      `context=${context}`
+    );
+  }
+  return resolvedTrack;
 }
 
 async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualTracks = [] } = {}) {

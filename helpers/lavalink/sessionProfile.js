@@ -8,6 +8,7 @@ const genreCache = new Map();
 const AUTOPLAY_VIBE_WEIGHT = 0.3;
 const MANUAL_CONTEXT_LIMIT = Math.max(Number(process.env.AUTOPLAY_MANUAL_CONTEXT_LIMIT ?? 12), 1);
 const PENDING_MANUAL_CONTEXT_LIMIT = Math.max(Number(process.env.AUTOPLAY_PENDING_MANUAL_CONTEXT_LIMIT ?? 4), 1);
+const AUTOPLAY_ARTIST_WINDOW = Math.max(Number(process.env.AUTOPLAY_ARTIST_WINDOW ?? 5), 3);
 
 function isAutoplayTrack(track) {
   return Boolean(track?.userData?.autoplay || track?.info?.autoplayed);
@@ -47,6 +48,47 @@ function buildManualAnchorRecords(manualHistory, pendingManualTracks) {
   }));
 
   return [...queued, ...played];
+}
+
+function buildManualTasteProfile(manualTracks) {
+  const genreCounts = {};
+  const familySet = new Set();
+  const featureValues = {};
+  const tracks = uniqueTracks(manualTracks).slice(-MANUAL_CONTEXT_LIMIT);
+
+  tracks.forEach((track) => {
+    const metadata = getTrackMetadata(track);
+    metadata.genres.forEach((genre) => {
+      genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+      getGenreFamilies([genre]).forEach((family) => familySet.add(family));
+    });
+
+    const features = metadata.features || metadata.derivedFeatures;
+    if (!features) return;
+    for (const field of ["tempo", "energy", "valence", "danceability"]) {
+      if (Number.isFinite(features[field])) {
+        featureValues[field] ||= [];
+        featureValues[field].push(features[field]);
+      }
+    }
+  });
+
+  const manualTasteGenres = Object.entries(genreCounts)
+    .sort(([, left], [, right]) => right - left)
+    .slice(0, 10)
+    .map(([genre, count]) => ({ genre, count, weight: count / Math.max(tracks.length, 1) }));
+  const manualTasteFeatures = Object.fromEntries(
+    Object.entries(featureValues).map(([field, values]) => [
+      field,
+      values.reduce((sum, value) => sum + value, 0) / values.length,
+    ])
+  );
+
+  return {
+    genres: manualTasteGenres,
+    genreFamilies: [...familySet],
+    features: Object.keys(manualTasteFeatures).length ? manualTasteFeatures : null,
+  };
 }
 
 function getTrackMetadata(track) {
@@ -99,6 +141,7 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
   const manualHistoryWithReference = isManualTrack(referenceTrack) ? [...manualHistory, referenceTrack] : manualHistory;
   const manualAnchorRecords = buildManualAnchorRecords(manualHistoryWithReference, pendingManual);
   const manualAnchorTracks = manualAnchorRecords.map((record) => record.track);
+  const manualTaste = buildManualTasteProfile(manualHistoryWithReference);
   const manualAnchorGenreFamilies = [
     ...new Set(manualAnchorRecords.flatMap((record) => getGenreFamilies(getTrackMetadata(record.track).genres))),
   ];
@@ -106,6 +149,20 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
   for (let index = recentTracks.length - 1; index >= 0; index -= 1) {
     if (!isAutoplayTrack(recentTracks[index])) break;
     autoplayStreak += 1;
+  }
+  const recentAutoplayArtists = recentTracks
+    .filter(isAutoplayTrack)
+    .slice(-AUTOPLAY_ARTIST_WINDOW)
+    .map(getSessionArtist)
+    .filter(Boolean);
+  let autoplayArtistStreak = 0;
+  if (recentTracks.at(-1) && isAutoplayTrack(recentTracks.at(-1))) {
+    const lastAutoplayArtist = getSessionArtist(recentTracks.at(-1));
+    for (let index = recentTracks.length - 1; index >= 0; index -= 1) {
+      const track = recentTracks[index];
+      if (!isAutoplayTrack(track) || getSessionArtist(track) !== lastAutoplayArtist) break;
+      autoplayArtistStreak += 1;
+    }
   }
 
   if (recentTracks.length === 0) {
@@ -136,6 +193,13 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
       manualAnchorTracks: pendingManual,
       manualAnchorRecords: buildManualAnchorRecords([], pendingManual),
       manualAnchorGenreFamilies: [],
+      manualTasteGenres: [],
+      manualTasteGenreFamilies: [],
+      manualTasteFeatures: null,
+      recentAutoplayArtists: [],
+      autoplayArtistStreak: 0,
+      referenceIsManual: isManualTrack(referenceTrack),
+      referenceIsAutoplay: isAutoplayTrack(referenceTrack),
       autoplayStreak: 0,
     };
   }
@@ -321,6 +385,13 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     manualAnchorTracks,
     manualAnchorRecords,
     manualAnchorGenreFamilies,
+    manualTasteGenres: manualTaste.genres,
+    manualTasteGenreFamilies: manualTaste.genreFamilies,
+    manualTasteFeatures: manualTaste.features,
+    recentAutoplayArtists,
+    autoplayArtistStreak,
+    referenceIsManual: isManualTrack(referenceTrack),
+    referenceIsAutoplay: isAutoplayTrack(referenceTrack),
     autoplayStreak,
   };
 }
