@@ -5,7 +5,7 @@ const {
   beginAutocompleteRequest,
   isLatestAutocompleteRequest,
 } = require("../../../helpers/interactions/autocompleteGuard");
-const { buildFallbackQueries } = require("../../../helpers/lavalink/fallbacks");
+const { buildFallbackQueries, isVerifiedFallbackMatch } = require("../../../helpers/lavalink/fallbacks");
 const { clearSearchCache, searchAcrossSources, searchSingleSource } = require("../../../helpers/lavalink/searchAggregator");
 const { parseSearchIdentifier } = require("../../../helpers/lavalink/searchIdentifier");
 const {
@@ -45,10 +45,53 @@ describe("Search source selection", () => {
     assert.strictEqual(isLatestAutocompleteRequest("user:guild", second), true);
   });
 
-  it("includes SoundCloud in playback fallback queries", () => {
-    const queries = buildFallbackQueries({ title: "Kuki Cieple Dranie", author: "Example Artist" });
-    assert.strictEqual(queries[0].source, "scsearch");
-    assert.ok(queries[0].query.includes("Kuki Cieple Dranie"));
+  it("uses YouTube as the first playback fallback and prioritizes ISRC", () => {
+    const withIsrc = buildFallbackQueries({
+      title: "Kuki Cieple Dranie",
+      author: "Example Artist",
+      isrc: "PLABC1234567",
+    });
+    const withoutIsrc = buildFallbackQueries({ title: "Kuki Cieple Dranie", author: "Example Artist" });
+
+    assert.deepStrictEqual(withIsrc[0], { source: "ytsearch", query: "PLABC1234567" });
+    assert.strictEqual(withoutIsrc[0].source, "ytmsearch");
+    assert.ok(withoutIsrc.some((entry) => entry.source === "scsearch"));
+  });
+
+  it("accepts a cross-provider fallback only when its recording identity matches", () => {
+    const spotify = {
+      info: {
+        title: "Save Your Tears",
+        author: "The Weeknd",
+        isrc: "USUG12001870",
+        length: 215_000,
+      },
+    };
+    const youtube = {
+      info: {
+        title: "The Weeknd - Save Your Tears (Official Audio)",
+        author: "The Weeknd - Topic",
+        isrc: "US-UG1-20-01870",
+        length: 216_000,
+      },
+    };
+
+    assert.deepStrictEqual(isVerifiedFallbackMatch(spotify, youtube), { valid: true, reason: "ISRC match" });
+  });
+
+  it("rejects a title match when the fallback is a remix, cover, or wrong artist", () => {
+    const spotify = {
+      info: { title: "Tamagotchi", author: "TACONAFIDE", length: 198_000 },
+    };
+    const remix = {
+      info: { title: "Tamagotchi (Remix)", author: "TACONAFIDE", length: 198_000 },
+    };
+    const wrongArtist = {
+      info: { title: "Tamagotchi", author: "Different Artist", length: 198_000 },
+    };
+
+    assert.strictEqual(isVerifiedFallbackMatch(spotify, remix).valid, false);
+    assert.strictEqual(isVerifiedFallbackMatch(spotify, wrongArtist).valid, false);
   });
 
   it("aggregates all providers so an exact popular match is not hidden by the preferred source", async () => {

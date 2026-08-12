@@ -2,6 +2,13 @@ const { inspect } = require("util");
 const Log = require("../logs/log");
 const { MAX_FALLBACK_ATTEMPTS } = require("./constants");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
+const {
+  cleanArtistName,
+  cleanTrackMetadata,
+  getBaseTitle,
+  getVariantKinds,
+  normalizeComparableText,
+} = require("./trackNormalization");
 
 const isAutoplayTrack = (track) => Boolean(track?.info?.autoplayed || track?.userData?.autoplay);
 
@@ -31,20 +38,98 @@ const buildFallbackQueries = (info = {}) => {
   };
 
   const author = info.author && info.author !== "Unknown" ? info.author : "";
-  push("scsearch", [info.title, author].filter(Boolean).join(" "));
-  push("ytmsearch", [info.title, author].filter(Boolean).join(" "));
-  push("ytsearch", [info.title, author].filter(Boolean).join(" "));
-
-  if (info.identifier) {
-    push("ytmsearch", info.identifier);
-    push("ytsearch", info.identifier);
+  // Keep the same resolution order as LavaSrc's Spotify mirror chain. ISRC
+  // is provider-neutral and avoids turning an unavailable Spotify recording
+  // into an unrelated title/artist search result.
+  if (info.isrc) {
+    push("ytsearch", info.isrc);
+    push("ytmsearch", info.isrc);
   }
 
-  if (info.isrc) push("ytmsearch", info.isrc);
-  if (info.isrc) push("scsearch", info.isrc);
+  const identityQuery = [info.title, author].filter(Boolean).join(" ");
+  push("ytmsearch", identityQuery);
+  push("ytsearch", identityQuery);
+  push("scsearch", identityQuery);
 
   return queries;
 };
+
+function normalizeIsrc(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function getTrackIdentityMetadata(trackOrInfo = {}) {
+  const info = trackOrInfo.info || trackOrInfo;
+  const { cleanTitle, searchArtist } = cleanTrackMetadata(info.title, info.author);
+
+  return {
+    title: getBaseTitle(cleanTitle || info.title),
+    artist: normalizeComparableText(cleanArtistName(searchArtist || info.author)),
+    isrc: normalizeIsrc(info.isrc || trackOrInfo.isrc || trackOrInfo.pluginInfo?.isrc),
+    variants: getVariantKinds(info.title),
+    duration: Number(info.length || trackOrInfo.length || 0),
+  };
+}
+
+function hasArtistMatch(expected, candidate) {
+  if (!expected || !candidate) return false;
+  if (expected === candidate || expected.includes(candidate) || candidate.includes(expected)) return true;
+
+  const expectedTokens = new Set(expected.split(" ").filter(Boolean));
+  const candidateTokens = new Set(candidate.split(" ").filter(Boolean));
+  let overlap = 0;
+  for (const token of expectedTokens) {
+    if (candidateTokens.has(token)) overlap += 1;
+  }
+
+  // Require all meaningful tokens for short artist names and enough coverage
+  // for collaborations such as "Kubi Producent, Young Multi, AG".
+  return overlap >= Math.max(1, Math.ceil(expectedTokens.size * 0.67));
+}
+
+function sameVariantLane(expected, candidate) {
+  const expectedVariants = new Set(expected.variants);
+  const candidateVariants = new Set(candidate.variants);
+  if (!expectedVariants.size) return candidateVariants.size === 0;
+  return [...expectedVariants].every((variant) => candidateVariants.has(variant));
+}
+
+function isVerifiedFallbackMatch(failedTrack, candidateTrack) {
+  const expected = getTrackIdentityMetadata(failedTrack);
+  const candidate = getTrackIdentityMetadata(candidateTrack);
+
+  if (!expected.title || !expected.artist || !candidate.title || !candidate.artist) {
+    return { valid: false, reason: "missing canonical title or artist" };
+  }
+
+  if (expected.isrc && candidate.isrc && expected.isrc !== candidate.isrc) {
+    return { valid: false, reason: "ISRC mismatch" };
+  }
+
+  if (expected.title !== candidate.title) {
+    return { valid: false, reason: "title mismatch" };
+  }
+
+  if (!hasArtistMatch(expected.artist, candidate.artist)) {
+    return { valid: false, reason: "artist mismatch" };
+  }
+
+  if (!sameVariantLane(expected, candidate)) {
+    return { valid: false, reason: "version mismatch" };
+  }
+
+  if (expected.duration > 0 && candidate.duration > 0) {
+    const difference = Math.abs(expected.duration - candidate.duration);
+    const allowedDifference = Math.max(12_000, Math.min(30_000, expected.duration * 0.1));
+    if (difference > allowedDifference) {
+      return { valid: false, reason: `duration mismatch (${difference}ms)` };
+    }
+  }
+
+  return { valid: true, reason: expected.isrc && candidate.isrc ? "ISRC match" : "identity match" };
+}
 
 async function tryQueueFallbackTrack(player, failedTrack) {
   const poru = player?.poru;
@@ -70,8 +155,25 @@ async function tryQueueFallbackTrack(player, failedTrack) {
     try {
       const response = await poru.resolve({ query, source });
       const validTracks = (response?.tracks || []).filter((t) => t?.track && t?.info);
-      const fallbackTrack = rankSearchResults(filterPlayableSearchResults(validTracks, query), query)[0];
-      if (!fallbackTrack) continue;
+      const rankedTracks = rankSearchResults(filterPlayableSearchResults(validTracks, query), query);
+      const verified = rankedTracks
+        .map((candidate) => ({ candidate, verification: isVerifiedFallbackMatch(failedTrack, candidate) }))
+        .find(({ verification }) => verification.valid);
+      const fallbackTrack = verified?.candidate;
+
+      if (!fallbackTrack) {
+        const reason = rankedTracks.length
+          ? isVerifiedFallbackMatch(failedTrack, rankedTracks[0]).reason
+          : "no relevant results";
+        Log.info(
+          "Fallback rejected unverified mirror",
+          `source=${source}`,
+          `query=${query}`,
+          `reason=${reason}`,
+          `guild=${player.guildId}`
+        );
+        continue;
+      }
 
       const fallbackInfo = copyRequesterMetadata(info, fallbackTrack.info || (fallbackTrack.info = {}));
       if (fallbackInfo.identifier && info.identifier && fallbackInfo.identifier === info.identifier) continue;
@@ -125,4 +227,6 @@ module.exports = {
   describeTrack,
   buildFallbackQueries,
   copyRequesterMetadata,
+  getTrackIdentityMetadata,
+  isVerifiedFallbackMatch,
 };

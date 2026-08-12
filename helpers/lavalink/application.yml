@@ -82,11 +82,14 @@ plugins:
       enabled: true
       refreshToken: ${YOUTUBE_REFRESH_TOKEN:}
   lavasrc:
-    providers: # Search providers for fallback
-      - 'dzsearch:"%ISRC%"'
-      - "dzsearch:%QUERY%"
+    providers: # Mirrors for Spotify and other metadata-only sources.
+      # Spotify itself never provides audio; resolve the recording on YouTube
+      # first, using its ISRC when present. Deezer is intentionally not here:
+      # its direct media endpoint can deny a valid Spotify match with a 403,
+      # which otherwise turns into a loose bot-side fallback.
       - 'ytsearch:"%ISRC%"'
       - "ytsearch:%QUERY%"
+      - "scsearch:%QUERY%"
     sources:
       spotify: true
       deezer: true

@@ -139,6 +139,8 @@ All secrets belong in `.env`, `.env.dev`, or `.env.prod`—never in this reposit
 | `LASTFM_API_KEY` | Strongly recommended for autoplay | Similar-artist data and tags for DJ mode. |
 | `LASTFM_APPLICATION_NAME` / `LASTFM_SHARED_SECRET` | Optional | Application metadata for Last.fm integrations. |
 
+Spotify links resolve their catalog metadata first, then play a verified YouTube mirror: ISRC search is preferred, followed by title and artist. Deezer is not used as Spotify's primary audio mirror because its media endpoint can reject otherwise valid recordings for licensing or regional-rights reasons. If the primary mirror fails, MewBit retries only a candidate with matching title, artist, requested version, duration, and (when both sources provide it) ISRC; it skips the track rather than silently playing a different song.
+
 If a provider requires browser cookies, obtain them from an account you control and store them only on the host. The production Compose file mounts `helpers/lavalink/youtube-cookies.txt` for Lavalink when that file exists. Do not commit it.
 
 ### Playback and autoplay
@@ -549,6 +551,7 @@ docker compose logs --tail=200 lavalink
 | Bot is online but cannot play music | Verify Lavalink is healthy, `LAVALINK_HOST/PORT/PASSWORD` match, and bot logs show a node connection. |
 | Player message appears in the wrong channel | Run `/setup player channel:#desired-channel`; the bot needs View/Send/Embed permission there. |
 | A provider does not find or play restricted tracks | Verify provider credentials/cookies, Lavalink plugins, and the relevant Lavalink log lines. |
+| A Spotify link skips or previously played the wrong song | Check the YouTube credentials and Lavalink logs. Spotify is metadata-only; MewBit now uses an ISRC-first YouTube mirror and rejects unverified alternate versions instead of accepting a loose fallback. |
 | Autoplay stops after an unusual track | Check `/health errors`; low-information tracks can exhaust metadata candidates. YouTube Mix is only a constrained fallback, so it may still decline an unsafe/unrelated recommendation. |
 | Activity is blank or shows only a preview | Verify the public HTTPS URL mapping, `VITE_DISCORD_CLIENT_ID`, Activity client secret, exact redirect URI, and reverse proxy routes for `/api/activity` and `/api/token`. |
 | Activity authorization returns HTML/502 | The production domain/proxy is likely serving the frontend document for a gateway endpoint. Confirm API routes reach `ACTIVITY_PORT`. |

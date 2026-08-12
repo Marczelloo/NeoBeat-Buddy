@@ -93,7 +93,7 @@ function createPoru(client) {
 
     const placeholder = await channel
       .send({
-        embeds: [errorEmbed("Trying alternate source", "The YouTube stream failed, looking for another version…")],
+        embeds: [errorEmbed("Trying alternate source", "The current provider failed; checking a verified mirror…")],
       })
       .catch(() => null);
 
@@ -107,7 +107,7 @@ function createPoru(client) {
             embeds: [
               errorEmbed(
                 "Trying alternate source",
-                `The YouTube stream failed, so I'm retrying with an alternate source for **${title}**.`
+                `The current provider failed, so I'm retrying a verified mirror for **${title}**.`
               ),
             ],
           })
