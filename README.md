@@ -488,6 +488,21 @@ pnpm activity:build
 
 The test suite covers autoplay candidate normalization/scoring, provider fallbacks, duplicate prevention, queue behavior, Activity gateway behavior, and other helpers. Browser/UI behavior should additionally be tested in Discord because the embedded Activity lifecycle and permissions cannot be fully simulated by unit tests.
 
+### Autoplay soak and replay tests
+
+You can exercise hundreds of autoplay decisions locally without joining a voice channel or playing audio:
+
+```bash
+pnpm test:autoplay:soak
+pnpm test:autoplay:soak -- --steps 500 --seed 42
+pnpm test:autoplay:soak -- --fixture tests/fixtures/autoplay/replay.example.json
+pnpm test:autoplay:soak -- --fixture tests/fixtures/autoplay/replay.example.json --json
+```
+
+The simulator reuses the production session profile, candidate scorer, duplicate identity checks, manual-vibe corridor, transition-quality gate, artist rolling window, and deterministic exploration order. It reports unresolved cycles, provider-resolution failures, cross-provider duplicates, genre-family jumps, artist streaks, fallback usage, and source distribution. A non-zero exit code means the configured acceptance limits were exceeded.
+
+Replay fixtures are JSON files with a `seedTrack` and either `replaySteps` or `candidatesByReference`. The latter maps a reference track identifier to the candidate list that was observed in a real run, making it possible to replay a captured queue locally. Provider/network resolution is represented with `playable: false`; the simulator then tests whether another candidate keeps the session alive.
+
 ### Useful runtime checks
 
 ```text

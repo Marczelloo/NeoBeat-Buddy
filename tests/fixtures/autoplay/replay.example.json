@@ -1,0 +1,33 @@
+{
+  "name": "small-autoplay-replay",
+  "seed": 7,
+  "steps": 4,
+  "seedTrack": {
+    "track": "fixture-seed",
+    "info": {
+      "title": "Neon Seed",
+      "author": "Manual Listener",
+      "identifier": "fixture-seed",
+      "length": 180000
+    },
+    "userData": {
+      "genres": ["synthwave"],
+      "features": {"tempo": 120, "energy": 0.58, "valence": 0.5, "danceability": 0.7}
+    }
+  },
+  "candidatesByReference": {
+    "fixture-seed": [
+      {"title":"Replay One","artist":"Neon Echo","identifier":"fixture-1","source":"lastfm_similar","genres":["synthwave"],"features":{"tempo":120,"energy":0.58,"valence":0.5},"similarity":0.82},
+      {"title":"Metal Detour","artist":"Wrong Lane","identifier":"fixture-metal-1","source":"youtube_mix","genres":["metal"],"features":{"tempo":170,"energy":0.95,"valence":0.1},"similarity":0.99}
+    ],
+    "fixture-1": [
+      {"title":"Replay Two","artist":"Pixel Bloom","identifier":"fixture-2","source":"lastfm_similar","genres":["synthwave"],"features":{"tempo":121,"energy":0.6,"valence":0.5},"similarity":0.8}
+    ],
+    "fixture-2": [
+      {"title":"Replay Three","artist":"Chrome Fox","identifier":"fixture-3","source":"deezer_recommendations","genres":["synthwave"],"features":{"tempo":119,"energy":0.56,"valence":0.48},"similarity":0.79}
+    ],
+    "fixture-3": [
+      {"title":"Replay Four","artist":"Lunar Drift","identifier":"fixture-4","source":"lastfm_similar","genres":["synthwave"],"features":{"tempo":120,"energy":0.57,"valence":0.5},"similarity":0.81}
+    ]
+  }
+}

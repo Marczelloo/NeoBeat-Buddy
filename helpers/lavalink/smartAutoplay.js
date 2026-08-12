@@ -982,6 +982,31 @@ function getTransitionQuality(candidate, profile = {}) {
   return quality;
 }
 
+function applyTransitionQualityGuard(rankedCandidates, profile = {}) {
+  const initialPools = partitionRankedCandidates(rankedCandidates);
+  const qualityGuardActive =
+    Number(profile.autoplayStreak) >= AUTOPLAY_TRANSITION_QUALITY_GUARD_AFTER && initialPools.safe.length > 0;
+  const hasHighQualityAlternative = initialPools.safe.some(
+    (candidate) => Number(candidate.transitionQuality) >= AUTOPLAY_TRANSITION_QUALITY_MIN
+  );
+
+  if (qualityGuardActive && hasHighQualityAlternative) {
+    for (const candidate of initialPools.safe) {
+      if (
+        Number(candidate.transitionQuality) < AUTOPLAY_TRANSITION_QUALITY_MIN &&
+        !candidate.manualAnchorEvidence
+      ) {
+        candidate.deferred = true;
+        candidate.deferredReason = "transition-quality-low";
+        candidate.emergencyEligible = false;
+        candidate.scoringDetails.push(`transition:defer(<${AUTOPLAY_TRANSITION_QUALITY_MIN})`);
+      }
+    }
+  }
+
+  return rankedCandidates;
+}
+
 function getDiversifiedResolutionOrder(rankedCandidates, random = Math.random) {
   const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
   if (safe.length < 2 || AUTOPLAY_DIVERSITY_POOL_SIZE < 2) return rankedCandidates;
@@ -1171,25 +1196,7 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
     candidate.transitionQuality = getTransitionQuality(candidate, profile);
   });
 
-  const initialPools = partitionRankedCandidates(rankedCandidates);
-  const qualityGuardActive =
-    Number(profile.autoplayStreak) >= AUTOPLAY_TRANSITION_QUALITY_GUARD_AFTER && initialPools.safe.length > 0;
-  const hasHighQualityAlternative = initialPools.safe.some(
-    (candidate) => Number(candidate.transitionQuality) >= AUTOPLAY_TRANSITION_QUALITY_MIN
-  );
-  if (qualityGuardActive && hasHighQualityAlternative) {
-    for (const candidate of initialPools.safe) {
-      if (
-        Number(candidate.transitionQuality) < AUTOPLAY_TRANSITION_QUALITY_MIN &&
-        !candidate.manualAnchorEvidence
-      ) {
-        candidate.deferred = true;
-        candidate.deferredReason = "transition-quality-low";
-        candidate.emergencyEligible = false;
-        candidate.scoringDetails.push(`transition:defer(<${AUTOPLAY_TRANSITION_QUALITY_MIN})`);
-      }
-    }
-  }
+  applyTransitionQualityGuard(rankedCandidates, profile);
 
   const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
   const resolutionOrder = getDiversifiedResolutionOrder(rankedCandidates);
@@ -1379,6 +1386,7 @@ module.exports = {
   selectTagEnrichmentTargets,
   partitionRankedCandidates,
   getTransitionQuality,
+  applyTransitionQualityGuard,
   getDiversifiedResolutionOrder,
   hasSessionVibeAnchor,
   getMetadataFreeYouTubeMixFallbackCandidates,
