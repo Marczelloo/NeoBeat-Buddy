@@ -44,20 +44,42 @@ export function sendActivityAction({ guildId, accessToken, action, payload }) {
 }
 
 export function connectActivitySocket({ guildId, accessToken, onState, onReady, onError }) {
-  const socket = new WebSocket(websocketUrl("/api/activity/ws"));
-  socket.addEventListener("open", () => {
-    socket.send(JSON.stringify({ type: "auth", guildId, token: accessToken }));
-  });
-  socket.addEventListener("message", (event) => {
-    try {
-      const payload = JSON.parse(event.data);
-      if (payload.type === "state") onState(payload.state);
-      if (payload.type === "ready") onReady?.(payload.identity);
-      if (payload.type === "error") onError?.(new Error(payload.error));
-    } catch (error) {
-      onError?.(error);
-    }
-  });
-  socket.addEventListener("error", () => onError?.(new Error("Realtime Activity connection failed.")));
-  return () => socket.close();
+  let socket = null;
+  let reconnectTimer = null;
+  let stopped = false;
+  let retryCount = 0;
+
+  const connect = () => {
+    if (stopped) return;
+    socket = new WebSocket(websocketUrl("/api/activity/ws"));
+    socket.addEventListener("open", () => {
+      retryCount = 0;
+      socket.send(JSON.stringify({ type: "auth", guildId, token: accessToken }));
+    });
+    socket.addEventListener("message", (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "state") onState(payload.state);
+        if (payload.type === "ready") onReady?.(payload.identity);
+        if (payload.type === "error") onError?.(new Error(payload.error));
+      } catch (error) {
+        onError?.(error);
+      }
+    });
+    socket.addEventListener("close", () => {
+      if (stopped) return;
+      const delay = Math.min(5000, 600 * (2 ** Math.min(retryCount, 3)));
+      retryCount += 1;
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = window.setTimeout(connect, delay);
+    });
+    socket.addEventListener("error", () => onError?.(new Error("Realtime Activity connection interrupted. Reconnecting…")));
+  };
+
+  connect();
+  return () => {
+    stopped = true;
+    window.clearTimeout(reconnectTimer);
+    socket?.close();
+  };
 }

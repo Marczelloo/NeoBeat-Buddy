@@ -34,11 +34,12 @@ const { getPoru } = require("../lavalink/players");
 const { searchSingleSource } = require("../lavalink/searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
 const { skipWithLearning } = require("../lavalink/skipLearning");
-const { getLyricsState, setLyricsState } = require("../lavalink/state");
+const { getLyricsState, playbackState, setLyricsState } = require("../lavalink/state");
 const Log = require("../logs/log");
 const { importPlaylistFromUrl } = require("../playlists/import");
 const playlistStore = require("../playlists/store");
 const { serializeFilters, serializeLyrics, serializePlaylist, serializePlaylistDetails, serializeTrack, normalizeSource } = require("./state");
+const { activityStateEvents, getActivityStateRevision, markActivityStateChanged } = require("./sync");
 
 const DEFAULT_PORT = 8787;
 const MAX_BODY_SIZE = 64 * 1024;
@@ -324,7 +325,9 @@ function getSerializedEqualizerPresets(userId) {
 function buildActivityState(client, guildId, userId) {
   const player = getPlayer(guildId);
   const likedSongs = playlistStore.getLikedSongs(userId);
-  const currentTrack = player?.currentTrack ? serializeTrack(player.currentTrack) : null;
+  const livePlaybackState = playbackState.get(guildId);
+  const currentTrackSource = livePlaybackState?.currentTrack || player?.currentTrack || null;
+  const currentTrack = currentTrackSource ? serializeTrack(currentTrackSource) : null;
   const filters = getEqualizerState(guildId) || player?.filters || {};
   const guild = client.guilds.cache.get(guildId);
   const settings = guildState.getGuildState(guildId);
@@ -332,7 +335,11 @@ function buildActivityState(client, guildId, userId) {
   const position = player?.currentTrack ? getInterpolatedPosition(player, Date.now(), 0) : 0;
   const botStatus = client?.user?.presence?.activities?.find((activity) => activity.type === 2)?.name || null;
 
+  const generatedAt = Date.now();
+
   return {
+    revision: getActivityStateRevision(guildId),
+    generatedAt,
     botStatus,
     guild: {
       id: guildId,
@@ -354,7 +361,7 @@ function buildActivityState(client, guildId, userId) {
       queue: getSerializedQueue(player),
       filters: serializeFilters(filters),
       lyrics,
-      updatedAt: Date.now(),
+      updatedAt: generatedAt,
     },
     playlists: getSerializedPlaylists(userId, guildId),
     likedTrackIds: [...new Set((likedSongs.tracks || []).flatMap((track) => playlistStore.getTrackIdentityKeys(track)))],
@@ -433,6 +440,17 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
     case "toggle":
       return player?.isPaused ? lavalinkResume(guildId) : lavalinkPause(guildId);
     case "skip":
+      if (payload.expectedTrackId) {
+        const liveTrack = playbackState.get(guildId)?.currentTrack || player?.currentTrack || null;
+        const liveTrackId = liveTrack ? serializeTrack(liveTrack)?.id : null;
+        if (!liveTrackId || String(payload.expectedTrackId) !== String(liveTrackId)) {
+          return {
+            success: false,
+            stale: true,
+            error: "The player already moved to the next track. Synced the latest state instead.",
+          };
+        }
+      }
       return skipWithLearning(guildId, player, lavalinkSkip, "activity_skip");
     case "previous":
       return lavalinkPrevious(guildId);
@@ -627,6 +645,9 @@ function createActivityServer(client) {
   const config = getActivityConfig();
   let server = null;
   let interval = null;
+  let listeningForPlayerChanges = false;
+
+  const handlePlayerStateChange = ({ guildId }) => broadcastGuildState(client, guildId);
 
   async function handleRequest(request, response) {
     response.req = request;
@@ -701,7 +722,7 @@ function createActivityServer(client) {
           const playlist = playlistStore.getPlaylist(identity.id, guildId, detailName);
           if (playlist) result = { ...result, playlist: serializePlaylistDetails(playlist) };
         }
-        broadcastGuildState(client, guildId);
+        markActivityStateChanged(guildId, `activity:${body.action}`);
         return sendJson(response, 200, { ok: true, result: serializeActivityActionResult(body.action, result), state: buildActivityState(client, guildId, identity.id) }, config);
       }
 
@@ -740,7 +761,7 @@ function createActivityServer(client) {
         if (!socket.authorized) return sendSocket(socket, { type: "error", error: "Authenticate the Activity socket first." });
         if (message.type === "action") {
           await runActivityAction({ guildId: socket.guildId, identity: socket.identity, action: message.action, payload: message.payload || {} });
-          broadcastGuildState(client, socket.guildId);
+          markActivityStateChanged(socket.guildId, `activity:${message.action}`);
         }
       } catch (error) {
         sendSocket(socket, { type: "error", error: error.message || "Activity socket error" });
@@ -765,6 +786,10 @@ function createActivityServer(client) {
         const actualPort = server.address()?.port || config.port;
         Log.success("MewBit Activity gateway ready", `http://${config.host}:${actualPort}`);
       });
+      if (!listeningForPlayerChanges) {
+        activityStateEvents.on("change", handlePlayerStateChange);
+        listeningForPlayerChanges = true;
+      }
       interval = setInterval(() => {
         const guilds = new Set([...sockets].filter((socket) => socket.authorized).map((socket) => socket.guildId));
         for (const guildId of guilds) broadcastGuildState(client, guildId);
@@ -775,6 +800,10 @@ function createActivityServer(client) {
     stop() {
       if (interval) clearInterval(interval);
       interval = null;
+      if (listeningForPlayerChanges) {
+        activityStateEvents.off("change", handlePlayerStateChange);
+        listeningForPlayerChanges = false;
+      }
       for (const socket of sockets) socket.close();
       sockets.clear();
       if (server) server.close();

@@ -865,7 +865,7 @@ async function fetchTopArtistCandidates(profile, guildId) {
  * @param {Object} profile - Session profile from buildSessionProfile
  * @returns {Promise<Array>} Array of candidate tracks
  */
-async function collectCandidates(referenceTrack, guildId, profile, reference) {
+async function collectCandidates(referenceTrack, guildId, profile, reference, { sources = null } = {}) {
   const { identifier } = referenceTrack.info;
   const { cleanTitle, searchArtist } = reference;
 
@@ -882,7 +882,10 @@ async function collectCandidates(referenceTrack, guildId, profile, reference) {
     candidateSources.push(["spotify", () => fetchSpotifyCandidates(referenceTrack, guildId, profile)]);
   }
 
-  const sourceResults = await Promise.allSettled(candidateSources.map(([, load]) => load()));
+  const selectedSources = Array.isArray(sources)
+    ? candidateSources.filter(([name]) => sources.includes(name))
+    : candidateSources;
+  const sourceResults = await Promise.allSettled(selectedSources.map(([, load]) => load()));
   const allCandidates = sourceResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
   const deduplicatedCandidates = await enrichCandidatesWithLastFmTags(mergeCandidates(allCandidates), guildId);
   if (USE_DEEZER_METADATA) {
@@ -1689,4 +1692,5 @@ module.exports = {
   resolveToPlayable,
   candidateKey,
   mergeCandidates,
+  collectCandidates,
 };

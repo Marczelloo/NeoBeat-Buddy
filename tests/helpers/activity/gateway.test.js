@@ -1,7 +1,20 @@
-const test = require("node:test");
 const assert = require("node:assert/strict");
+const test = require("node:test");
 const { WebSocket } = require("ws");
 const { createActivityServer, isAllowedArtworkUrl, serializeActivityActionResult, stringifyJson } = require("../../../helpers/activity/server");
+const { getActivityStateRevision, markActivityStateChanged, resetActivityStateRevision } = require("../../../helpers/activity/sync");
+
+test("Activity state revisions only move forward for a guild", () => {
+  const guildId = "activity-revision-test";
+  resetActivityStateRevision(guildId);
+
+  assert.equal(getActivityStateRevision(guildId), 0);
+  assert.equal(markActivityStateChanged(guildId, "trackStart"), 1);
+  assert.equal(markActivityStateChanged(guildId, "trackEnd"), 2);
+  assert.equal(getActivityStateRevision(guildId), 2);
+
+  resetActivityStateRevision(guildId);
+});
 
 test("Activity responses stay JSON-safe for Lavalink objects", () => {
   const circular = { encoded: 123n };
@@ -69,11 +82,14 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
   assert.equal(health.ok, true);
   assert.equal(state.ok, true);
   assert.equal(state.state.guild.id, "activity-test-guild");
+  assert.equal(typeof state.state.revision, "number");
+  assert.equal(typeof state.state.generatedAt, "number");
   assert.equal(state.state.player.currentTrack, null);
   assert.equal(blockedArtworkResponse.status, 400);
   assert.match(blockedArtwork.error, /not allowed/i);
 
   const messages = [];
+  const revisions = [];
   await new Promise((resolve, reject) => {
     const socket = new WebSocket(`ws://127.0.0.1:${port}/api/activity/ws`);
     const timeout = setTimeout(() => reject(new Error("Activity WebSocket handshake timed out.")), 2000);
@@ -82,13 +98,20 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
       const payload = JSON.parse(raw.toString());
       messages.push(payload.type);
       if (payload.type === "state") {
-        clearTimeout(timeout);
-        socket.close();
-        resolve();
+        revisions.push(payload.state.revision);
+        if (revisions.length === 1) {
+          markActivityStateChanged("activity-test-guild", "gateway-test");
+        } else {
+          clearTimeout(timeout);
+          socket.close();
+          resolve();
+        }
       }
     });
     socket.on("error", reject);
   });
 
-  assert.deepEqual(messages, ["ready", "state"]);
+  assert.deepEqual(messages, ["ready", "state", "state"]);
+  assert.equal(revisions[1], revisions[0] + 1);
+  resetActivityStateRevision("activity-test-guild");
 });

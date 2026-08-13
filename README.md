@@ -32,7 +32,9 @@ MewBit is a Discord music bot with a shared listening **Discord Activity**. It u
 ### Smart autoplay / DJ mode
 
 - Pre-fetches compatible tracks before the queue runs dry.
-- Scores candidates using track title/artist normalization, Last.fm similarity and tags, genre families, energy/tempo signals when available, source reliability, and recent listening context.
+- Uses the V3 DJ selector: a stable manual-session anchor, Last.fm related tracks, nearby album cuts, and YouTube Mix only as a constrained fallback. Broad catalog searches do not enter its decision pool.
+- Preserves a fitting same-artist run when it has a strong relationship signal, but caps it at three consecutive tracks and caps same-album runs at two tracks.
+- Scores the small trusted pool with canonical track identity, Last.fm similarity, anchor/current genre-family compatibility, and session/exposure memory.
 - Rejects alternate uploads of tracks that have already appeared, including the same song from a different provider; ISRC is used when available and normalized artist/title identity remains the fallback.
 - Avoids loops, over-repetition, and weak fallback results while still allowing a fitting artist to return after a sensible cooldown.
 - Keeps tempo styles such as nightcore, slowed, and sped-up available as valid autoplay lanes, while requiring remix/live/acoustic/cover variants to match the current version lane.
@@ -153,6 +155,9 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `LOUDNESS_NORMALIZATION` | `true` | Enables source-aware playback gain compensation. |
 | `LOUDNESS_<SOURCE>_DB` | provider default | Optional gain offset for a provider, e.g. `LOUDNESS_SOUNDCLOUD_DB=-3`. |
 | `AUTOPLAY_HISTORY_LIMIT` | `80` | Recent autoplay reservations remembered for hard duplicate prevention. |
+| `AUTOPLAY_V3` | `true` | Uses the simpler trusted-source DJ selector. Set to `false` only to temporarily roll back to the legacy scorer. |
+| `AUTOPLAY_V3_MAX_ALBUM_STREAK` | `2` | Maximum consecutive tracks from one album before V3 requires a different album. |
+| `AUTOPLAY_V3_MAX_ARTIST_STREAK` | `3` | Maximum consecutive tracks by one artist before V3 requires a different artist. |
 | `TRACK_HISTORY_LIMIT` | `80` | Number of tracks retained in the active playback history. |
 | `AUTOPLAY_EXPOSURE_TTL_MS` | `1209600000` | How long cross-session autoplay exposure is remembered (14 days). |
 | `AUTOPLAY_EXPOSURE_LIMIT` | `300` | Maximum canonical recommendations remembered per guild. |

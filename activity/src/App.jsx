@@ -116,7 +116,7 @@ function formatEqGain(gain) {
 }
 
 function useCompactViewport() {
-  const query = "(max-width: 620px) and (max-height: 420px)";
+  const query = "(max-height: 360px), (max-width: 620px) and (max-height: 420px)";
   const readQuery = () => typeof window !== "undefined" && window.matchMedia(query).matches;
   const [isCompact, setIsCompact] = useState(readQuery);
 
@@ -312,7 +312,7 @@ function PlayerControls({ player, volume, playlists = [], likedTrackIds = [], on
         <IconButton label="Stop playback and clear queue" onClick={() => onAction("stop")} disabled={!player.currentTrack}>
           <Stop size={19} weight="fill" aria-hidden="true" />
         </IconButton>
-        <IconButton label="Skip track" onClick={() => onAction("skip")}>
+        <IconButton label="Skip track" onClick={() => onAction("skip", { expectedTrackId: player.currentTrack?.id })}>
           <SkipForward size={20} weight="regular" aria-hidden="true" />
         </IconButton>
         <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")}>
@@ -884,12 +884,12 @@ function PlayerBar({ state, position, onAction, onView }) {
       </div>
       <div className="player-bar-center">
         <div className="bar-controls">
-          <IconButton label={`Loop mode ${player.loop}`} className={player.loop !== "NONE" ? "is-active" : ""} onClick={() => onAction("loop")} disabled={!track}><Repeat size={16} weight={player.loop !== "NONE" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
-          <IconButton label="Play previous track" onClick={() => onAction("previous")} disabled={!track}><SkipBack size={17} weight="regular" aria-hidden="true" /></IconButton>
+          <IconButton label={`Loop mode ${player.loop}`} className={`bar-loop ${player.loop !== "NONE" ? "is-active" : ""}`} onClick={() => onAction("loop")} disabled={!track}><Repeat size={16} weight={player.loop !== "NONE" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
+          <IconButton label="Play previous track" className="bar-previous" onClick={() => onAction("previous")} disabled={!track}><SkipBack size={17} weight="regular" aria-hidden="true" /></IconButton>
           <button className="bar-play" type="button" aria-label={isPlaying ? "Pause track" : "Play track"} onClick={() => onAction("toggle")} disabled={!track}>{isPlaying ? <Pause size={18} weight="fill" aria-hidden="true" /> : <Play size={18} weight="fill" aria-hidden="true" />}</button>
-          <IconButton label="Stop playback and clear queue" onClick={() => onAction("stop")} disabled={!track}><Stop size={16} weight="fill" aria-hidden="true" /></IconButton>
-          <IconButton label="Skip track" onClick={() => onAction("skip")} disabled={!track}><SkipForward size={17} weight="regular" aria-hidden="true" /></IconButton>
-          <IconButton label="Shuffle queue" onClick={() => onAction("shuffle")} disabled={!track}><Shuffle size={16} weight="regular" aria-hidden="true" /></IconButton>
+          <IconButton label="Stop playback and clear queue" className="bar-stop" onClick={() => onAction("stop")} disabled={!track}><Stop size={16} weight="fill" aria-hidden="true" /></IconButton>
+          <IconButton label="Skip track" className="bar-skip" onClick={() => onAction("skip", { expectedTrackId: track?.id })} disabled={!track}><SkipForward size={17} weight="regular" aria-hidden="true" /></IconButton>
+          <IconButton label="Shuffle queue" className="bar-shuffle" onClick={() => onAction("shuffle")} disabled={!track}><Shuffle size={16} weight="regular" aria-hidden="true" /></IconButton>
         </div>
         <div className="bar-progress">
           <span>{formatTime(seekSlider.value)}</span>
@@ -955,6 +955,7 @@ function App() {
   const syncAt = useRef(Date.now());
   const hydrationStartedAt = useRef(Date.now());
   const hydrationTimer = useRef(null);
+  const appliedSnapshot = useRef({ revision: -1, generatedAt: -1 });
   const isCompact = useCompactViewport();
 
   const goToView = useCallback((view) => {
@@ -969,6 +970,11 @@ function App() {
 
   const applyState = useCallback((nextState) => {
     if (!nextState) return;
+    const revision = Number(nextState.revision ?? 0);
+    const generatedAt = Number(nextState.generatedAt ?? nextState.player?.updatedAt ?? 0);
+    const current = appliedSnapshot.current;
+    if (revision < current.revision || (revision === current.revision && generatedAt < current.generatedAt)) return;
+    appliedSnapshot.current = { revision, generatedAt };
     syncAt.current = Date.now();
     setState(nextState);
   }, []);
@@ -1117,8 +1123,8 @@ function App() {
       const shouldHitGateway = context.mode === "discord" || Boolean(import.meta.env.VITE_ACTIVITY_GATEWAY_URL || import.meta.env.VITE_ACTIVITY_CONNECT_LOCAL);
       if (shouldHitGateway) {
         const response = await sendActivityAction({ ...context, action, payload });
-        if (response.result?.success === false) throw new Error(response.result.error || "Activity action failed.");
         applyState(response.state);
+        if (response.result?.success === false) throw new Error(response.result.error || "Activity action failed.");
         if (response.result?.playlist) setSelectedPlaylistDetail(response.result.playlist);
         if (action === "delete_playlist" && response.result?.success) {
           setSelectedPlaylistDetail(null);

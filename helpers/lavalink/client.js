@@ -1,5 +1,6 @@
 const { inspect } = require("util");
 const { Poru } = require("poru");
+const { markActivityStateChanged } = require("../activity/sync");
 const {
   restoreVoiceChannelStatus,
   updateTrackVoiceChannelStatus,
@@ -147,6 +148,16 @@ function createPoru(client) {
     void stopLyricsSession(player.guildId);
     scheduleProgressUpdates(player);
 
+    // Keep Activity state authoritative from the first tick of the new track.
+    // Artwork, lyrics and Discord UI updates below may involve network waits.
+    const state = ensurePlaybackState(player.guildId);
+    state.currentTrack = cloneTrack(track);
+    state.lastPosition = 0;
+    state.lastTimestamp = Date.now();
+    state.paused = Boolean(player.isPaused);
+    playbackState.set(player.guildId, state);
+    markActivityStateChanged(player.guildId, "trackStart");
+
     try {
       await applyNormalizedVolume(player, track);
     } catch (err) {
@@ -159,15 +170,9 @@ function createPoru(client) {
       Log.warning("Failed to update voice channel status", err?.message || String(err), `guild=${player.guildId}`);
     }
 
-    const state = ensurePlaybackState(player.guildId);
-    state.currentTrack = cloneTrack(track);
-    state.lastPosition = 0;
-    state.lastTimestamp = Date.now();
-    state.paused = Boolean(player.isPaused);
-    playbackState.set(player.guildId, state);
-
     const lyricsPayload = await fetchLyrics(player, track.info).catch(() => null);
     setLyricsState(player.guildId, lyricsPayload);
+    markActivityStateChanged(player.guildId, "lyricsReady");
 
     // Enhanced logging with more readable track info
     const trackInfo = track.info || {};
@@ -278,6 +283,7 @@ function createPoru(client) {
     state.paused = false;
     playbackState.set(player.guildId, state);
     clearLyricsState(player.guildId);
+    markActivityStateChanged(player.guildId, "trackEnd");
 
     if (player.queue.length === 0) {
       void restoreVoiceChannelStatus(poru.client, player.voiceChannel).catch((err) =>
@@ -309,6 +315,7 @@ function createPoru(client) {
   });
 
   poru.on("queueEnd", async (player) => {
+    markActivityStateChanged(player.guildId, "queueEnd");
     Log.info("🏁 Queue ended", `guild=${player.guildId}`);
 
     const state = ensurePlaybackState(player.guildId);

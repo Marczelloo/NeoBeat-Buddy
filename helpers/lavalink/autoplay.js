@@ -1,5 +1,6 @@
 const Log = require("../logs/log");
 const { recordAutoplayExposure } = require("./autoplayExposure");
+const { fetchAutoplayV3Track } = require("./autoplayV3");
 const { isAutoplayTrack } = require("./queueOrdering");
 const { fetchSmartAutoplayTrack } = require("./smartAutoplay");
 const { cloneTrack, rememberAutoplayTrack } = require("./state");
@@ -27,7 +28,8 @@ async function queueAutoplayTrack(player, lastTrack, textChannelId) {
   autoplayInFlight.add(player.guildId);
 
   try {
-    const relatedTrack = await fetchSmartAutoplayTrack(lastTrack, player.guildId, {
+    const selectAutoplayTrack = process.env.AUTOPLAY_V3 === "false" ? fetchSmartAutoplayTrack : fetchAutoplayV3Track;
+    const relatedTrack = await selectAutoplayTrack(lastTrack, player.guildId, {
       pendingManualTracks: getPendingManualTracks(player),
     });
 
