@@ -10,9 +10,10 @@ const {
 const { scoreCandidates, getTimeOfDayFactor, hasReliableSessionVibe } = require("./candidateScoring");
 const { areGenreFamiliesCompatible, getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
 const { getLastFmSimilarTracks, getLastFmTagProfile } = require("./lastfmClient");
+const { normalizeReleaseYear } = require("./metadataValidation");
 const { getPoru } = require("./players");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
-const { buildSessionProfile, genreCache, isAutoplayTrack } = require("./sessionProfile");
+const { buildSessionProfile, genreCache, getTrackMetadata, isAutoplayTrack } = require("./sessionProfile");
 const { getSkipPatterns } = require("./skipLearning");
 const {
   getSpotifyBasedSuggestions,
@@ -256,7 +257,8 @@ function applyCandidateMetadata(track, candidate) {
     track.userData.isrc = candidate.isrc;
     track.userData.autoplayIsrc = candidate.isrc;
   }
-  if (candidate.releaseYear) track.userData.releaseYear = candidate.releaseYear;
+  const releaseYear = normalizeReleaseYear(candidate.releaseYear);
+  if (releaseYear) track.userData.releaseYear = releaseYear;
 
   return track;
 }
@@ -305,6 +307,8 @@ async function enrichManualAnchorTracks(tracks, guildId) {
         features: candidate.features || null,
         derivedFeatures: candidate.derivedFeatures || null,
         metadataConfidence: candidate.metadataConfidence || 0,
+        metadataProvider: candidate.metadataProvider || null,
+        metadataSources: candidate.metadataSources || [],
         releaseYear: candidate.releaseYear || null,
       });
     }
@@ -927,6 +931,8 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "" } = {
           features: candidate.features || null,
           derivedFeatures: candidate.derivedFeatures || null,
           metadataConfidence: candidate.metadataConfidence || 0,
+          metadataProvider: candidate.metadataProvider || null,
+          metadataSources: candidate.metadataSources || [],
           releaseYear: candidate.releaseYear || null,
         });
       }
@@ -1046,7 +1052,7 @@ function applyTransitionQualityGuard(rankedCandidates, profile = {}) {
 
 function getDiversifiedResolutionOrder(rankedCandidates, random = Math.random) {
   const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
-  if (safe.length < 2 || AUTOPLAY_DIVERSITY_POOL_SIZE < 2) return rankedCandidates;
+  if (safe.length < 2 || AUTOPLAY_DIVERSITY_POOL_SIZE < 2) return [...safe, ...deferred];
 
   const topScore = safe[0].score;
   const topQuality = Number(safe[0].transitionQuality) || 0;
@@ -1084,39 +1090,51 @@ function hasSessionVibeAnchor(profile = {}) {
 }
 
 /**
- * YouTube Mix is a useful radio signal for obscure or meme uploads which have
- * no catalog metadata at all. It is deliberately not a general escape hatch:
- * only direct Mix tracks rejected exclusively for missing metadata can enter
- * this pool, and only when the room itself has no usable vibe anchor.
+ * YouTube Mix is the final provider-relationship fallback for obscure tracks
+ * and temporary metadata outages. It can run only after normal and stable
+ * anchor candidates are exhausted, and it must not contradict any known
+ * current/manual genre family.
  */
 function getMetadataFreeYouTubeMixFallbackCandidates(rankedCandidates, profile) {
-  if (hasSessionVibeAnchor(profile)) return [];
+  const referenceFamilies = profile.referenceGenreFamilies || [];
+  const manualFamilies = profile.manualTasteGenreFamilies?.length
+    ? profile.manualTasteGenreFamilies
+    : profile.manualAnchorGenreFamilies || [];
 
   return rankedCandidates.filter(
-    (candidate) =>
+    (candidate) => {
+      const candidateFamilies = candidate.genreFamilies || getGenreFamilies(candidate.genres || []);
+      const referenceCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
+      const manualCompatibility = areGenreFamiliesCompatible(manualFamilies, candidateFamilies);
+      return (
       candidate.source === "youtube_mix" &&
       candidate.track &&
+      !candidate.hardRejected &&
       !candidate.deferred &&
       candidate.fallbackOnly &&
       candidate.rejectionReason === "metadata-free-mix-fallback" &&
       candidate.score >= AUTOPLAY_MIX_FALLBACK_MIN_SCORE &&
+      referenceCompatibility !== false &&
+      manualCompatibility !== false &&
       getAutoplayVersionCompatibility(candidate.title, profile.referenceTitleRaw || "").allowed
+      );
+    }
   );
 }
 
 async function resolveMetadataFreeYouTubeMixFallback(candidates, profile, skipPatterns, guildId, fallbackAnchor = null) {
-  if (!candidates.length || hasSessionVibeAnchor(profile)) return null;
+  if (!candidates.length) return null;
 
   const rankedCandidates = scoreCandidates(candidates, profile, skipPatterns, guildId);
   const mixCandidates = getMetadataFreeYouTubeMixFallbackCandidates(rankedCandidates, profile);
   if (!mixCandidates.length) return null;
 
   Log.warning(
-    "Autoplay using metadata-free YouTube Mix fallback",
+    "Autoplay using direct YouTube Mix fallback",
     "",
     `guild=${guildId}`,
     `candidates=${mixCandidates.length}`,
-    "reason=no-session-vibe-metadata"
+    `reason=${hasSessionVibeAnchor(profile) ? "catalog-candidates-exhausted" : "no-session-vibe-metadata"}`
   );
 
   for (const candidate of mixCandidates) {
@@ -1215,6 +1233,23 @@ function getStableFallbackAnchor(profile, referenceTrack) {
   }) || null;
 }
 
+function createStableAnchorProfile(profile, fallbackAnchor) {
+  const metadata = getTrackMetadata(fallbackAnchor);
+  return {
+    ...profile,
+    referenceGenres: metadata.genres,
+    referenceGenreFamilies: getGenreFamilies(metadata.genres),
+    referenceFeatures: metadata.features,
+    referenceDerivedFeatures: metadata.derivedFeatures,
+    referenceMetadataConfidence: metadata.metadataConfidence,
+    referenceMetadataProvider: metadata.metadataProvider,
+    referenceMetadataSources: metadata.metadataSources,
+    referenceTitleRaw: fallbackAnchor?.info?.title || "",
+    referenceIsManual: !isAutoplayTrack(fallbackAnchor),
+    referenceIsAutoplay: isAutoplayTrack(fallbackAnchor),
+  };
+}
+
 function getFallbackOriginAnchor(referenceTrack) {
   const anchor = referenceTrack?.userData?.autoplayFallbackAnchor;
   if (!anchor?.info?.title || !anchor?.info?.author) return null;
@@ -1242,6 +1277,9 @@ function createFallbackAnchor(track) {
       features: track.userData?.features || null,
       derivedFeatures: track.userData?.derivedFeatures || null,
       metadataConfidence: track.userData?.metadataConfidence || 0,
+      metadataProvider: track.userData?.metadataProvider || null,
+      metadataSources: track.userData?.metadataSources || [],
+      releaseYear: track.userData?.releaseYear || null,
     },
   };
 }
@@ -1273,8 +1311,19 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
 
   const { safe, deferred } = partitionRankedCandidates(rankedCandidates);
   const resolutionOrder = getDiversifiedResolutionOrder(rankedCandidates);
-  const resolutionProbe = resolutionOrder[0];
+  const safeCandidates = new Set(safe);
+  const resolutionProbe = resolutionOrder.find((candidate) => safeCandidates.has(candidate));
   const selectedRank = rankedCandidates.indexOf(resolutionProbe) + 1;
+  const rejectionCounts = rankedCandidates.reduce((counts, candidate) => {
+    if (!candidate.hardRejected) return counts;
+    const reason = candidate.rejectionReason || "unknown";
+    counts[reason] = (counts[reason] || 0) + 1;
+    return counts;
+  }, {});
+  const rejectionSummary = Object.entries(rejectionCounts)
+    .sort(([, left], [, right]) => right - left)
+    .map(([reason, count]) => `${reason}:${count}`)
+    .join(",");
 
   for (const candidate of deferred) {
     Log.info(
@@ -1295,14 +1344,15 @@ async function scoreAndResolveCandidates(candidates, profile, skipPatterns, guil
     "Top candidates scored",
     "",
     `guild=${guildId}`,
-    `winner=${rankedCandidates[0]?.artist} - ${rankedCandidates[0]?.title} (${rankedCandidates[0]?.score})`,
+    `winner=${resolutionProbe ? `${resolutionProbe.artist} - ${resolutionProbe.title} (${resolutionProbe.score})` : "none"}`,
     `resolutionProbe=${resolutionProbe?.artist} - ${resolutionProbe?.title} (${resolutionProbe?.score})`,
     `selectedRank=${selectedRank || "none"}`,
     `scoreDelta=${resolutionProbe ? Number((rankedCandidates[0].score - resolutionProbe.score).toFixed(2)) : "none"}`,
     `transitionQuality=${resolutionProbe?.transitionQuality ?? "unknown"}`,
     `safe=${safe.length}`,
     `deferred=${deferred.length}`,
-    `scoring=${rankedCandidates[0]?.scoringDetails?.join(", ") || "none"}`
+    `rejections=${rejectionSummary || "none"}`,
+    `scoring=${resolutionProbe?.scoringDetails?.join(", ") || "none"}`
   );
   Log.debug(
     "Runner-ups",
@@ -1396,6 +1446,8 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualT
       features: referenceMetadata.features,
       derivedFeatures: referenceMetadata.derivedFeatures || null,
       metadataConfidence: referenceMetadata.metadataConfidence || 0,
+      metadataProvider: referenceMetadata.metadataProvider || null,
+      metadataSources: referenceMetadata.metadataSources || [],
       releaseYear: referenceMetadata.releaseYear,
     });
   }
@@ -1443,6 +1495,7 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualT
   const fallbackAnchor = getFallbackOriginAnchor(referenceTrack) || getStableFallbackAnchor(profile, referenceTrack);
   if (fallbackAnchor) {
     const fallbackReference = getAutoplayReference(fallbackAnchor);
+    const fallbackProfile = createStableAnchorProfile(profile, fallbackAnchor);
     Log.warning(
       "Autoplay retrying from stable session anchor",
       "",
@@ -1450,13 +1503,20 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualT
       `failedReference=${reference.searchArtist} - ${reference.cleanTitle}`,
       `anchor=${fallbackReference.searchArtist} - ${fallbackReference.cleanTitle}`
     );
-    const fallbackCandidates = await collectCandidates(fallbackAnchor, guildId, profile, fallbackReference);
-    const fallbackTrack = await scoreAndResolveCandidates(fallbackCandidates, profile, skipPatterns, guildId, "stable-anchor-fallback");
+    const fallbackCandidates = await collectCandidates(fallbackAnchor, guildId, fallbackProfile, fallbackReference);
+    const fallbackTrack = await scoreAndResolveCandidates(
+      fallbackCandidates,
+      fallbackProfile,
+      skipPatterns,
+      guildId,
+      "stable-anchor-fallback",
+      { anchorTrusted: true }
+    );
     if (fallbackTrack) return fallbackTrack;
 
     const anchoredMixTrack = await resolveMetadataFreeYouTubeMixFallback(
       fallbackCandidates,
-      profile,
+      fallbackProfile,
       skipPatterns,
       guildId,
       fallbackAnchor
@@ -1498,6 +1558,7 @@ module.exports = {
   resolveMetadataFreeYouTubeMixFallback,
   resolveRankedCandidates,
   getStableFallbackAnchor,
+  createStableAnchorProfile,
   getFallbackOriginAnchor,
   attachFallbackOrigin,
   enrichCandidatesWithLastFmTags,

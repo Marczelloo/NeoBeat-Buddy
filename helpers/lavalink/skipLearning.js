@@ -1,5 +1,5 @@
 const Log = require("../logs/log");
-const { normalizeGenreTags } = require("./genreUtils");
+const { isGenericGenreTag, normalizeGenreTags } = require("./genreUtils");
 const { genreCache } = require("./sessionProfile");
 
 const skipHistory = new Map();
@@ -50,7 +50,7 @@ function recordSkip(guildId, track, reason = "manual") {
   const genres = normalizeGenreTags(track.userData?.genres || genreCache.get(track.info?.identifier)?.genres || [], {
     artist: track.userData?.autoplayReference?.artist || track.info?.author,
     title: track.userData?.autoplayReference?.title || track.info?.title,
-  });
+  }).filter((genre) => !isGenericGenreTag(genre));
 
   skips.push({
     artist: track.info?.author,
@@ -74,8 +74,20 @@ function recordSkip(guildId, track, reason = "manual") {
   );
 }
 
+/**
+ * Runs a skip while preserving the track that was playing before Poru
+ * advances the queue. Reading currentTrack after await records the next song.
+ */
+async function skipWithLearning(guildId, player, skip, reason = "manual") {
+  const skippedTrack = player?.currentTrack || null;
+  const didSkip = await skip(guildId);
+  if (didSkip && skippedTrack) recordSkip(guildId, skippedTrack, reason);
+  return didSkip;
+}
+
 module.exports = {
   getSkipPatterns,
   recordSkip,
+  skipWithLearning,
   skipHistory,
 };

@@ -140,12 +140,14 @@ describe("Smart Autoplay System", () => {
   });
 
   describe("recordSkip", () => {
-    let recordSkip;
+    let getSkipPatterns, recordSkip, skipWithLearning;
 
     beforeEach(() => {
       delete require.cache[require.resolve("../../../helpers/lavalink/skipLearning")];
       const skipLearning = require("../../../helpers/lavalink/skipLearning");
+      getSkipPatterns = skipLearning.getSkipPatterns;
       recordSkip = skipLearning.recordSkip;
+      skipWithLearning = skipLearning.skipWithLearning;
     });
 
     it("should record skip with artist and reason", () => {
@@ -161,6 +163,20 @@ describe("Smart Autoplay System", () => {
       for (let i = 0; i < 10; i++) {
         recordSkip(GUILD_ID, track, "command_skip");
       }
+    });
+
+    it("records the song captured before the player advances", async () => {
+      const skippedTrack = createMockTrack("Skipped Song", "Skipped Artist", "skipped-id");
+      const nextTrack = createMockTrack("Next Song", "Next Artist", "next-id");
+      const player = { currentTrack: skippedTrack };
+
+      const result = await skipWithLearning(GUILD_ID, player, async () => {
+        player.currentTrack = nextTrack;
+        return true;
+      }, "command_skip");
+
+      assert.strictEqual(result, true);
+      assert.strictEqual(getSkipPatterns(GUILD_ID).recentSkips.at(-1).title, "Skipped Song");
     });
   });
 

@@ -165,9 +165,10 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_MIX_FALLBACK_MIN_SCORE` | `58` | Minimum fit score for metadata-free YouTube Mix fallback candidates; Mix never enters the normal safe pool. |
 | `AUTOPLAY_MANUAL_CONTEXT_LIMIT` | `12` | Number of recently played user-selected tracks retained as strong autoplay anchors. |
 | `AUTOPLAY_PENDING_MANUAL_CONTEXT_LIMIT` | `4` | Upcoming manual queue tracks used to shape recommendations before they play. |
-| `AUTOPLAY_DRIFT_GUARD_AFTER` | `2` | Consecutive autoplay tracks after which the manual-anchor corridor is enforced. |
+| `AUTOPLAY_DRIFT_GUARD_AFTER` | `1` | Enforces the manual-anchor corridor after the first automatic transition, preventing multi-step drift before it starts. |
 | `AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE` | `42` | Minimum normalized fit to a manual anchor while drift protection is active. |
 | `AUTOPLAY_UNVERIFIED_DRIFT_PENALTY` | `18` | Penalty for candidates without enough evidence against the manual listening context. |
+| `AUTOPLAY_SKIP_GENRE_PENALTY_MAX` | `30` | Caps learned genre penalties; one skipped track contributes one specific-genre penalty instead of one penalty per tag. |
 | `AUTOPLAY_ARTIST_WINDOW` | `5` | Recent automatic tracks considered for artist repetition control. |
 | `AUTOPLAY_ARTIST_MAX_IN_WINDOW` | `2` | Maximum automatic appearances by one artist in that window before deferral. |
 | `AUTOPLAY_TEMPO_CORRIDOR_MAX` | `38` | Maximum verified half/double-time-aware BPM jump before an established session rejects the transition. |

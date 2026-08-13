@@ -316,6 +316,22 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         assert.ok(scored[0].scoringDetails.includes("skipGenre:-15"));
       });
+
+      it("caps one skipped track to one genre penalty instead of multiplying across tags", () => {
+        const candidates = [
+          createMockCandidate("Song", "Artist", "id1", "deezer_recommendations", {
+            genres: ["synthpop", "dream pop", "art pop"],
+          }),
+        ];
+        const profile = createMinimalProfile();
+        const skipPatterns = {
+          skippedArtists: {},
+          skippedGenres: { synthpop: 1, "dream pop": 1, "art pop": 1 },
+        };
+
+        const [scored] = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
+        assert.deepStrictEqual(scored.scoringDetails.filter((detail) => detail.startsWith("skipGenre:")), ["skipGenre:-15"]);
+      });
     });
 
     describe("Duplicate Prevention", () => {

@@ -1,6 +1,7 @@
 const Log = require("../logs/log");
 const { getCommunityMetadata } = require("./communityMetadata");
 const { normalizeGenreTags } = require("./genreUtils");
+const { normalizeReleaseYear } = require("./metadataValidation");
 const { getBaseTitle, normalizeComparableText } = require("./trackNormalization");
 
 const metadataCache = new Map();
@@ -99,7 +100,7 @@ function normalizeDeezerMetadata(payload) {
   return {
     deezerId: payload.id ? String(payload.id) : null,
     isrc: payload.isrc || null,
-    releaseYear: payload.release_date ? Number.parseInt(String(payload.release_date).slice(0, 4), 10) || null : null,
+    releaseYear: normalizeReleaseYear(payload.release_date),
     catalogRank: Number.isFinite(Number(payload.rank)) ? Number(payload.rank) : null,
     features: Object.keys(features).length ? features : null,
     metadataConfidence: tempo ? 0.45 : gain !== null ? 0.2 : 0.05,
@@ -175,7 +176,7 @@ function mergeAudioMetadata(candidate, metadata, { checked = true } = {}) {
 
   candidate.deezerId ||= metadata.deezerId;
   candidate.isrc ||= metadata.isrc;
-  candidate.releaseYear ||= metadata.releaseYear;
+  candidate.releaseYear = normalizeReleaseYear(candidate.releaseYear) || normalizeReleaseYear(metadata.releaseYear);
   candidate.catalogRank ||= metadata.catalogRank;
   candidate.metadataProvider ||= metadata.metadataProvider;
   candidate.metadataConfidence = Math.max(candidate.metadataConfidence || 0, metadata.metadataConfidence || 0);
@@ -199,7 +200,7 @@ function mergeCommunityMetadata(candidate, metadata) {
   candidate.metadataSources = [...new Set([...(candidate.metadataSources || []), ...(metadata.metadataSources || [])])];
   candidate.metadataProvider ||= candidate.metadataSources.join("+") || null;
   candidate.metadataConfidence = Math.max(candidate.metadataConfidence || 0, metadata.metadataConfidence || 0);
-  candidate.releaseYear ||= metadata.releaseYear;
+  candidate.releaseYear = normalizeReleaseYear(candidate.releaseYear) || normalizeReleaseYear(metadata.releaseYear);
   candidate.isrc ||= metadata.isrc;
   return candidate;
 }

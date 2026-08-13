@@ -1,5 +1,6 @@
 const Log = require("../logs/log");
 const { getGenreFamilies, normalizeGenreTags } = require("./genreUtils");
+const { normalizeReleaseYear } = require("./metadataValidation");
 const { playbackState } = require("./state");
 const { cleanArtistName } = require("./trackNormalization");
 
@@ -104,7 +105,9 @@ function getTrackMetadata(track) {
     features: direct.features || cached.features || null,
     derivedFeatures: direct.derivedFeatures || cached.derivedFeatures || null,
     metadataConfidence: Math.max(Number(direct.metadataConfidence) || 0, Number(cached.metadataConfidence) || 0),
-    releaseYear: direct.releaseYear || cached.releaseYear || null,
+    metadataProvider: direct.metadataProvider || cached.metadataProvider || null,
+    metadataSources: direct.metadataSources || cached.metadataSources || [],
+    releaseYear: normalizeReleaseYear(direct.releaseYear) || normalizeReleaseYear(cached.releaseYear),
   };
 }
 
@@ -236,7 +239,15 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
   const energyValues = [];
   const valenceValues = [];
   const recentGenreFamilies = [];
-  let referenceMetadata = { genres: [], features: null, derivedFeatures: null, metadataConfidence: 0, releaseYear: null };
+  let referenceMetadata = {
+    genres: [],
+    features: null,
+    derivedFeatures: null,
+    metadataConfidence: 0,
+    metadataProvider: null,
+    metadataSources: [],
+    releaseYear: null,
+  };
 
   let profileWeightTotal = 0;
 
@@ -405,6 +416,8 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     referenceFeatures: referenceMetadata.features,
     referenceDerivedFeatures: referenceMetadata.derivedFeatures,
     referenceMetadataConfidence: referenceMetadata.metadataConfidence,
+    referenceMetadataProvider: referenceMetadata.metadataProvider,
+    referenceMetadataSources: referenceMetadata.metadataSources,
     avgDerivedFeatures,
     recentGenreFamilies,
     recentTracks,

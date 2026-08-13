@@ -15,7 +15,7 @@ const {
   getLyricsState,
 } = require("./lavalink/index");
 const { buildLyricsResponse } = require("./lavalink/lyricsFormatter");
-const { recordSkip } = require("./lavalink/skipLearning");
+const { skipWithLearning } = require("./lavalink/skipLearning");
 const Log = require("./logs/log");
 const { formatDuration } = require("./utils");
 
@@ -104,8 +104,7 @@ async function handleControlButtons(interaction, player) {
 
     if (!config.enabled || isDj) {
       await interaction.deferUpdate();
-      await lavalinkSkip(guildId);
-      if (livePlayer?.currentTrack) recordSkip(guildId, livePlayer.currentTrack, "manual_skip");
+      await skipWithLearning(guildId, livePlayer, lavalinkSkip, "manual_skip");
       skipVotes.clear(guildId);
 
       const loopToDisplay = player.loop ?? "NONE";
@@ -141,10 +140,9 @@ async function handleControlButtons(interaction, player) {
     }
 
     if (settings.mode === "hybrid" && isDj) {
-      const skipped = await lavalinkSkip(guildId);
+      const skipped = await skipWithLearning(guildId, livePlayer, lavalinkSkip, "manual_skip");
       if (skipped) {
         skipVotes.clear(guildId);
-        if (livePlayer?.currentTrack) recordSkip(guildId, livePlayer.currentTrack, "manual_skip");
         await interaction.reply({ content: "Song skipped.", ephemeral: true });
         return;
       }
@@ -157,9 +155,8 @@ async function handleControlButtons(interaction, player) {
     const eligibleCount = listeners.size;
 
     if (eligibleCount <= 1) {
-      await lavalinkSkip(guildId);
+      await skipWithLearning(guildId, livePlayer, lavalinkSkip, "manual_skip");
       skipVotes.clear(guildId);
-      if (livePlayer?.currentTrack) recordSkip(guildId, livePlayer.currentTrack, "manual_skip");
       await interaction.reply({ content: "Song skipped.", ephemeral: true });
 
       const loopToDisplay = player.loop ?? "NONE";
@@ -185,9 +182,8 @@ async function handleControlButtons(interaction, player) {
     }
 
     if (result.status === "passed") {
-      await lavalinkSkip(guildId);
+      await skipWithLearning(guildId, livePlayer, lavalinkSkip, "manual_skip");
       skipVotes.clear(guildId);
-      if (livePlayer?.currentTrack) recordSkip(guildId, livePlayer.currentTrack, "manual_skip");
       await interaction.reply({ content: "Vote passed. Song skipped.", ephemeral: true });
 
       const loopToDisplay = player.loop ?? "NONE";

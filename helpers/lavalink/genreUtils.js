@@ -53,8 +53,8 @@ const GENERIC_GENRE_TAGS = new Set([
   "rock",
 ]);
 
-const NON_MUSIC_TAG_PATTERN = /^(?:\d{4}s?|\d{2}s|\d{4}\s+music|seen\s+live|favorite(?:s)?|favourites?|my\s+(?:favorites?|favourites?|music|shit)|female\s+vocalists?|male\s+vocalists?|under\s+\d+\s+listeners|awesome|love|loved|beautiful|cool|best|good|bad|spotify|last\s*fm|scrobble(?:d)?|heard\s+on|playlist|indie\s+playlist|english|polish|american|british|german|french|swedish|canadian)$/i;
-const LOW_SIGNAL_CONTEXT_TAG_PATTERN = /^(?:mortality|freedom\s+vs\s+conformity|jazz\s+elements?|rain|clipe|estudo|violao|official(?:\s+audio)?|music\s+video)$/i;
+const NON_MUSIC_TAG_PATTERN = /^(?:\d{4}s?|\d{2}s|\d{4}\s+music|seen\s+live|want\s+to\s+see\s+live|favorite(?:s)?|favourites?|my\s+(?:favorites?|favourites?|music|shit)|female\s+vocalists?|male\s+vocalists?|under\s+\d+\s+listeners|awesome|love|loved|beautiful|cool|best|good|bad|garbage|spotify|last\s*fm|scrobble(?:d)?|heard\s+on|playlist|indie\s+playlist|english|polish|american|british|german|french|swedish|canadian|japanese|korean)$/i;
+const LOW_SIGNAL_CONTEXT_TAG_PATTERN = /^(?:mortality|freedom\s+vs\s+conformity|jazz\s+elements?|rain|clipe|estudo|violao|official(?:\s+audio)?|music\s+video|pro\s+drums(?:\s+fc)?|clone\s+hero|cover|parody)$/i;
 
 function isNoisyGenreTag(genre) {
   const tag = normalizeGenre(genre);
@@ -120,6 +120,10 @@ function normalizeGenreTags(genres = [], context = {}) {
   return [...unique];
 }
 
+function isGenericGenreTag(genre) {
+  return GENERIC_GENRE_TAGS.has(normalizeGenre(genre));
+}
+
 function getGenreFamilies(genres = []) {
   const families = new Set();
 
@@ -179,6 +183,7 @@ module.exports = {
   normalizeGenre,
   normalizeGenreTags,
   isNoisyGenreTag,
+  isGenericGenreTag,
   getGenreFamilies,
   areGenreFamiliesCompatible,
   findGenreOverlap,

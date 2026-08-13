@@ -33,6 +33,7 @@ const { getInterpolatedPosition, stopLyricsSession } = require("../lavalink/lyri
 const { getPoru } = require("../lavalink/players");
 const { searchSingleSource } = require("../lavalink/searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
+const { skipWithLearning } = require("../lavalink/skipLearning");
 const { getLyricsState, setLyricsState } = require("../lavalink/state");
 const Log = require("../logs/log");
 const { importPlaylistFromUrl } = require("../playlists/import");
@@ -432,7 +433,7 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
     case "toggle":
       return player?.isPaused ? lavalinkResume(guildId) : lavalinkPause(guildId);
     case "skip":
-      return lavalinkSkip(guildId);
+      return skipWithLearning(guildId, player, lavalinkSkip, "activity_skip");
     case "previous":
       return lavalinkPrevious(guildId);
     case "stop":

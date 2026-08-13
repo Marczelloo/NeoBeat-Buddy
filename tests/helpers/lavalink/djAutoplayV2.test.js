@@ -14,6 +14,7 @@ const {
   resolveRankedCandidates,
   selectTagEnrichmentTargets,
   getStableFallbackAnchor,
+  createStableAnchorProfile,
   getFallbackOriginAnchor,
   attachFallbackOrigin,
   getRelevantPlayableTrack,
@@ -35,6 +36,9 @@ function track(title, artist, identifier, options = {}) {
       features: options.features || null,
       derivedFeatures: options.derivedFeatures || null,
       metadataConfidence: options.metadataConfidence || 0,
+      metadataProvider: options.metadataProvider || null,
+      metadataSources: options.metadataSources || [],
+      releaseYear: options.releaseYear || null,
     },
   };
 }
@@ -134,6 +138,70 @@ describe("DJ autoplay v2", () => {
     assert.ok(ranked.scoringDetails.includes("manualAnchor:-1000(unverified-drift)"));
   });
 
+  it("prevents a low-confidence artist-tag bridge from drifting after the first autoplay step", () => {
+    const manual = track("Loser", "Tame Impala", "tame-loser", {
+      genres: ["neo-psychedelia", "psychedelic pop", "synth funk"],
+      metadataConfidence: 0.68,
+      metadataProvider: "lastfm-track",
+    });
+    const [ranked] = scoreCandidates(
+      [candidate("BOY IN RED", "Isaiah Rashad", "isaiah", {
+        genres: ["jazz rap", "hiphop", "southern hiphop"],
+        similarity: 0.7,
+        metadataConfidence: 0.42,
+        metadataProvider: "lastfm-artist",
+      })],
+      profile({
+        manualAnchorRecords: [{ track: manual, type: "played", weight: 1 }],
+        manualTasteGenres: manual.userData.genres.map((genre) => ({ genre, count: 1, weight: 1 })),
+        manualTasteGenreFamilies: ["rock", "pop", "rnb"],
+        referenceGenres: ["neo-soul", "funk", "jazz rap"],
+        referenceGenreFamilies: ["rnb", "jazz", "hiphop"],
+        referenceMetadataConfidence: 0.68,
+        referenceMetadataProvider: "lastfm-track",
+        referenceIsAutoplay: true,
+        autoplayStreak: 1,
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked.hardRejected, true);
+    assert.strictEqual(ranked.manualAnchorEvidence, false);
+  });
+
+  it("rebuilds the transition reference around the stable manual anchor", () => {
+    const anchor = track("Loser", "Tame Impala", "stable-tame", {
+      genres: ["neo-psychedelia", "psychedelic pop"],
+      features: { tempo: 120, energy: 0.6 },
+      metadataConfidence: 0.68,
+      metadataProvider: "lastfm-track",
+    });
+    const fallback = createStableAnchorProfile(
+      profile({
+        referenceGenres: ["jazz rap"],
+        referenceGenreFamilies: ["hiphop", "jazz"],
+        referenceTitleRaw: "BOY IN RED",
+        autoplayStreak: 2,
+      }),
+      anchor
+    );
+
+    assert.strictEqual(fallback.referenceTitleRaw, "Loser");
+    assert.deepStrictEqual(fallback.referenceGenres, ["neo-psychedelia", "psychedelic pop"]);
+    assert.deepStrictEqual(fallback.referenceFeatures, { tempo: 120, energy: 0.6 });
+    assert.strictEqual(fallback.referenceMetadataProvider, "lastfm-track");
+    assert.strictEqual(fallback.referenceIsManual, true);
+  });
+
+  it("does not let an impossible catalog year corrupt the session average", () => {
+    const invalid = track("Bad catalog metadata", "Artist", "bad-year", { releaseYear: 1 });
+    playbackState.set(GUILD_ID, { history: [], manualHistory: [] });
+
+    const session = buildSessionProfile(GUILD_ID, invalid);
+    assert.strictEqual(session.avgYear, null);
+  });
+
   it("defers an artist that already fills the autoplay rolling window", () => {
     const [ranked] = scoreCandidates(
       [candidate("Another good song", "Repeat Artist", "repeat-artist-4", { genres: ["pop"], similarity: 0.8 })],
@@ -217,18 +285,34 @@ describe("DJ autoplay v2", () => {
     );
   });
 
-  it("does not use the metadata-free YouTube Mix fallback when the session has a vibe anchor", () => {
+  it("keeps a direct YouTube Mix fallback when catalog candidates fail in an anchored session", () => {
     const directMix = candidate("Unknown Mix result", "Unknown uploader", "mix-anchor", { source: "youtube_mix" });
     directMix.track = track("Unknown Mix result", "Unknown uploader", "mix-anchor");
-    const ranked = scoreCandidates([directMix], profile(), noSkips, GUILD_ID);
+    const anchoredProfile = profile({ referenceGenres: ["hip hop"], referenceGenreFamilies: ["hiphop"] });
+    const ranked = scoreCandidates([directMix], anchoredProfile, noSkips, GUILD_ID);
 
     assert.deepStrictEqual(
-      getMetadataFreeYouTubeMixFallbackCandidates(
-        ranked,
-        profile({ referenceGenres: ["hip hop"], referenceGenreFamilies: ["hiphop"] })
-      ),
-      []
+      getMetadataFreeYouTubeMixFallbackCandidates(ranked, anchoredProfile).map((item) => item.identifier),
+      ["mix-anchor"]
     );
+  });
+
+  it("does not let the direct Mix fallback cross a known incompatible genre family", () => {
+    const directMix = candidate("Metal detour", "Unknown uploader", "mix-metal", {
+      source: "youtube_mix",
+      genres: ["death metal"],
+      metadataConfidence: 0.42,
+      metadataProvider: "lastfm-artist",
+    });
+    directMix.track = track("Metal detour", "Unknown uploader", "mix-metal");
+    const anchoredProfile = profile({
+      referenceGenres: ["hip hop"],
+      referenceGenreFamilies: ["hiphop"],
+      manualTasteGenreFamilies: ["hiphop"],
+    });
+    const ranked = scoreCandidates([directMix], anchoredProfile, noSkips, GUILD_ID);
+
+    assert.deepStrictEqual(getMetadataFreeYouTubeMixFallbackCandidates(ranked, anchoredProfile), []);
   });
 
   it("resolves a direct metadata-free YouTube Mix candidate without broad search", async () => {

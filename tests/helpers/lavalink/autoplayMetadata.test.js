@@ -9,6 +9,7 @@ const {
   normalizeDeezerMetadata,
 } = require("../../../helpers/lavalink/autoplayMetadata");
 const { scoreCandidates } = require("../../../helpers/lavalink/candidateScoring");
+const { normalizeReleaseYear } = require("../../../helpers/lavalink/metadataValidation");
 
 const noSkips = { skippedArtists: {}, skippedGenres: {} };
 
@@ -150,5 +151,13 @@ describe("Autoplay metadata without Spotify audio features", () => {
 
     assert.ok(ranked[0].scoringDetails.includes("continuity:+18(energy)"));
     assert.notStrictEqual(ranked[0].vibeConfidence, "low");
+  });
+
+  it("drops impossible release years before they enter the session profile", () => {
+    const fixedNow = new Date("2026-08-13T00:00:00Z");
+    assert.strictEqual(normalizeReleaseYear(1, fixedNow), null);
+    assert.strictEqual(normalizeReleaseYear("1735-01-01", fixedNow), null);
+    assert.strictEqual(normalizeReleaseYear("2024-05-10", fixedNow), 2024);
+    assert.strictEqual(normalizeReleaseYear(2028, fixedNow), null);
   });
 });

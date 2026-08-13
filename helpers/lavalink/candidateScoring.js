@@ -7,6 +7,7 @@ const {
   findSpecificGenreOverlap,
   getGenreBridgeStrength,
   getGenreFamilies,
+  isGenericGenreTag,
   normalizeGenreTags,
 } = require("./genreUtils");
 const { getTrackMetadata, sessionStartTime } = require("./sessionProfile");
@@ -17,7 +18,7 @@ const {
   normalizeComparableText,
 } = require("./trackNormalization");
 
-const AUTOPLAY_DRIFT_GUARD_AFTER = Math.max(Number(process.env.AUTOPLAY_DRIFT_GUARD_AFTER ?? 2), 1);
+const AUTOPLAY_DRIFT_GUARD_AFTER = Math.max(Number(process.env.AUTOPLAY_DRIFT_GUARD_AFTER ?? 1), 1);
 const AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE = Number(process.env.AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE ?? 42);
 const AUTOPLAY_UNVERIFIED_DRIFT_PENALTY = Number(process.env.AUTOPLAY_UNVERIFIED_DRIFT_PENALTY ?? 18);
 const AUTOPLAY_ARTIST_WINDOW = Math.max(Number(process.env.AUTOPLAY_ARTIST_WINDOW ?? 5), 3);
@@ -25,6 +26,7 @@ const AUTOPLAY_ARTIST_MAX_IN_WINDOW = Math.max(Number(process.env.AUTOPLAY_ARTIS
 const AUTOPLAY_TEMPO_CORRIDOR_MAX = Math.max(Number(process.env.AUTOPLAY_TEMPO_CORRIDOR_MAX ?? 38), 20);
 const AUTOPLAY_ENERGY_CORRIDOR_MAX = Math.min(Math.max(Number(process.env.AUTOPLAY_ENERGY_CORRIDOR_MAX ?? 0.36), 0.15), 0.8);
 const AUTOPLAY_VALENCE_CORRIDOR_MAX = Math.min(Math.max(Number(process.env.AUTOPLAY_VALENCE_CORRIDOR_MAX ?? 0.48), 0.2), 1);
+const AUTOPLAY_SKIP_GENRE_PENALTY_MAX = Math.max(Number(process.env.AUTOPLAY_SKIP_GENRE_PENALTY_MAX ?? 30), 0);
 
 /**
  * Gets time-of-day factor for energy preferences
@@ -61,6 +63,17 @@ function getCandidateFeatures(candidate) {
   };
 }
 
+function hasLowConfidenceArtistTags(metadata = {}) {
+  const sources = [metadata.metadataProvider, ...(metadata.metadataSources || [])]
+    .filter(Boolean)
+    .map((source) => String(source).toLowerCase());
+  const hasArtistFallback = sources.some((source) => source === "lastfm-artist");
+  const hasRecordingTags = sources.some((source) =>
+    /lastfm-track|lastfm-album|musicbrainz|theaudiodb|spotify/.test(source)
+  );
+  return hasArtistFallback && !hasRecordingTags && (Number(metadata.metadataConfidence) || 0) < 0.6;
+}
+
 function getManualAnchorRecords(profile = {}) {
   if (Array.isArray(profile.manualAnchorRecords)) return profile.manualAnchorRecords;
   return (profile.manualAnchorTracks || []).map((track) => ({ track, type: "played", weight: 1 }));
@@ -92,6 +105,7 @@ function getManualAnchorVibe(candidate, profile = {}, { anchorTrusted = false } 
   const candidateFeatures = getCandidateFeatures(candidate);
   const candidateArtist = normalizeArtist(candidate?.artist);
   const similarity = normalizeSimilarity(candidate?.similarity);
+  const candidateGenreTrusted = !hasLowConfidenceArtistTags(candidate);
   const results = [];
 
   for (const record of records) {
@@ -106,6 +120,7 @@ function getManualAnchorVibe(candidate, profile = {}, { anchorTrusted = false } 
     const anchorArtist = normalizeArtist(track?.userData?.autoplayReference?.artist || track?.info?.author);
     const genreCompatibility = areGenreFamiliesCompatible(anchorFamilies, candidateFamilies);
     const sharedGenres = findGenreOverlap(anchorGenres, candidateGenres);
+    const trustedSharedGenres = candidateGenreTrusted && !hasLowConfidenceArtistTags(metadata) ? sharedGenres : [];
     const comparableFields = [];
     let closeFeatureCount = 0;
     let score = 0;
@@ -115,14 +130,15 @@ function getManualAnchorVibe(candidate, profile = {}, { anchorTrusted = false } 
       comparableFields.push("genre");
       if (genreCompatibility === true) {
         const sharesFamily = anchorFamilies.some((family) => candidateFamilies.includes(family));
-        score += sharesFamily ? 18 : 10;
+        const trustedFamily = candidateGenreTrusted && !hasLowConfidenceArtistTags(metadata);
+        score += trustedFamily ? (sharesFamily ? 18 : 10) : 5;
       }
       else {
         score -= 34;
         conflict = true;
       }
     }
-    if (sharedGenres.length > 0) {
+    if (trustedSharedGenres.length > 0) {
       comparableFields.push("subgenre");
       score += 26;
     }
@@ -165,7 +181,7 @@ function getManualAnchorVibe(candidate, profile = {}, { anchorTrusted = false } 
       score: normalizedScore,
       conflict,
       comparable: comparableFields,
-      sharedGenres,
+      sharedGenres: trustedSharedGenres,
       closeFeatureCount,
       sameArtist: candidateArtist && anchorArtist && candidateArtist === anchorArtist,
     });
@@ -268,10 +284,21 @@ function getVibeEvidence(candidate, profile, candidateFamilies, referenceFamilie
     field === "tempo" ? distance < 30 : distance < 0.3
   ).length;
   const hasFeatureContinuity = closeFeatureCount > 0;
-  const hasCompatibleGenre = genreCompatibility === true || sharedGenres.length > 0;
+  const genreEvidenceTrusted =
+    !hasLowConfidenceArtistTags(candidate) &&
+    !hasLowConfidenceArtistTags({
+      metadataProvider: profile.referenceMetadataProvider,
+      metadataSources: profile.referenceMetadataSources,
+      metadataConfidence: profile.referenceMetadataConfidence,
+    });
+  const hasCompatibleGenre = genreEvidenceTrusted && (genreCompatibility === true || sharedGenres.length > 0);
   const hasStrongSimilarity = similarity >= 0.72;
   const hasAnySimilarity = similarity > 0.12;
-  const noAnchorMix = candidate?.source === "youtube_mix" && !hasSessionVibeAnchor(profile);
+  const directMixFallback =
+    candidate?.source === "youtube_mix" &&
+    !hasCompatibleGenre &&
+    !hasFeatureContinuity &&
+    !hasStrongSimilarity;
 
   return {
     similarity,
@@ -282,13 +309,13 @@ function getVibeEvidence(candidate, profile, candidateFamilies, referenceFamilie
     hasCompatibleGenre,
     hasStrongSimilarity,
     hasAnySimilarity,
-    noAnchorMix,
+    directMixFallback,
     confidence:
       hasCompatibleGenre || hasFeatureContinuity || hasStrongSimilarity
         ? "high"
         : hasAnySimilarity || getFeatureCoverage(features) > 0
           ? "medium"
-          : noAnchorMix
+          : directMixFallback
             ? "fallback"
             : "low",
   };
@@ -384,6 +411,14 @@ function hasStrongSessionVibe(profile, referenceFeatures) {
 
 function getTransitionCorridor(candidate, profile, referenceFamilies, referenceGenres, candidateFamilies, candidateFeatures, referenceFeatures) {
   const bridge = getGenreBridgeStrength(referenceGenres, candidate.genres || []);
+  const genreEvidenceTrusted =
+    !hasLowConfidenceArtistTags(candidate) &&
+    !hasLowConfidenceArtistTags({
+      metadataProvider: profile.referenceMetadataProvider,
+      metadataSources: profile.referenceMetadataSources,
+      metadataConfidence: profile.referenceMetadataConfidence,
+    });
+  const bridgeStrength = genreEvidenceTrusted ? bridge.strength : Math.min(bridge.strength, 1);
   const active = hasStrongSessionVibe(profile, referenceFeatures);
   const violations = [];
   const referenceConfidence = Math.max(Number(profile?.referenceMetadataConfidence) || 0, 0.45);
@@ -412,7 +447,7 @@ function getTransitionCorridor(candidate, profile, referenceFamilies, referenceG
     active &&
     referenceSpecificGenres.length > 0 &&
     candidate.genres.length > 0 &&
-    bridge.strength < 3 &&
+    bridgeStrength < 3 &&
     closeFeatureSignals < 2
   ) {
     violations.push("specific-genre-floor");
@@ -426,7 +461,7 @@ function getTransitionCorridor(candidate, profile, referenceFamilies, referenceG
     referenceConfidence >= 0.45
   ) {
     const tempoDistance = getTempoDistance(candidateFeatures.tempo, referenceFeatures.tempo);
-    const maxDistance = bridge.strength >= 2 ? AUTOPLAY_TEMPO_CORRIDOR_MAX + 10 : AUTOPLAY_TEMPO_CORRIDOR_MAX;
+    const maxDistance = bridgeStrength >= 2 ? AUTOPLAY_TEMPO_CORRIDOR_MAX + 10 : AUTOPLAY_TEMPO_CORRIDOR_MAX;
     if (tempoDistance !== null && tempoDistance > maxDistance) violations.push(`tempo:${Math.round(tempoDistance)}`);
   }
 
@@ -447,8 +482,8 @@ function getTransitionCorridor(candidate, profile, referenceFamilies, referenceG
   const familyCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
   return {
     active,
-    bridgeStrength: bridge.strength,
-    specificOverlap: bridge.specificOverlap,
+    bridgeStrength,
+    specificOverlap: genreEvidenceTrusted ? bridge.specificOverlap : [],
     violations,
     shouldReject: violations.length > 0 && familyCompatibility !== false,
   };
@@ -509,6 +544,13 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     const transitionReferenceGenres = normalizeGenreTags(profile.referenceGenres?.length ? profile.referenceGenres : sessionGenres);
     const candidateFeatures = getCandidateFeatures(candidate);
     const referenceFeatures = getReferenceFeatures(profile);
+    const genreEvidenceTrusted =
+      !hasLowConfidenceArtistTags(candidate) &&
+      !hasLowConfidenceArtistTags({
+        metadataProvider: profile.referenceMetadataProvider,
+        metadataSources: profile.referenceMetadataSources,
+        metadataConfidence: profile.referenceMetadataConfidence,
+      });
     candidate.genreFamilies = candidateFamilies;
     const transitionCorridor = getTransitionCorridor(
       candidate,
@@ -558,7 +600,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       vibeEvidence.hasAnySimilarity ||
       vibeEvidence.hasCompatibleGenre ||
       vibeEvidence.hasFeatureContinuity;
-    const isMetadataFreeMix = vibeEvidence.noAnchorMix && !hasMusicSignal;
+    const isMetadataFreeMix = vibeEvidence.directMixFallback && !hasMusicSignal;
     const hasReliableSignal = hasMusicSignal || isMetadataFreeMix;
     candidate.vibeConfidence = vibeEvidence.confidence;
     candidate.fallbackOnly = false;
@@ -578,7 +620,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     // live under a broad family such as pop or electronic. Direct Mix tracks
     // without any session metadata stay available in the dedicated fallback
     // path above, preserving niche and meme-music sessions.
-    if (!candidate.hardRejected && transitionCorridor.shouldReject) {
+    if (!candidate.hardRejected && !isMetadataFreeMix && transitionCorridor.shouldReject) {
       score -= 1000;
       candidate.hardRejected = true;
       candidate.rejectionReason = "transition-corridor";
@@ -652,6 +694,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     // because it has a generic tag or a source bonus.
     if (
       !candidate.hardRejected &&
+      !isMetadataFreeMix &&
       hasSessionVibeAnchor(profile) &&
       !vibeEvidence.hasCompatibleGenre &&
       !vibeEvidence.hasFeatureContinuity &&
@@ -677,17 +720,17 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       candidate.rejectionReason = "incompatible-genre-family";
       scoringDetails.push("transition:-90(genre-drift)");
     } else if (transitionCompatibility === true) {
-      genreBonus += 12;
-      scoringDetails.push("transition:compatible-vibe");
+      genreBonus += genreEvidenceTrusted ? 12 : 4;
+      scoringDetails.push(genreEvidenceTrusted ? "transition:compatible-vibe" : "transition:weak-artist-tags");
     }
 
     const exactReferenceOverlap = findGenreOverlap(referenceGenres, candidate.genres || []);
     const specificReferenceOverlap = findSpecificGenreOverlap(referenceGenres, candidate.genres || []);
-    if (exactReferenceOverlap.length > 0) {
+    if (genreEvidenceTrusted && exactReferenceOverlap.length > 0) {
       genreBonus += 8;
       scoringDetails.push("transition:shared-subgenre");
     }
-    if (specificReferenceOverlap.length > 0) {
+    if (genreEvidenceTrusted && specificReferenceOverlap.length > 0) {
       genreBonus += 8;
       scoringDetails.push("transition:specific-bridge");
     }
@@ -1124,14 +1167,14 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
         if (normalized) counts[normalized] = (counts[normalized] || 0) + (Number(count) || 0);
         return counts;
       }, {});
-      candidate.genres.forEach((genre) => {
-        const genreSkipCount = normalizedSkippedGenres[genre] || 0;
-        if (genreSkipCount > 0) {
-          const genreSkipPenalty = genreSkipCount * 15;
-          score -= genreSkipPenalty;
-          scoringDetails.push(`skipGenre:-${genreSkipPenalty}`);
-        }
-      });
+      const matchingSkipCount = candidate.genres
+        .filter((genre) => !isGenericGenreTag(genre))
+        .reduce((maximum, genre) => Math.max(maximum, normalizedSkippedGenres[genre] || 0), 0);
+      if (matchingSkipCount > 0) {
+        const genreSkipPenalty = Math.min(AUTOPLAY_SKIP_GENRE_PENALTY_MAX, matchingSkipCount * 15);
+        score -= genreSkipPenalty;
+        scoringDetails.push(`skipGenre:-${genreSkipPenalty}`);
+      }
     }
 
     // Remembered exposure is intentionally a soft cross-session penalty. The
@@ -1216,4 +1259,5 @@ module.exports = {
   getTransitionCorridor,
   getDjRunwayScore,
   hasReliableSessionVibe,
+  hasLowConfidenceArtistTags,
 };

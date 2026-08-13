@@ -1,6 +1,7 @@
 const Log = require("../logs/log");
 const { normalizeGenreTags } = require("./genreUtils");
 const { getLastFmTagProfile } = require("./lastfmClient");
+const { normalizeReleaseYear } = require("./metadataValidation");
 const { getBaseTitle, normalizeComparableText } = require("./trackNormalization");
 
 const COMMUNITY_CACHE_TTL_MS = Math.max(Number(process.env.AUTOPLAY_COMMUNITY_METADATA_CACHE_TTL_MS) || 30 * 24 * 60 * 60 * 1000, 60 * 60 * 1000);
@@ -65,7 +66,7 @@ function normalizeMusicBrainzMetadata(recording) {
   const releaseDate = recording?.releases?.map((release) => release?.date).find(Boolean) || "";
   return {
     genres: normalizeGenreTags(tags),
-    releaseYear: Number.parseInt(String(releaseDate).slice(0, 4), 10) || null,
+    releaseYear: normalizeReleaseYear(releaseDate),
     isrc: recording.isrcs?.[0] || null,
     source: "musicbrainz",
     confidence: tags.length ? 0.72 : 0.55,
@@ -113,7 +114,7 @@ function normalizeAudioDbMetadata(track) {
   return {
     genres: normalizeGenreTags(tags),
     moodTags: normalizeGenreTags(moodTags),
-    releaseYear: Number.parseInt(String(track.intYearReleased || "").slice(0, 4), 10) || null,
+    releaseYear: normalizeReleaseYear(track.intYearReleased),
     source: "theaudiodb",
     confidence: tags.length || moodTags.length ? 0.48 : 0.28,
   };
@@ -143,7 +144,7 @@ function mergeMetadata(...items) {
   return {
     genres,
     moodTags,
-    releaseYear: usable.map((item) => item.releaseYear).find(Boolean) || null,
+    releaseYear: usable.map((item) => normalizeReleaseYear(item.releaseYear)).find(Boolean) || null,
     isrc: usable.map((item) => item.isrc).find(Boolean) || null,
     metadataSources: [...new Set(sources)],
     metadataConfidence: Math.max(...usable.map((item) => Number(item.confidence) || 0)),
