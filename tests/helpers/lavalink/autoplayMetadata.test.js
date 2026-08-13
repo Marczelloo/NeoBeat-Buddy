@@ -72,12 +72,19 @@ describe("Autoplay metadata without Spotify audio features", () => {
       rank: 907086,
       isrc: "US123",
       release_date: "2021-05-20",
+      track_position: 3,
+      disk_number: 1,
+      artist: { id: 7 },
+      album: { id: 99, title: "Test Album" },
     });
 
     assert.deepStrictEqual(metadata.features, { tempo: 118.2, loudness: -8.3 });
     assert.strictEqual(metadata.deezerId, "123");
     assert.strictEqual(metadata.releaseYear, 2021);
     assert.strictEqual(metadata.metadataProvider, "deezer");
+    assert.strictEqual(metadata.albumId, "99");
+    assert.strictEqual(metadata.albumTitle, "Test Album");
+    assert.strictEqual(metadata.trackPosition, 3);
     assert.strictEqual(getFeatureCoverage(metadata.features), 1);
   });
 
@@ -133,7 +140,7 @@ describe("Autoplay metadata without Spotify audio features", () => {
     assert.ok(ranked.scoringDetails.includes("metadata:-12(no-tempo-anchor)"));
   });
 
-  it("uses derived catalog energy as a continuity signal", () => {
+  it("uses derived catalog energy only as a small tie-breaker", () => {
     const ranked = scoreCandidates(
       [
         candidate("Derived bridge", "Bridge Artist", "derived-bridge", {
@@ -149,7 +156,8 @@ describe("Autoplay metadata without Spotify audio features", () => {
       "autoplay-derived-feature-continuity"
     );
 
-    assert.ok(ranked[0].scoringDetails.includes("continuity:+18(energy)"));
+    assert.ok(ranked[0].scoringDetails.includes("continuity:+3(derived-energy)"));
+    assert.ok(!ranked[0].scoringDetails.includes("continuity:+18(energy)"));
     assert.notStrictEqual(ranked[0].vibeConfidence, "low");
   });
 

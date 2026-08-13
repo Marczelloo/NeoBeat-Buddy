@@ -108,6 +108,12 @@ function getTrackMetadata(track) {
     metadataProvider: direct.metadataProvider || cached.metadataProvider || null,
     metadataSources: direct.metadataSources || cached.metadataSources || [],
     releaseYear: normalizeReleaseYear(direct.releaseYear) || normalizeReleaseYear(cached.releaseYear),
+    deezerId: direct.deezerId || cached.deezerId || null,
+    artistId: direct.artistId || cached.artistId || null,
+    albumId: direct.albumId || cached.albumId || null,
+    albumTitle: direct.albumTitle || cached.albumTitle || track?.info?.albumName || track?.info?.album?.name || null,
+    trackPosition: direct.trackPosition || cached.trackPosition || null,
+    diskNumber: direct.diskNumber || cached.diskNumber || null,
   };
 }
 
@@ -157,7 +163,7 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
       .join(" → ")}`
   );
 
-  const recentTracks = [...history.slice(-14), referenceTrack].filter(Boolean);
+  const recentTracks = uniqueTracks([...history.slice(-14), referenceTrack]);
   const cooldownTracks = [...history, referenceTrack, ...recentAutoplayTracks].filter(Boolean).slice(-160);
   const manualHistoryWithReference = isManualTrack(referenceTrack) ? [...manualHistory, referenceTrack] : manualHistory;
   const manualAnchorRecords = buildManualAnchorRecords(manualHistoryWithReference, pendingManual);
@@ -202,11 +208,16 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
       valenceTrend: null,
       energyTarget: null,
       valenceTarget: null,
+      measuredEnergyTarget: null,
+      measuredValenceTarget: null,
       referenceGenres: [],
       referenceGenreFamilies: [],
       referenceFeatures: null,
       referenceDerivedFeatures: null,
       referenceMetadataConfidence: 0,
+      referenceArtist: getSessionArtist(referenceTrack),
+      referenceAlbumId: null,
+      referenceAlbumTitle: null,
       avgDerivedFeatures: null,
       recentGenreFamilies: [],
       recentTracks: [],
@@ -238,6 +249,8 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
   const years = [];
   const energyValues = [];
   const valenceValues = [];
+  const measuredEnergyValues = [];
+  const measuredValenceValues = [];
   const recentGenreFamilies = [];
   let referenceMetadata = {
     genres: [],
@@ -247,6 +260,12 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     metadataProvider: null,
     metadataSources: [],
     releaseYear: null,
+    deezerId: null,
+    artistId: null,
+    albumId: null,
+    albumTitle: null,
+    trackPosition: null,
+    diskNumber: null,
   };
 
   let profileWeightTotal = 0;
@@ -289,6 +308,8 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
 
     if (Number.isFinite(continuityFeatures.energy)) energyValues.push(continuityFeatures.energy);
     if (Number.isFinite(continuityFeatures.valence)) valenceValues.push(continuityFeatures.valence);
+    if (Number.isFinite(metadata.features?.energy)) measuredEnergyValues.push(metadata.features.energy);
+    if (Number.isFinite(metadata.features?.valence)) measuredValenceValues.push(metadata.features.valence);
 
     if (metadata.derivedFeatures) derivedFeaturesList.push(metadata.derivedFeatures);
 
@@ -371,6 +392,8 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
 
   const energyTarget = getSmoothedTarget(energyValues, energyTrend);
   const valenceTarget = getSmoothedTarget(valenceValues, valenceTrend);
+  const measuredEnergyTarget = getSmoothedTarget(measuredEnergyValues, energyTrend);
+  const measuredValenceTarget = getSmoothedTarget(measuredValenceValues, valenceTrend);
 
   Log.debug(
     "Session profile with enhanced features",
@@ -411,6 +434,8 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     valenceTrend,
     energyTarget,
     valenceTarget,
+    measuredEnergyTarget,
+    measuredValenceTarget,
     referenceGenres: referenceMetadata.genres,
     referenceGenreFamilies: getGenreFamilies(referenceMetadata.genres),
     referenceFeatures: referenceMetadata.features,
@@ -418,6 +443,9 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     referenceMetadataConfidence: referenceMetadata.metadataConfidence,
     referenceMetadataProvider: referenceMetadata.metadataProvider,
     referenceMetadataSources: referenceMetadata.metadataSources,
+    referenceArtist: getSessionArtist(referenceTrack),
+    referenceAlbumId: referenceMetadata.albumId,
+    referenceAlbumTitle: referenceMetadata.albumTitle,
     avgDerivedFeatures,
     recentGenreFamilies,
     recentTracks,

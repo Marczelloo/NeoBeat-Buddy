@@ -127,10 +127,11 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
     });
 
     describe("Genre Matching", () => {
-      it("should give +30 points per matching genre", () => {
+      it("rewards matching genres when a direct similarity signal verifies the transition", () => {
         const candidates = [
           createMockCandidate("Song", "Artist", "id1", "deezer_recommendations", {
             genres: ["rock", "alternative"],
+            similarity: 0.8,
           }),
         ];
         const profile = createMinimalProfile({
@@ -143,7 +144,8 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        // Should have genre bonus (30 * 1.0) + (30 * 0.6) = 48
+        // Genre influence is capped and only participates after another
+        // relationship signal confirms that this is not a textual-tag jump.
         const genreDetail = scored[0].scoringDetails.find((d) => d.startsWith("genre:"));
         assert.ok(genreDetail);
         assert.ok(scored[0].score > 90); // Base + source + genre
@@ -581,10 +583,10 @@ describe("Autoplay System - Priority-Based Recommendations", () => {
 
         const scored = scoreCandidates(candidates, profile, skipPatterns, GUILD_ID);
 
-        // Deezer with genre should be top due to source bonus + genre
-        // Spotify with all features should be second
-        // YouTube search should be last
-        assert.strictEqual(scored[2].source, "youtube_search");
+        assert.strictEqual(scored[0].source, "spotify_recommendations");
+        assert.strictEqual(scored[0].hardRejected, false);
+        assert.strictEqual(scored.find((item) => item.source === "youtube_search").hardRejected, true);
+        assert.strictEqual(scored.find((item) => item.source === "deezer_recommendations").hardRejected, true);
       });
     });
   });

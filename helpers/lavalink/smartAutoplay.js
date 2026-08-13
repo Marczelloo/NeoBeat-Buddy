@@ -4,6 +4,7 @@ const { getAutoplayExposureSnapshot, getExposureKey, getExposureRecord } = requi
 const {
   enrichCandidateWithAutoplayMetadata,
   enrichCandidatesWithDeezerMetadata,
+  getDeezerAlbumTracks,
   getFeatureCoverage,
   getTempoDistance,
 } = require("./autoplayMetadata");
@@ -63,8 +64,9 @@ function formatCandidateDiagnostic(candidate) {
   const confidence = candidate.vibeConfidence || "unknown";
   const source = candidate.providerSources?.join("+") || candidate.source || "unknown";
   const genres = candidate.genres?.slice(0, 3).join("/") || "none";
+  const natural = `${candidate.naturalReason || "unknown"}:${Number(candidate.naturalTier) || 0}`;
   const status = candidate.hardRejected ? `reject:${candidate.rejectionReason || "unknown"}` : candidate.fallbackOnly ? "fallback-only" : candidate.deferred ? `defer:${candidate.deferredReason || "artist"}` : "eligible";
-  return `${formatLogValue(candidate.artist, 42)} - ${formatLogValue(candidate.title, 58)} score=${score} quality=${quality} confidence=${confidence} source=${source} genres=${genres} status=${status}`;
+  return `${formatLogValue(candidate.artist, 42)} - ${formatLogValue(candidate.title, 58)} score=${score} quality=${quality} confidence=${confidence} natural=${natural} source=${source} genres=${genres} status=${status}`;
 }
 
 function getLavalinkNode() {
@@ -89,7 +91,8 @@ async function loadLavalinkTracks(query) {
 
   const data = await response.json();
   if (data?.loadType === "playlist") return data.data?.tracks || [];
-  if (data?.loadType === "search" || data?.loadType === "track") return data.data || [];
+  if (data?.loadType === "search") return Array.isArray(data.data) ? data.data : [];
+  if (data?.loadType === "track") return data.data ? [data.data] : [];
   return [];
 }
 
@@ -127,11 +130,17 @@ function mergeCandidates(candidates) {
     existing.metadataConfidence = Math.max(existing.metadataConfidence || 0, candidate.metadataConfidence || 0);
     existing.metadataProvider ||= candidate.metadataProvider;
     existing.deezerId ||= candidate.deezerId;
+    existing.artistId ||= candidate.artistId;
+    existing.albumId ||= candidate.albumId;
+    existing.albumTitle ||= candidate.albumTitle;
+    existing.trackPosition ||= candidate.trackPosition;
+    existing.diskNumber ||= candidate.diskNumber;
     existing.isrc ||= candidate.isrc;
     existing.catalogRank ||= candidate.catalogRank;
     existing.similarity = Math.max(existing.similarity || 0, candidate.similarity || 0);
     existing.popularity = Math.max(existing.popularity || 0, candidate.popularity || 0);
     existing.releaseYear ||= candidate.releaseYear;
+    existing.sameAlbum ||= candidate.sameAlbum;
     existing.track ||= candidate.track;
     existing.providerSources = [...new Set([...(existing.providerSources || []), candidate.source].filter(Boolean))];
   }
@@ -253,6 +262,12 @@ function applyCandidateMetadata(track, candidate) {
   if (Number.isFinite(candidate.metadataConfidence)) track.userData.metadataConfidence = candidate.metadataConfidence;
   if (candidate.metadataProvider) track.userData.metadataProvider = candidate.metadataProvider;
   if (candidate.metadataSources?.length) track.userData.metadataSources = candidate.metadataSources;
+  if (candidate.deezerId) track.userData.deezerId = candidate.deezerId;
+  if (candidate.artistId) track.userData.artistId = candidate.artistId;
+  if (candidate.albumId) track.userData.albumId = candidate.albumId;
+  if (candidate.albumTitle) track.userData.albumTitle = candidate.albumTitle;
+  if (Number.isFinite(candidate.trackPosition)) track.userData.trackPosition = candidate.trackPosition;
+  if (Number.isFinite(candidate.diskNumber)) track.userData.diskNumber = candidate.diskNumber;
   if (candidate.isrc) {
     track.userData.isrc = candidate.isrc;
     track.userData.autoplayIsrc = candidate.isrc;
@@ -310,6 +325,12 @@ async function enrichManualAnchorTracks(tracks, guildId) {
         metadataProvider: candidate.metadataProvider || null,
         metadataSources: candidate.metadataSources || [],
         releaseYear: candidate.releaseYear || null,
+        deezerId: candidate.deezerId || null,
+        artistId: candidate.artistId || null,
+        albumId: candidate.albumId || null,
+        albumTitle: candidate.albumTitle || null,
+        trackPosition: candidate.trackPosition || null,
+        diskNumber: candidate.diskNumber || null,
       });
     }
   });
@@ -472,6 +493,63 @@ async function fetchSpotifyCandidates(referenceTrack, guildId, profile) {
   }
 
   return candidates;
+}
+
+async function fetchSameAlbumCandidates(guildId, referenceTrack, reference) {
+  const referenceCandidate = {
+    artist: reference.searchArtist,
+    title: reference.cleanTitle,
+    deezerId: referenceTrack.userData?.deezerId,
+    albumId: referenceTrack.userData?.albumId,
+    albumTitle: referenceTrack.userData?.albumTitle,
+    trackPosition: referenceTrack.userData?.trackPosition,
+  };
+
+  try {
+    const { metadata, tracks } = await getDeezerAlbumTracks(referenceCandidate, 12);
+    if (!metadata?.albumId || tracks.length < 2) return [];
+
+    const currentKey = getExposureKey(referenceCandidate);
+    const neighbours = tracks.filter((track) => getExposureKey(track) !== currentKey).slice(0, 8);
+    const resolved = await mapWithConcurrency(neighbours, 3, async (albumTrack) => {
+      try {
+        const direct = await loadLavalinkTracks(`https://www.deezer.com/track/${albumTrack.deezerId}`);
+        const track = getRelevantPlayableTrack(direct, `${albumTrack.artist} ${albumTrack.title}`);
+        if (!track || !matchesAutoplayCandidate(albumTrack, track)) return null;
+
+        return {
+          ...albumTrack,
+          identifier: track.info?.identifier,
+          duration: track.info?.length || albumTrack.duration,
+          source: "same_album",
+          track,
+          genres: [],
+          popularity: albumTrack.catalogRank || 0,
+          releaseYear: null,
+          features: null,
+          metadataConfidence: 0.9,
+          metadataProvider: "deezer-album",
+          sameAlbum: true,
+          score: 0,
+        };
+      } catch {
+        return null;
+      }
+    });
+
+    const candidates = resolved.filter(Boolean);
+    Log.info(
+      "Deezer same-album candidates collected",
+      "",
+      `guild=${guildId}`,
+      `album=${formatLogValue(metadata.albumTitle)}`,
+      `count=${candidates.length}`
+    );
+    return candidates;
+  } catch (error) {
+    Log.debug("Same-album autoplay candidates failed", error.message, `guild=${guildId}`);
+    return [];
+  }
 }
 
 function getLastFmExposureWeight(track, reference, exposure, now = Date.now()) {
@@ -795,6 +873,7 @@ async function collectCandidates(referenceTrack, guildId, profile, reference) {
   // Broad artist searches were the source of most "fallback picked something
   // completely different" incidents, so they are intentionally not used here.
   const candidateSources = [
+    ["sameAlbum", () => fetchSameAlbumCandidates(guildId, referenceTrack, reference)],
     ["deezer", () => fetchDeezerCandidates(guildId, cleanTitle, searchArtist)],
     ["lastfm", () => fetchLastFmCandidates(reference, guildId, profile.autoplayExposure)],
     ["youtubeMix", () => fetchYouTubeMixCandidates(identifier, guildId)],
@@ -934,6 +1013,12 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "" } = {
           metadataProvider: candidate.metadataProvider || null,
           metadataSources: candidate.metadataSources || [],
           releaseYear: candidate.releaseYear || null,
+          deezerId: candidate.deezerId || null,
+          artistId: candidate.artistId || null,
+          albumId: candidate.albumId || null,
+          albumTitle: candidate.albumTitle || null,
+          trackPosition: candidate.trackPosition || null,
+          diskNumber: candidate.diskNumber || null,
         });
       }
 
@@ -973,17 +1058,23 @@ function partitionRankedCandidates(rankedCandidates) {
 
 function getTransitionQuality(candidate, profile = {}) {
   const referenceFeatures = {
-    ...(profile.avgDerivedFeatures || {}),
     ...(profile.avgFeatures || {}),
-    ...(profile.referenceDerivedFeatures || {}),
     ...(profile.referenceFeatures || {}),
   };
   const hasReferenceFeatures = Object.keys(referenceFeatures).length > 0;
-  const candidateFeatures = { ...(candidate?.derivedFeatures || {}), ...(candidate?.features || {}) };
+  const candidateFeatures = { ...(candidate?.features || {}) };
   const referenceFamilies = profile.referenceGenreFamilies || [];
   const candidateFamilies = candidate?.genreFamilies || getGenreFamilies(candidate?.genres || []);
   let quality = 0;
   let evidenceSignals = 0;
+
+  if (candidate?.sameAlbum) {
+    quality += 10;
+    evidenceSignals += 2;
+  } else if (candidate?.sameArtist) {
+    quality += 7;
+    evidenceSignals += 2;
+  }
 
   const genreCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
   if (genreCompatibility === true) {
@@ -1056,9 +1147,11 @@ function getDiversifiedResolutionOrder(rankedCandidates, random = Math.random) {
 
   const topScore = safe[0].score;
   const topQuality = Number(safe[0].transitionQuality) || 0;
+  const topNaturalTier = Number(safe[0].naturalTier) || 0;
   const minimumScore = topScore - AUTOPLAY_DIVERSITY_SCORE_BAND;
   const pool = safe
     .filter((candidate) => {
+      if ((Number(candidate.naturalTier) || 0) !== topNaturalTier) return false;
       if (candidate.score < minimumScore) return false;
       const scoreDrop = topScore - candidate.score;
       if (scoreDrop <= AUTOPLAY_SELECTION_MAX_SCORE_DROP) return true;
@@ -1167,7 +1260,9 @@ async function resolveRankedCandidates(
 
   const emergencyPool = deferred
     .filter((candidate) => candidate.emergencyEligible !== false)
-    .filter((candidate) => !requireManualAnchor || candidate.manualAnchorEvidence);
+    .filter((candidate) =>
+      !requireManualAnchor || candidate.manualAnchorEvidence || candidate.sameAlbum || candidate.sameArtist
+    );
   const pools = deferredOnly ? [["artist-streak emergency", emergencyPool]] : [["safe", safe]];
   for (const [pool, candidates] of pools) {
     for (const candidate of candidates) {
@@ -1210,7 +1305,12 @@ function getStableFallbackAnchor(profile, referenceTrack) {
   if (!hasReliableSessionVibe(profile)) return null;
   const current = getAutoplayReference(referenceTrack);
   const previousTracks = (profile.recentTracks || []).slice(0, -1).reverse();
-  const orderedAnchors = previousTracks.filter((track) => !isAutoplayTrack(track));
+  const explicitManualAnchors = [...(profile.manualAnchorTracks || [])].reverse();
+  const orderedAnchors = [...explicitManualAnchors, ...previousTracks.filter((track) => !isAutoplayTrack(track))]
+    .filter((track, index, tracks) => {
+      const key = getExposureKey(track);
+      return key && tracks.findIndex((entry) => getExposureKey(entry) === key) === index;
+    });
   const sessionFamilies = profile.manualTasteGenreFamilies?.length
     ? profile.manualTasteGenreFamilies
     : getGenreFamilies((profile.topGenres || []).map((genre) => genre.genre));
@@ -1244,6 +1344,9 @@ function createStableAnchorProfile(profile, fallbackAnchor) {
     referenceMetadataConfidence: metadata.metadataConfidence,
     referenceMetadataProvider: metadata.metadataProvider,
     referenceMetadataSources: metadata.metadataSources,
+    referenceArtist: getAutoplayReference(fallbackAnchor).searchArtist,
+    referenceAlbumId: metadata.albumId,
+    referenceAlbumTitle: metadata.albumTitle,
     referenceTitleRaw: fallbackAnchor?.info?.title || "",
     referenceIsManual: !isAutoplayTrack(fallbackAnchor),
     referenceIsAutoplay: isAutoplayTrack(fallbackAnchor),
@@ -1280,6 +1383,12 @@ function createFallbackAnchor(track) {
       metadataProvider: track.userData?.metadataProvider || null,
       metadataSources: track.userData?.metadataSources || [],
       releaseYear: track.userData?.releaseYear || null,
+      deezerId: track.userData?.deezerId || null,
+      artistId: track.userData?.artistId || null,
+      albumId: track.userData?.albumId || null,
+      albumTitle: track.userData?.albumTitle || null,
+      trackPosition: track.userData?.trackPosition || null,
+      diskNumber: track.userData?.diskNumber || null,
     },
   };
 }
@@ -1439,6 +1548,12 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualT
     metadataProvider: referenceMetadata.metadataProvider || null,
     metadataSources: referenceMetadata.metadataSources || [],
     releaseYear: referenceMetadata.releaseYear,
+    deezerId: referenceMetadata.deezerId || null,
+    artistId: referenceMetadata.artistId || null,
+    albumId: referenceMetadata.albumId || null,
+    albumTitle: referenceMetadata.albumTitle || null,
+    trackPosition: referenceMetadata.trackPosition || null,
+    diskNumber: referenceMetadata.diskNumber || null,
   };
   if (referenceMetadata.genres?.length || referenceMetadata.features || referenceMetadata.derivedFeatures) {
     genreCache.set(referenceTrack.info.identifier, {
@@ -1449,6 +1564,12 @@ async function fetchSmartAutoplayTrack(referenceTrack, guildId, { pendingManualT
       metadataProvider: referenceMetadata.metadataProvider || null,
       metadataSources: referenceMetadata.metadataSources || [],
       releaseYear: referenceMetadata.releaseYear,
+      deezerId: referenceMetadata.deezerId || null,
+      artistId: referenceMetadata.artistId || null,
+      albumId: referenceMetadata.albumId || null,
+      albumTitle: referenceMetadata.albumTitle || null,
+      trackPosition: referenceMetadata.trackPosition || null,
+      diskNumber: referenceMetadata.diskNumber || null,
     });
   }
 

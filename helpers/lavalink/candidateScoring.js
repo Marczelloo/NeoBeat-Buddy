@@ -63,6 +63,17 @@ function getCandidateFeatures(candidate) {
   };
 }
 
+function getMeasuredCandidateFeatures(candidate) {
+  return { ...(candidate?.features || {}) };
+}
+
+function getMeasuredReferenceFeatures(profile = {}) {
+  return {
+    ...(profile.avgFeatures || {}),
+    ...(profile.referenceFeatures || {}),
+  };
+}
+
 function hasLowConfidenceArtistTags(metadata = {}) {
   const sources = [metadata.metadataProvider, ...(metadata.metadataSources || [])]
     .filter(Boolean)
@@ -236,6 +247,69 @@ function getReferenceFeatures(profile = {}) {
   };
 }
 
+function normalizeAlbum(value) {
+  return normalizeComparableText(value || "").replace(/\b(?:deluxe|expanded|remaster(?:ed)?|edition)\b/g, "").trim();
+}
+
+function getNaturalTransitionEvidence(candidate, profile, referenceGenres = []) {
+  const candidateArtist = normalizeArtist(candidate?.artist);
+  const referenceArtist = normalizeArtist(profile?.referenceArtist || profile?.topArtists?.[0]?.artist);
+  const candidateAlbum = normalizeAlbum(candidate?.albumTitle || candidate?.album);
+  const referenceAlbum = normalizeAlbum(profile?.referenceAlbumTitle);
+  const sameArtist = Boolean(candidateArtist && referenceArtist && candidateArtist === referenceArtist);
+  const sameAlbum = Boolean(
+    candidate?.sameAlbum ||
+      (candidate?.albumId && profile?.referenceAlbumId && String(candidate.albumId) === String(profile.referenceAlbumId)) ||
+      (sameArtist && candidateAlbum && referenceAlbum && candidateAlbum === referenceAlbum)
+  );
+  const similarity = normalizeSimilarity(candidate?.similarity);
+  const specificOverlap = findSpecificGenreOverlap(referenceGenres, candidate?.genres || []);
+  const measuredCandidate = getMeasuredCandidateFeatures(candidate);
+  const measuredReference = getMeasuredReferenceFeatures(profile);
+  let measuredCloseCount = 0;
+
+  if (hasNumber(measuredCandidate.tempo) && hasNumber(measuredReference.tempo)) {
+    const distance = getTempoDistance(measuredCandidate.tempo, measuredReference.tempo);
+    if (distance !== null && distance <= 22) measuredCloseCount += 1;
+  }
+  for (const field of ["energy", "valence", "danceability"]) {
+    if (
+      hasNumber(measuredCandidate[field]) &&
+      hasNumber(measuredReference[field]) &&
+      Math.abs(measuredCandidate[field] - measuredReference[field]) <= 0.22
+    ) {
+      measuredCloseCount += 1;
+    }
+  }
+
+  let tier = 0;
+  let reason = "unverified";
+  if (sameAlbum) {
+    tier = 4;
+    reason = "same-album";
+  } else if (sameArtist) {
+    tier = 3;
+    reason = "same-artist";
+  } else if (similarity >= 0.72) {
+    tier = 3;
+    reason = "strong-similarity";
+  } else if (similarity >= 0.35 && (specificOverlap.length > 0 || measuredCloseCount > 0)) {
+    tier = 2;
+    reason = "verified-similarity";
+  } else if (measuredCloseCount >= 2) {
+    tier = 2;
+    reason = "measured-audio-bridge";
+  } else if (specificOverlap.length > 0 && measuredCloseCount > 0) {
+    tier = 2;
+    reason = "genre-audio-bridge";
+  } else if (similarity > 0 || specificOverlap.length > 0 || measuredCloseCount > 0) {
+    tier = 1;
+    reason = "single-signal";
+  }
+
+  return { tier, reason, sameAlbum, sameArtist, similarity, specificOverlap, measuredCloseCount };
+}
+
 function hasReliableSessionVibe(profile = {}) {
   const genreSignal = Boolean(
     profile.referenceGenreFamilies?.length ||
@@ -265,8 +339,8 @@ function hasSessionVibeAnchor(profile = {}) {
 
 function getVibeEvidence(candidate, profile, candidateFamilies, referenceFamilies, referenceGenres) {
   const similarity = normalizeSimilarity(candidate?.similarity);
-  const features = getCandidateFeatures(candidate);
-  const referenceFeatures = getReferenceFeatures(profile);
+  const features = getMeasuredCandidateFeatures(candidate);
+  const referenceFeatures = getMeasuredReferenceFeatures(profile);
   const genreCompatibility = areGenreFamiliesCompatible(referenceFamilies, candidateFamilies);
   const sharedGenres = findGenreOverlap(referenceGenres, candidate?.genres || []);
   const featureDistances = [];
@@ -544,6 +618,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     const transitionReferenceGenres = normalizeGenreTags(profile.referenceGenres?.length ? profile.referenceGenres : sessionGenres);
     const candidateFeatures = getCandidateFeatures(candidate);
     const referenceFeatures = getReferenceFeatures(profile);
+    const measuredCandidateFeatures = getMeasuredCandidateFeatures(candidate);
+    const measuredReferenceFeatures = getMeasuredReferenceFeatures(profile);
     const genreEvidenceTrusted =
       !hasLowConfidenceArtistTags(candidate) &&
       !hasLowConfidenceArtistTags({
@@ -558,8 +634,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       referenceFamilies,
       transitionReferenceGenres,
       candidateFamilies,
-      candidateFeatures,
-      referenceFeatures
+      measuredCandidateFeatures,
+      measuredReferenceFeatures
     );
     candidate.transitionCorridor = transitionCorridor;
 
@@ -586,6 +662,11 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     // song. Direct similarity, metadata, or audio features are required for
     // every automatic pick, including sessions whose reference has no tags.
     const vibeEvidence = getVibeEvidence(candidate, profile, candidateFamilies, referenceFamilies, referenceGenres);
+    const naturalEvidence = getNaturalTransitionEvidence(candidate, profile, transitionReferenceGenres);
+    candidate.naturalTier = naturalEvidence.tier;
+    candidate.naturalReason = naturalEvidence.reason;
+    candidate.sameAlbum = naturalEvidence.sameAlbum;
+    candidate.sameArtist = naturalEvidence.sameArtist;
     const manualAnchorVibe = getManualAnchorVibe(candidate, profile, scoringOptions);
     candidate.manualAnchorScore = manualAnchorVibe.bestScore;
     candidate.manualAnchorType = manualAnchorVibe.bestType;
@@ -599,7 +680,9 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     const hasMusicSignal =
       vibeEvidence.hasAnySimilarity ||
       vibeEvidence.hasCompatibleGenre ||
-      vibeEvidence.hasFeatureContinuity;
+      vibeEvidence.hasFeatureContinuity ||
+      naturalEvidence.sameAlbum ||
+      naturalEvidence.sameArtist;
     const isMetadataFreeMix = vibeEvidence.directMixFallback && !hasMusicSignal;
     const hasReliableSignal = hasMusicSignal || isMetadataFreeMix;
     candidate.vibeConfidence = vibeEvidence.confidence;
@@ -615,12 +698,35 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       scoringDetails.push(`${candidate.isFallback ? "fallback" : "provider"}:-1000(no-vibe-signal)`);
     }
 
+    // A provider's broad recommendation plus one textual tag is not enough to
+    // justify a cross-artist jump. Natural continuations (same album/artist)
+    // are always valid; other artists need either strong direct similarity or
+    // a genre bridge confirmed by measured audio metadata.
+    if (
+      !candidate.hardRejected &&
+      !isMetadataFreeMix &&
+      hasSessionVibeAnchor(profile) &&
+      !naturalEvidence.sameAlbum &&
+      !naturalEvidence.sameArtist &&
+      naturalEvidence.tier < 2
+    ) {
+      score -= 1000;
+      candidate.hardRejected = true;
+      candidate.rejectionReason = "insufficient-transition-evidence";
+      scoringDetails.push(`transition:-1000(${naturalEvidence.reason})`);
+    }
+
     // Once the room has a reliable current identity, a large verified tempo,
     // energy, or mood jump is a bad transition even if both songs happen to
     // live under a broad family such as pop or electronic. Direct Mix tracks
     // without any session metadata stay available in the dedicated fallback
     // path above, preserving niche and meme-music sessions.
-    if (!candidate.hardRejected && !isMetadataFreeMix && transitionCorridor.shouldReject) {
+    if (
+      !candidate.hardRejected &&
+      !isMetadataFreeMix &&
+      !naturalEvidence.sameAlbum &&
+      transitionCorridor.shouldReject
+    ) {
       score -= 1000;
       candidate.hardRejected = true;
       candidate.rejectionReason = "transition-corridor";
@@ -640,13 +746,18 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
         candidate.hardRejected = true;
         candidate.rejectionReason = "queued-manual-vibe-mismatch";
         scoringDetails.push("manualQueue:-1000(vibe-mismatch)");
-      } else if (driftGuardActive && manualAnchorVibe.allComparableConflicting) {
+      } else if (
+        driftGuardActive &&
+        !naturalEvidence.sameAlbum &&
+        manualAnchorVibe.allComparableConflicting
+      ) {
         score -= 1000;
         candidate.hardRejected = true;
         candidate.rejectionReason = "manual-anchor-drift";
         scoringDetails.push("manualAnchor:-1000(drift)");
       } else if (
         driftGuardActive &&
+        !naturalEvidence.sameAlbum &&
         !scoringOptions.anchorTrusted &&
         !manualAnchorVibe.hasStrongEvidence
       ) {
@@ -656,6 +767,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
         scoringDetails.push("manualAnchor:-1000(unverified-drift)");
       } else if (
         driftGuardActive &&
+        !naturalEvidence.sameAlbum &&
         !scoringOptions.anchorTrusted &&
         manualAnchorVibe.bestScore < AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE
       ) {
@@ -677,6 +789,7 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     if (
       !candidate.hardRejected &&
       !isMetadataFreeMix &&
+      !naturalEvidence.sameAlbum &&
       driftGuardActive &&
       !scoringOptions.anchorTrusted &&
       hasManualTasteContext &&
@@ -696,6 +809,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       !candidate.hardRejected &&
       !isMetadataFreeMix &&
       hasSessionVibeAnchor(profile) &&
+      !naturalEvidence.sameAlbum &&
+      !naturalEvidence.sameArtist &&
       !vibeEvidence.hasCompatibleGenre &&
       !vibeEvidence.hasFeatureContinuity &&
       !vibeEvidence.hasStrongSimilarity
@@ -803,7 +918,10 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       scoringDetails.push(`similarity:+${similarityScore}`);
     }
 
-    if (candidate.source === "deezer_recommendations") {
+    if (candidate.source === "same_album") {
+      score += 30;
+      scoringDetails.push("source:+30(same-album)");
+    } else if (candidate.source === "deezer_recommendations") {
       score += 5;
       scoringDetails.push("source:+5(deezer)");
     } else if (candidate.source === "spotify_recommendations") {
@@ -897,9 +1015,9 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
 
     // Direct transition continuity is more important than a long-term average;
     // it prevents an otherwise good recommendation from feeling like a hard cut.
-    if (Object.keys(candidateFeatures).length && Object.keys(referenceFeatures).length) {
-      if (hasNumber(candidateFeatures.tempo) && hasNumber(referenceFeatures.tempo)) {
-        const tempoDiff = getTempoDistance(candidateFeatures.tempo, referenceFeatures.tempo);
+    if (Object.keys(measuredCandidateFeatures).length && Object.keys(measuredReferenceFeatures).length) {
+      if (hasNumber(measuredCandidateFeatures.tempo) && hasNumber(measuredReferenceFeatures.tempo)) {
+        const tempoDiff = getTempoDistance(measuredCandidateFeatures.tempo, measuredReferenceFeatures.tempo);
         if (tempoDiff < 10) {
           score += 18;
           scoringDetails.push("continuity:+18(tempo)");
@@ -915,8 +1033,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
         }
       }
 
-      if (hasNumber(candidateFeatures.energy) && hasNumber(referenceFeatures.energy)) {
-        const energyDiff = Math.abs(candidateFeatures.energy - referenceFeatures.energy);
+      if (hasNumber(measuredCandidateFeatures.energy) && hasNumber(measuredReferenceFeatures.energy)) {
+        const energyDiff = Math.abs(measuredCandidateFeatures.energy - measuredReferenceFeatures.energy);
         if (energyDiff < 0.12) {
           score += 18;
           scoringDetails.push("continuity:+18(energy)");
@@ -929,8 +1047,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
         }
       }
 
-      if (hasNumber(candidateFeatures.valence) && hasNumber(referenceFeatures.valence)) {
-        const valenceDiff = Math.abs(candidateFeatures.valence - referenceFeatures.valence);
+      if (hasNumber(measuredCandidateFeatures.valence) && hasNumber(measuredReferenceFeatures.valence)) {
+        const valenceDiff = Math.abs(measuredCandidateFeatures.valence - measuredReferenceFeatures.valence);
         if (valenceDiff < 0.15) {
           score += 12;
           scoringDetails.push("continuity:+12(mood)");
@@ -938,6 +1056,35 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
           score -= 12;
           scoringDetails.push("continuity:-12(mood)");
         }
+      }
+    }
+
+    // Catalog-derived energy/valence are estimates from BPM/gain and text
+    // cues. They may break a tie, but must never carry the same weight as a
+    // measured audio profile.
+    if (
+      !hasNumber(measuredCandidateFeatures.energy) &&
+      !hasNumber(measuredReferenceFeatures.energy) &&
+      hasNumber(candidate.derivedFeatures?.energy) &&
+      hasNumber(profile.referenceDerivedFeatures?.energy)
+    ) {
+      const derivedEnergyDiff = Math.abs(candidate.derivedFeatures.energy - profile.referenceDerivedFeatures.energy);
+      if (derivedEnergyDiff < 0.12) {
+        score += 3;
+        scoringDetails.push("continuity:+3(derived-energy)");
+      }
+    }
+
+    if (
+      !hasNumber(measuredCandidateFeatures.valence) &&
+      !hasNumber(measuredReferenceFeatures.valence) &&
+      hasNumber(candidate.derivedFeatures?.valence) &&
+      hasNumber(profile.referenceDerivedFeatures?.valence)
+    ) {
+      const derivedValenceDiff = Math.abs(candidate.derivedFeatures.valence - profile.referenceDerivedFeatures.valence);
+      if (derivedValenceDiff < 0.15) {
+        score += 2;
+        scoringDetails.push("continuity:+2(derived-mood)");
       }
     }
 
@@ -993,8 +1140,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
     // A DJ usually holds a stable plateau and only moves energy in deliberate,
     // small steps. The target is a recency-weighted estimate from the set, not
     // a clock-based preference.
-    if (hasNumber(candidateFeatures.energy) && hasNumber(profile.energyTarget)) {
-      const energyDiff = Math.abs(candidateFeatures.energy - profile.energyTarget);
+    if (hasNumber(measuredCandidateFeatures.energy) && hasNumber(profile.measuredEnergyTarget)) {
+      const energyDiff = Math.abs(measuredCandidateFeatures.energy - profile.measuredEnergyTarget);
       if (energyDiff < 0.14) {
         score += 12;
         scoringDetails.push("djEnergy:+12(target)");
@@ -1007,8 +1154,8 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       }
     }
 
-    if (hasNumber(candidateFeatures.valence) && hasNumber(profile.valenceTarget)) {
-      const valenceDiff = Math.abs(candidateFeatures.valence - profile.valenceTarget);
+    if (hasNumber(measuredCandidateFeatures.valence) && hasNumber(profile.measuredValenceTarget)) {
+      const valenceDiff = Math.abs(measuredCandidateFeatures.valence - profile.measuredValenceTarget);
       if (valenceDiff < 0.16) {
         score += 7;
         scoringDetails.push("djMood:+7(target)");
@@ -1217,6 +1364,9 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
   });
 
   candidates.sort((a, b) => {
+    if (!a.hardRejected && !b.hardRejected && Number(b.naturalTier) !== Number(a.naturalTier)) {
+      return Number(b.naturalTier) - Number(a.naturalTier);
+    }
     if (b.score !== a.score) return b.score - a.score;
     const similarityDifference = normalizeSimilarity(b.similarity) - normalizeSimilarity(a.similarity);
     if (similarityDifference !== 0) return similarityDifference;
@@ -1234,7 +1384,12 @@ function scoreCandidates(candidates, profile, skipPatterns, guildId, scoringOpti
       c.score += (((c.artist?.length || 0) + (c.title?.length || 0)) % 5) / 100;
     });
 
-    candidates.sort((a, b) => b.score - a.score);
+    candidates.sort((a, b) => {
+      if (!a.hardRejected && !b.hardRejected && Number(b.naturalTier) !== Number(a.naturalTier)) {
+        return Number(b.naturalTier) - Number(a.naturalTier);
+      }
+      return b.score - a.score;
+    });
 
     Log.debug(
       "Added variety to top candidates",
@@ -1260,4 +1415,5 @@ module.exports = {
   getDjRunwayScore,
   hasReliableSessionVibe,
   hasLowConfidenceArtistTags,
+  getNaturalTransitionEvidence,
 };

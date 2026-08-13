@@ -57,6 +57,9 @@ function candidate(title, artist, identifier, options = {}) {
     metadataProvider: options.metadataProvider || null,
     popularity: options.popularity || 0,
     similarity: options.similarity || 0,
+    albumId: options.albumId || null,
+    albumTitle: options.albumTitle || null,
+    sameAlbum: Boolean(options.sameAlbum),
     isFallback: Boolean(options.isFallback),
   };
 }
@@ -83,6 +86,9 @@ function profile(overrides = {}) {
     referenceGenreFamilies: [],
     referenceFeatures: null,
     referenceMetadataConfidence: 0,
+    referenceArtist: "Reference Artist",
+    referenceAlbumId: null,
+    referenceAlbumTitle: null,
     recentGenreFamilies: [],
     ...overrides,
   };
@@ -168,6 +174,96 @@ describe("DJ autoplay v2", () => {
 
     assert.strictEqual(ranked.hardRejected, true);
     assert.strictEqual(ranked.manualAnchorEvidence, false);
+  });
+
+  it("prefers a same-album Taco continuation over a metadata-empty Polish rap recommendation", () => {
+    const ranked = scoreCandidates(
+      [
+        candidate("Następny rozdział", "Taco Hemingway", "taco-album", {
+          source: "same_album",
+          sameAlbum: true,
+          albumId: "frascati-album",
+        }),
+        candidate("Losowy hit", "Mata", "mata-random", {
+          source: "deezer_recommendations",
+          derivedFeatures: { energy: 0.61 },
+        }),
+      ],
+      profile({
+        referenceArtist: "Taco Hemingway",
+        referenceAlbumId: "frascati-album",
+        referenceAlbumTitle: "1-800-OŚWIECENIE",
+        referenceGenres: ["alternative rap", "hiphop"],
+        referenceGenreFamilies: ["hiphop"],
+        referenceDerivedFeatures: { energy: 0.6 },
+        topGenres: [{ genre: "alternative rap", count: 1, weight: 1 }],
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked[0].identifier, "taco-album");
+    assert.strictEqual(ranked[0].naturalReason, "same-album");
+    assert.strictEqual(ranked[0].hardRejected, false);
+    assert.strictEqual(ranked.find((item) => item.identifier === "mata-random").hardRejected, true);
+  });
+
+  it("trusts an intentional same-album sequence over a sparse catalog feature mismatch", () => {
+    const [ranked] = scoreCandidates(
+      [
+        candidate("FOTOMODELKI", "Taco Hemingway", "fotomodelki", {
+          source: "same_album",
+          albumId: "album-latarnie",
+          albumTitle: "LATARNIE WSZĘDZIE DAWNO ZGASŁY",
+          sameAlbum: true,
+          features: { tempo: 128, energy: 0.86, valence: 0.72 },
+        }),
+      ],
+      profile({
+        referenceArtist: "Taco Hemingway",
+        referenceAlbumId: "album-latarnie",
+        referenceAlbumTitle: "LATARNIE WSZĘDZIE DAWNO ZGASŁY",
+        referenceFeatures: { tempo: 82, energy: 0.3, valence: 0.2 },
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked.naturalReason, "same-album");
+    assert.strictEqual(ranked.hardRejected, false);
+  });
+
+  it("prefers another Tame Impala track over a weak tag-only A$AP Rocky bridge", () => {
+    const ranked = scoreCandidates(
+      [
+        candidate("Borderline", "Tame Impala", "tame-borderline", {
+          source: "deezer_recommendations",
+          genres: ["neo-psychedelia", "psychedelic pop"],
+        }),
+        candidate("PUNK ROCKY", "A$AP Rocky", "asap-punk", {
+          source: "deezer_recommendations",
+          genres: ["dream pop", "psychedelic pop", "neo-psychedelia", "rap rock", "punk"],
+          similarity: 0.2,
+          derivedFeatures: { energy: 0.62 },
+        }),
+      ],
+      profile({
+        referenceArtist: "Tame Impala",
+        referenceGenres: ["neo-psychedelia", "psychedelic pop", "synth funk"],
+        referenceGenreFamilies: ["rock", "pop", "rnb"],
+        referenceDerivedFeatures: { energy: 0.6 },
+        topGenres: [{ genre: "neo-psychedelia", count: 1, weight: 1 }],
+      }),
+      noSkips,
+      GUILD_ID
+    );
+
+    assert.strictEqual(ranked[0].identifier, "tame-borderline");
+    assert.strictEqual(ranked[0].naturalReason, "same-artist");
+    const rocky = ranked.find((item) => item.identifier === "asap-punk");
+    assert.strictEqual(rocky.hardRejected, true);
+    assert.strictEqual(rocky.rejectionReason, "insufficient-transition-evidence");
+    assert.ok(!rocky.scoringDetails.includes("continuity:+18(energy)"));
   });
 
   it("rebuilds the transition reference around the stable manual anchor", () => {

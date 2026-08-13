@@ -5,6 +5,7 @@ const { normalizeReleaseYear } = require("./metadataValidation");
 const { getBaseTitle, normalizeComparableText } = require("./trackNormalization");
 
 const metadataCache = new Map();
+const albumTracksCache = new Map();
 const METADATA_CACHE_TTL_MS = Math.max(
   Number(process.env.AUTOPLAY_DEEZER_METADATA_CACHE_TTL_MS) || 7 * 24 * 60 * 60 * 1000,
   60 * 60 * 1000
@@ -22,6 +23,7 @@ function getTrackIdentity(candidate) {
 }
 
 function getDeezerTrackId(candidate) {
+  if (/^\d+$/.test(String(candidate?.deezerId || ""))) return String(candidate.deezerId);
   const identifier = candidate?.deezerId || candidate?.track?.info?.identifier || candidate?.identifier;
   const sourceName = String(candidate?.track?.info?.sourceName || candidate?.track?.info?.source || "").toLowerCase();
   const uri = String(candidate?.track?.info?.uri || candidate?.uri || "");
@@ -99,6 +101,11 @@ function normalizeDeezerMetadata(payload) {
 
   return {
     deezerId: payload.id ? String(payload.id) : null,
+    artistId: payload.artist?.id ? String(payload.artist.id) : null,
+    albumId: payload.album?.id ? String(payload.album.id) : null,
+    albumTitle: String(payload.album?.title || "").trim() || null,
+    trackPosition: Number.isFinite(Number(payload.track_position)) ? Number(payload.track_position) : null,
+    diskNumber: Number.isFinite(Number(payload.disk_number)) ? Number(payload.disk_number) : null,
     isrc: payload.isrc || null,
     releaseYear: normalizeReleaseYear(payload.release_date),
     catalogRank: Number.isFinite(Number(payload.rank)) ? Number(payload.rank) : null,
@@ -106,6 +113,53 @@ function normalizeDeezerMetadata(payload) {
     metadataConfidence: tempo ? 0.45 : gain !== null ? 0.2 : 0.05,
     metadataProvider: "deezer",
   };
+}
+
+async function getDeezerAlbumTracks(candidate, limit = 12) {
+  const metadata = await getDeezerMetadata(candidate);
+  if (!metadata?.albumId) return { metadata, tracks: [] };
+
+  const cached = albumTracksCache.get(metadata.albumId);
+  if (cached && Date.now() - cached.timestamp < METADATA_CACHE_TTL_MS) {
+    return { metadata, tracks: sortAlbumTracksForReference(cached.tracks, metadata).slice(0, limit) };
+  }
+
+  const payload = await fetchJson(
+    `https://api.deezer.com/album/${encodeURIComponent(metadata.albumId)}/tracks?limit=100`
+  );
+  const tracks = (Array.isArray(payload?.data) ? payload.data : [])
+    .filter((track) => track?.id && track?.title && track?.artist?.name)
+    .map((track) => ({
+      deezerId: String(track.id),
+      artist: String(track.artist.name).trim(),
+      artistId: track.artist.id ? String(track.artist.id) : null,
+      title: String(track.title).trim(),
+      duration: Number.isFinite(Number(track.duration)) ? Number(track.duration) * 1000 : null,
+      catalogRank: Number.isFinite(Number(track.rank)) ? Number(track.rank) : null,
+      albumId: metadata.albumId,
+      albumTitle: metadata.albumTitle,
+      trackPosition: Number.isFinite(Number(track.track_position)) ? Number(track.track_position) : null,
+      diskNumber: Number.isFinite(Number(track.disk_number)) ? Number(track.disk_number) : null,
+    }));
+
+  albumTracksCache.set(metadata.albumId, { timestamp: Date.now(), tracks });
+  return { metadata, tracks: sortAlbumTracksForReference(tracks, metadata).slice(0, limit) };
+}
+
+function sortAlbumTracksForReference(tracks, metadata) {
+  const referencePosition = Number(metadata?.trackPosition);
+  const referenceDisk = Number(metadata?.diskNumber) || 1;
+  return [...tracks].sort((left, right) => {
+    const leftDiskDistance = Math.abs((Number(left.diskNumber) || 1) - referenceDisk);
+    const rightDiskDistance = Math.abs((Number(right.diskNumber) || 1) - referenceDisk);
+    if (leftDiskDistance !== rightDiskDistance) return leftDiskDistance - rightDiskDistance;
+    if (Number.isFinite(referencePosition)) {
+      const distance = Math.abs((Number(left.trackPosition) || 0) - referencePosition) -
+        Math.abs((Number(right.trackPosition) || 0) - referencePosition);
+      if (distance) return distance;
+    }
+    return (Number(left.trackPosition) || 0) - (Number(right.trackPosition) || 0);
+  });
 }
 
 async function fetchJson(url) {
@@ -175,6 +229,11 @@ function mergeAudioMetadata(candidate, metadata, { checked = true } = {}) {
   }
 
   candidate.deezerId ||= metadata.deezerId;
+  candidate.artistId ||= metadata.artistId;
+  candidate.albumId ||= metadata.albumId;
+  candidate.albumTitle ||= metadata.albumTitle;
+  candidate.trackPosition ||= metadata.trackPosition;
+  candidate.diskNumber ||= metadata.diskNumber;
   candidate.isrc ||= metadata.isrc;
   candidate.releaseYear = normalizeReleaseYear(candidate.releaseYear) || normalizeReleaseYear(metadata.releaseYear);
   candidate.catalogRank ||= metadata.catalogRank;
@@ -281,6 +340,7 @@ function getTempoDistance(left, right) {
 
 function clearAutoplayMetadataCache() {
   metadataCache.clear();
+  albumTracksCache.clear();
 }
 
 module.exports = {
@@ -289,6 +349,7 @@ module.exports = {
   enrichCandidateWithAutoplayMetadata,
   enrichCandidatesWithDeezerMetadata,
   getDeezerMetadata,
+  getDeezerAlbumTracks,
   deriveCatalogFeatureHints,
   getFeatureCoverage,
   getTempoDistance,

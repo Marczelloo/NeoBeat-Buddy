@@ -54,6 +54,8 @@ function getTrackSummary(track) {
       ...(track?.userData?.features || {}),
     },
     metadataConfidence: Number(track?.userData?.metadataConfidence) || 0,
+    albumId: track?.userData?.albumId || null,
+    albumTitle: track?.userData?.albumTitle || null,
     fallback: track?.userData?.autoplayFallback || null,
   };
 }
@@ -66,7 +68,10 @@ function createMetrics() {
     longTermRepeats: 0,
     genreFamilyJumps: 0,
     maxConsecutiveArtist: 0,
+    maxConsecutiveArtistOutsideAlbum: 0,
     artistWindowViolations: 0,
+    artistWindowDiversityViolations: 0,
+    sameAlbumTransitions: 0,
     resolutionFailures: 0,
     fallbackSelections: 0,
     weakEvidenceSelections: 0,
@@ -124,13 +129,25 @@ function updateMetrics(
 
   const artist = normalizeArtist(selectedTrack.info?.author);
   const previousArtist = metrics.artists.at(-1);
+  const previousAlbumId = String(previousTrack?.userData?.albumId || "");
+  const selectedAlbumId = String(selectedTrack?.userData?.albumId || "");
+  const sameAlbum = Boolean(
+    artist && artist === previousArtist && previousAlbumId && selectedAlbumId && previousAlbumId === selectedAlbumId
+  );
   const streak = artist && artist === previousArtist ? (metrics.currentArtistStreak || 0) + 1 : 1;
   metrics.currentArtistStreak = streak;
   metrics.maxConsecutiveArtist = Math.max(metrics.maxConsecutiveArtist, streak);
+  const diversityStreak = artist && artist === previousArtist && !sameAlbum
+    ? (metrics.currentArtistStreakOutsideAlbum || 0) + 1
+    : 1;
+  metrics.currentArtistStreakOutsideAlbum = diversityStreak;
+  metrics.maxConsecutiveArtistOutsideAlbum = Math.max(metrics.maxConsecutiveArtistOutsideAlbum, diversityStreak);
+  if (sameAlbum) metrics.sameAlbumTransitions += 1;
   metrics.artists.push(artist);
   const recentArtists = metrics.artists.slice(-artistWindowSize);
   if (recentArtists.filter((entry) => entry === artist).length > maxArtistAppearancesInWindow) {
     metrics.artistWindowViolations += 1;
+    if (!sameAlbum) metrics.artistWindowDiversityViolations += 1;
   }
 
   const source = selectedTrack.info?.sourceName || "unknown";
@@ -155,8 +172,10 @@ function evaluateLiveSoak(result, {
   const violations = [];
   if (result.metrics.duplicateSelections > maxDuplicateSelections) violations.push(`duplicates=${result.metrics.duplicateSelections}`);
   if (result.metrics.genreFamilyJumps > maxGenreFamilyJumps) violations.push(`genreJumps=${result.metrics.genreFamilyJumps}`);
-  if (result.metrics.maxConsecutiveArtist > maxConsecutiveArtist) violations.push(`maxArtistStreak=${result.metrics.maxConsecutiveArtist}`);
-  if (result.metrics.artistWindowViolations > maxArtistWindowViolations) violations.push(`artistWindow=${result.metrics.artistWindowViolations}`);
+  const diversityStreak = result.metrics.maxConsecutiveArtistOutsideAlbum ?? result.metrics.maxConsecutiveArtist;
+  const diversityWindowViolations = result.metrics.artistWindowDiversityViolations ?? result.metrics.artistWindowViolations;
+  if (diversityStreak > maxConsecutiveArtist) violations.push(`maxArtistStreak=${diversityStreak}`);
+  if (diversityWindowViolations > maxArtistWindowViolations) violations.push(`artistWindow=${diversityWindowViolations}`);
   if (result.metrics.unresolvedSteps > maxUnresolvedSteps) violations.push(`unresolved=${result.metrics.unresolvedSteps}`);
   if (continuity.tempo.max !== null && continuity.tempo.max > maxTempoJump) {
     violations.push(`tempoJump=${continuity.tempo.max}`);

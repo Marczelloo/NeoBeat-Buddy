@@ -61,8 +61,14 @@ async function main() {
       `unresolved=${result.metrics.unresolvedSteps} resolutionFailures=${result.metrics.resolutionFailures} ` +
       `duplicates=${result.metrics.duplicateSelections} longTermRepeats=${result.metrics.longTermRepeats}`
     );
-    console.log(`genreJumps=${result.metrics.genreFamilyJumps} maxArtistStreak=${result.metrics.maxConsecutiveArtist}`);
-    console.log(`artistWindowViolations=${result.metrics.artistWindowViolations}`);
+    console.log(
+      `genreJumps=${result.metrics.genreFamilyJumps} maxArtistStreak=${result.metrics.maxConsecutiveArtist} ` +
+      `outsideAlbum=${result.metrics.maxConsecutiveArtistOutsideAlbum}`
+    );
+    console.log(
+      `artistWindowViolations=${result.metrics.artistWindowViolations} ` +
+      `outsideAlbum=${result.metrics.artistWindowDiversityViolations} sameAlbumTransitions=${result.metrics.sameAlbumTransitions}`
+    );
     console.log(
       `continuity=tempo(avg:${result.metrics.continuity.tempo.average ?? "n/a"},max:${result.metrics.continuity.tempo.max ?? "n/a"}) ` +
       `energy(avg:${result.metrics.continuity.energy.average ?? "n/a"},max:${result.metrics.continuity.energy.max ?? "n/a"}) ` +
