@@ -23,6 +23,10 @@ const MAX_ARTIST_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX
 const REPEAT_COOLDOWN_MS = Math.max(Number(process.env.AUTOPLAY_REPEAT_COOLDOWN_MS ?? 60 * 60 * 1000), 0);
 const AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS = Math.max(Number(process.env.AI_DJ_MAX_ARTIST_STREAK ?? 5), MAX_CONSECUTIVE_ARTIST_TRACKS);
 const AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS = Math.max(Number(process.env.AI_DJ_MAX_ALBUM_STREAK ?? 3), MAX_CONSECUTIVE_ALBUM_TRACKS);
+const SOFT_ARTIST_EXIT_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ARTIST_STREAK ?? 2), 1);
+const SOFT_ALBUM_EXIT_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBUM_STREAK ?? 2), 1);
+const SOFT_ARTIST_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ARTIST_EXIT_PENALTY ?? 7), 0);
+const SOFT_ALBUM_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBUM_EXIT_PENALTY ?? 9), 0);
 
 function sourceSet(candidate) {
   return new Set([candidate?.source, ...(candidate?.providerSources || [])].filter(Boolean));
@@ -173,11 +177,29 @@ function scoreCandidateV3(candidate, context) {
   const continuationScore = sameAlbum ? 12 : sameArtist ? 8 : 0;
   const continuationPenalty = Math.max(0, continuationDepth - softCap + 1) * (sameAlbum ? 3 : 4);
   const diversityScore = sameArtist ? 0 : 6;
+  // A soft exit never rejects a natural continuation: it only lets a similarly
+  // credible bridge outrank it after the room has stayed in one lane for a bit.
+  const softArtistExitStreak = Math.max(Number(context.softArtistExitStreak ?? SOFT_ARTIST_EXIT_STREAK), 1);
+  const softAlbumExitStreak = Math.max(Number(context.softAlbumExitStreak ?? SOFT_ALBUM_EXIT_STREAK), 1);
+  const softArtistExitPenalty = Math.max(Number(context.softArtistExitPenalty ?? SOFT_ARTIST_EXIT_PENALTY), 0);
+  const softAlbumExitPenalty = Math.max(Number(context.softAlbumExitPenalty ?? SOFT_ALBUM_EXIT_PENALTY), 0);
+  const artistExitSteps = sameArtist ? Math.max(0, context.artistStreak - softArtistExitStreak + 1) : 0;
+  const albumExitSteps = sameAlbum ? Math.max(0, context.albumStreak - softAlbumExitStreak + 1) : 0;
+  const softExitPenalty = artistExitSteps * softArtistExitPenalty + albumExitSteps * softAlbumExitPenalty;
 
   return {
     candidate,
-    score: relation + genreScore + continuationScore + diversityScore - continuationPenalty,
-    details: { relation, genreScore, continuationScore, continuationPenalty, diversityScore, sameArtist, sameAlbum },
+    score: relation + genreScore + continuationScore + diversityScore - continuationPenalty - softExitPenalty,
+    details: {
+      relation,
+      genreScore,
+      continuationScore,
+      continuationPenalty,
+      softExitPenalty,
+      diversityScore,
+      sameArtist,
+      sameAlbum,
+    },
   };
 }
 
@@ -344,6 +366,10 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
     skippedArtists,
     referenceTrack,
     repeatCooldownMs: REPEAT_COOLDOWN_MS,
+    softArtistExitStreak: SOFT_ARTIST_EXIT_STREAK,
+    softAlbumExitStreak: SOFT_ALBUM_EXIT_STREAK,
+    softArtistExitPenalty: SOFT_ARTIST_EXIT_PENALTY,
+    softAlbumExitPenalty: SOFT_ALBUM_EXIT_PENALTY,
   };
 
   const reference = getAutoplayReference(referenceTrack);
@@ -388,6 +414,10 @@ module.exports = {
   MAX_ARTIST_CONTINUITY_STREAK,
   AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS,
   AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS,
+  SOFT_ARTIST_EXIT_STREAK,
+  SOFT_ALBUM_EXIT_STREAK,
+  SOFT_ARTIST_EXIT_PENALTY,
+  SOFT_ALBUM_EXIT_PENALTY,
   REPEAT_COOLDOWN_MS,
   buildAIDJCandidates,
   fetchAutoplayV3Track,

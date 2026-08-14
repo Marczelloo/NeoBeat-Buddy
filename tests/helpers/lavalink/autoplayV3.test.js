@@ -121,6 +121,32 @@ describe("Autoplay V3 selection", () => {
     assert.strictEqual(blocked.rejected["ai-artist-streak"], 1);
   });
 
+  it("softly prefers an equally credible artist exit after two consecutive tracks", () => {
+    const sameArtist = candidate("Still Here", "Taco Hemingway", "ai_dj", { genres: ["hip hop"] });
+    const compatibleExit = candidate("Natural Bridge", "Quebonafide", "ai_dj", { genres: ["hip hop"] });
+    compatibleExit.aiDjRank = 1;
+
+    const { ranked } = selectV3Candidates([sameArtist, compatibleExit], context({ artistStreak: 2 }));
+
+    assert.strictEqual(ranked[0].candidate.title, "Natural Bridge");
+    assert.ok(ranked[1].details.softExitPenalty > 0);
+  });
+
+  it("softly prefers another album without rejecting a strong continuation", () => {
+    const sameAlbum = candidate("Another Cut", "Taco Hemingway", "ai_dj", {
+      albumId: "frascati",
+      genres: ["hip hop"],
+    });
+    const compatibleExit = candidate("Scene Bridge", "Quebonafide", "ai_dj", { genres: ["hip hop"] });
+    compatibleExit.aiDjRank = 1;
+
+    const { ranked } = selectV3Candidates([sameAlbum, compatibleExit], context({ artistStreak: 2, albumStreak: 2 }));
+    const continuationOnly = selectV3Candidates([sameAlbum], context({ artistStreak: 2, albumStreak: 2 }));
+
+    assert.strictEqual(ranked[0].candidate.title, "Scene Bridge");
+    assert.strictEqual(continuationOnly.ranked.length, 1);
+  });
+
   it("makes an AI album run bridge outward after its bounded ceiling", () => {
     const aiCandidate = candidate("Wosk", "Taco Hemingway", "ai_dj", { albumId: "frascati", genres: ["hip hop"] });
     const { ranked, rejected } = selectV3Candidates([aiCandidate], context({
