@@ -41,7 +41,9 @@ services:
       ACTIVITY_HOST: ${ACTIVITY_HOST:-0.0.0.0}
       ACTIVITY_PORT: ${ACTIVITY_PORT:-8787}
     ports:
-      - "${ACTIVITY_PORT:-8787}:${ACTIVITY_PORT:-8787}"
+      # Keep Activity private for the Cloudflare tunnel and avoid the Dashboard
+      # runner, which already owns localhost:8787 on the Raspberry Pi.
+      - "127.0.0.1:${ACTIVITY_PUBLIC_PORT:-8788}:${ACTIVITY_PORT:-8787}"
     volumes:
       - ./helpers/data:/app/helpers/data # Persist data across restarts
       - ./logs:/app/logs
