@@ -5,6 +5,7 @@ const SOURCE_LABELS = Object.freeze({
   youtube: "YouTube",
 });
 const { getArtworkUrls, getTrackArtworkSource } = require("../artwork");
+const { getDisplayTrackMetadata } = require("../lavalink/displayMetadata");
 
 function normalizeSource(source) {
   const value = String(source || "unknown").toLowerCase();
@@ -24,14 +25,15 @@ function serializeTrack(track, index = null) {
   if (!track) return null;
 
   const info = track.info || {};
+  const display = getDisplayTrackMetadata(track);
   const source = normalizeSource(info.sourceName || info.source || info.uri);
   const artwork = getArtworkUrls(getTrackArtworkSource(track));
 
   return {
     id: getTrackId(track),
     index,
-    title: String(info.title || "Unknown track"),
-    author: String(info.author || "Unknown artist"),
+    title: display.title,
+    author: display.author,
     durationMs: Number(info.length) || 0,
     artworkUrl: artwork.primary,
     artworkFallbackUrl: artwork.fallback,

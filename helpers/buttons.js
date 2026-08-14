@@ -4,6 +4,7 @@ const skipVotes = require("./dj/skipVotes");
 const djStore = require("./dj/store");
 const { playerEmbed, errorEmbed } = require("./embeds");
 const { getGuildState } = require("./guildState");
+const { getDisplayTrackMetadata } = require("./lavalink/displayMetadata");
 const {
   lavalinkPause,
   lavalinkResume,
@@ -412,6 +413,7 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
 
   if (player.currentTrack) {
     const info = player.currentTrack.info || {};
+    const display = getDisplayTrackMetadata(player.currentTrack);
     const artwork = getHighResolutionArtworkUrl(info.artworkUrl ?? info.thumbnail ?? info.image) ?? "https://i.imgur.com/3g7nmJC.png";
     const elapsedMs = positionOverride ?? player.position ?? 0;
     const durationLabel = info.isStream ? "Live" : formatDuration(info.length ?? 0);
@@ -422,10 +424,10 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
       player.currentTrack.pluginInfo?.isPreview === false ? null : player.currentTrack.pluginInfo?.quality || null;
 
     embed = playerEmbed(
-      info.title,
+      display.title,
       info.uri,
       artwork,
-      info.author ?? "Unknown",
+      display.author,
       info.requesterTag ?? "Unknown",
       info.requesterAvatar ?? null,
       durationLabel,

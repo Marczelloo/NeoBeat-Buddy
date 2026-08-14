@@ -6,7 +6,7 @@ const { fetchSmartAutoplayTrack } = require("./smartAutoplay");
 const { cloneTrack, rememberAutoplayTrack } = require("./state");
 
 const AUTOPLAY_PREFETCH_QUEUE_THRESHOLD = 1;
-const autoplayInFlight = new Set();
+const autoplayInFlight = new Map();
 
 function getPendingManualTracks(player) {
   return Array.from(player?.queue || [])
@@ -14,84 +14,96 @@ function getPendingManualTracks(player) {
     .slice(0, 4);
 }
 
-async function queueAutoplayTrack(player, lastTrack, textChannelId) {
+function runSharedAutoplayTask(guildId, createTask) {
+  const existing = autoplayInFlight.get(guildId);
+  if (existing) return existing;
+
+  const task = Promise.resolve().then(createTask);
+  autoplayInFlight.set(guildId, task);
+
+  task.finally(() => {
+    if (autoplayInFlight.get(guildId) === task) autoplayInFlight.delete(guildId);
+  }).catch(() => undefined);
+
+  return task;
+}
+
+function queueAutoplayTrack(player, lastTrack, textChannelId) {
   if (!player || !lastTrack) {
     Log.warning("Autoplay called without player or lastTrack");
-    return false;
+    return Promise.resolve(false);
   }
 
   if (autoplayInFlight.has(player.guildId)) {
     Log.debug("Autoplay fetch already in progress", "", `guild=${player.guildId}`);
-    return false;
+    return autoplayInFlight.get(player.guildId);
   }
 
-  autoplayInFlight.add(player.guildId);
+  return runSharedAutoplayTask(player.guildId, async () => {
+    try {
+      const selectAutoplayTrack = process.env.AUTOPLAY_V3 === "false" ? fetchSmartAutoplayTrack : fetchAutoplayV3Track;
+      const relatedTrack = await selectAutoplayTrack(lastTrack, player.guildId, {
+        pendingManualTracks: getPendingManualTracks(player),
+      });
 
-  try {
-    const selectAutoplayTrack = process.env.AUTOPLAY_V3 === "false" ? fetchSmartAutoplayTrack : fetchAutoplayV3Track;
-    const relatedTrack = await selectAutoplayTrack(lastTrack, player.guildId, {
-      pendingManualTracks: getPendingManualTracks(player),
-    });
+      if (!relatedTrack) {
+        Log.warning("Smart autoplay could not find a related track", "", `guild=${player.guildId}`);
+        return false;
+      }
 
-    if (!relatedTrack) {
-      Log.warning("Smart autoplay could not find a related track", "", `guild=${player.guildId}`);
-      return false;
-    }
+      const voiceChannel = player.poru.client.guilds.cache.get(player.guildId)?.channels.cache.get(player.voiceChannel);
 
-    const voiceChannel = player.poru.client.guilds.cache.get(player.guildId)?.channels.cache.get(player.voiceChannel);
+      const botIsInChannel = voiceChannel?.members?.has(player.poru.client.user.id);
 
-    const botIsInChannel = voiceChannel?.members?.has(player.poru.client.user.id);
+      if (!botIsInChannel) {
+        Log.debug(
+          "Aborting autoplay - bot left voice channel during fetch",
+          "",
+          `guild=${player.guildId}`,
+          `track=${relatedTrack.info?.title}`
+        );
+        return false;
+      }
 
-    if (!botIsInChannel) {
-      Log.debug(
-        "Aborting autoplay - bot left voice channel during fetch",
-        "",
-        `guild=${player.guildId}`,
-        `track=${relatedTrack.info?.title}`
+      const cloned = cloneTrack(relatedTrack);
+
+      cloned.info = {
+        ...(cloned.info || {}),
+        requester: textChannelId,
+        autoplayed: true,
+      };
+
+      cloned.userData = {
+        ...(cloned.userData || {}),
+        fallbackAttempts: 0,
+        autoplay: true,
+      };
+
+      await player.queue.add(cloned);
+      rememberAutoplayTrack(player.guildId, cloned);
+      await recordAutoplayExposure(player.guildId, cloned, lastTrack).catch((error) => {
+        Log.warning("Autoplay exposure memory update failed", "", `guild=${player.guildId}`, `error=${error.message}`);
+      });
+
+      Log.info(
+        "➕ Autoplay queued",
+        `${cloned.info?.title || "Unknown"}`,
+        `artist=${cloned.info?.author || "Unknown"}`,
+        `source=${cloned.info?.sourceName || "unknown"}`,
+        `queue=${player.queue.length}`,
+        `guild=${player.guildId}`
       );
+
+      if (!player.currentTrack && player.queue.length > 0) {
+        await player.play();
+      }
+
+      return true;
+    } catch (err) {
+      Log.error("❌ Autoplay failed", err, `guild=${player.guildId}`);
       return false;
     }
-
-    const cloned = cloneTrack(relatedTrack);
-
-    cloned.info = {
-      ...(cloned.info || {}),
-      requester: textChannelId,
-      autoplayed: true,
-    };
-
-    cloned.userData = {
-      ...(cloned.userData || {}),
-      fallbackAttempts: 0,
-      autoplay: true,
-    };
-
-    await player.queue.add(cloned);
-    rememberAutoplayTrack(player.guildId, cloned);
-    await recordAutoplayExposure(player.guildId, cloned, lastTrack).catch((error) => {
-      Log.warning("Autoplay exposure memory update failed", "", `guild=${player.guildId}`, `error=${error.message}`);
-    });
-
-    Log.info(
-      "➕ Autoplay queued",
-      `${cloned.info?.title || "Unknown"}`,
-      `artist=${cloned.info?.author || "Unknown"}`,
-      `source=${cloned.info?.sourceName || "unknown"}`,
-      `queue=${player.queue.length}`,
-      `guild=${player.guildId}`
-    );
-
-    if (!player.currentTrack && player.queue.length > 0) {
-      await player.play();
-    }
-
-    return true;
-  } catch (err) {
-    Log.error("❌ Autoplay failed", err, `guild=${player.guildId}`);
-    return false;
-  } finally {
-    autoplayInFlight.delete(player.guildId);
-  }
+  });
 }
 
 /**
@@ -116,9 +128,15 @@ function isAutoplayInFlight(guildId) {
   return autoplayInFlight.has(guildId);
 }
 
+function getAutoplayInFlight(guildId) {
+  return autoplayInFlight.get(guildId) || null;
+}
+
 module.exports = {
   queueAutoplayTrack,
   prefetchAutoplayTrack,
   isAutoplayInFlight,
+  getAutoplayInFlight,
+  runSharedAutoplayTask,
   AUTOPLAY_PREFETCH_QUEUE_THRESHOLD,
 };

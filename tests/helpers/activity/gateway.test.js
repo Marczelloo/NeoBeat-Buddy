@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { WebSocket } = require("ws");
-const { createActivityServer, isAllowedArtworkUrl, serializeActivityActionResult, stringifyJson } = require("../../../helpers/activity/server");
+const { createActivityServer, isAllowedArtworkUrl, resolveActivityPlayback, serializeActivityActionResult, stringifyJson } = require("../../../helpers/activity/server");
 const { getActivityStateRevision, markActivityStateChanged, resetActivityStateRevision } = require("../../../helpers/activity/sync");
 
 test("Activity state revisions only move forward for a guild", () => {
@@ -35,6 +35,16 @@ test("Activity artwork proxy only accepts known HTTPS media hosts", () => {
   assert.equal(isAllowedArtworkUrl("https://cdn-images.dzcdn.net/images/cover/example/500x500.jpg"), true);
   assert.equal(isAllowedArtworkUrl("http://127.0.0.1:8787/private"), false);
   assert.equal(isAllowedArtworkUrl("https://example.test/not-allowed.jpg"), false);
+});
+
+test("Activity uses the live player track when state lags behind a queue transition", () => {
+  const staleTrack = { track: "old", info: { identifier: "old", title: "Old", length: 120000 } };
+  const liveTrack = { track: "new", info: { identifier: "new", title: "New", length: 240000 } };
+  const playback = resolveActivityPlayback(staleTrack, liveTrack);
+
+  assert.equal(playback.track, liveTrack);
+  assert.equal(playback.durationMs, 240000);
+  assert.equal(playback.usesPlayerTrack, true);
 });
 
 function waitForListening(server) {

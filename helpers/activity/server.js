@@ -326,13 +326,13 @@ function buildActivityState(client, guildId, userId) {
   const player = getPlayer(guildId);
   const likedSongs = playlistStore.getLikedSongs(userId);
   const livePlaybackState = playbackState.get(guildId);
-  const currentTrackSource = livePlaybackState?.currentTrack || player?.currentTrack || null;
-  const currentTrack = currentTrackSource ? serializeTrack(currentTrackSource) : null;
+  const playback = resolveActivityPlayback(livePlaybackState?.currentTrack, player?.currentTrack);
+  const currentTrack = playback.track ? serializeTrack(playback.track) : null;
   const filters = getEqualizerState(guildId) || player?.filters || {};
   const guild = client.guilds.cache.get(guildId);
   const settings = guildState.getGuildState(guildId);
   const lyrics = serializeLyrics(getLyricsState(guildId));
-  const position = player?.currentTrack ? getInterpolatedPosition(player, Date.now(), 0) : 0;
+  const position = playback.usesPlayerTrack ? getInterpolatedPosition(player, Date.now(), 0) : 0;
   const botStatus = client?.user?.presence?.activities?.find((activity) => activity.type === 2)?.name || null;
 
   const generatedAt = Date.now();
@@ -352,7 +352,7 @@ function buildActivityState(client, guildId, userId) {
       paused: Boolean(player?.isPaused),
       playing: Boolean(player?.isPlaying && !player?.isPaused),
       positionMs: Math.max(0, Math.round(position)),
-      durationMs: currentTrack?.durationMs || 0,
+      durationMs: playback.durationMs || currentTrack?.durationMs || 0,
       volume: getUserVolume(player),
       loop: player?.loop || "NONE",
       shuffleActive: Boolean(player?.shuffleActive),
@@ -367,6 +367,20 @@ function buildActivityState(client, guildId, userId) {
     likedTrackIds: [...new Set((likedSongs.tracks || []).flatMap((track) => playlistStore.getTrackIdentityKeys(track)))],
     filterPresets: FILTER_PRESET_NAMES,
     equalizerPresets: getSerializedEqualizerPresets(userId),
+  };
+}
+
+function resolveActivityPlayback(stateTrack, playerTrack) {
+  // Poru's player is the source of truth for the active stream. The state
+  // snapshot is intentionally only a fallback while a player is unavailable.
+  const usesPlayerTrack = Boolean(playerTrack);
+  const track = usesPlayerTrack ? playerTrack : stateTrack || playerTrack || null;
+  const playerDuration = Number(playerTrack?.info?.length) || 0;
+
+  return {
+    track,
+    usesPlayerTrack,
+    durationMs: usesPlayerTrack ? playerDuration : Number(track?.info?.length) || 0,
   };
 }
 
@@ -815,6 +829,7 @@ function createActivityServer(client) {
 module.exports = {
   createActivityServer,
   buildActivityState,
+  resolveActivityPlayback,
   isAllowedArtworkUrl,
   runActivityAction,
   searchActivityTracks,

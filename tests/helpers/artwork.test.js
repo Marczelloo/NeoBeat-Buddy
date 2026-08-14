@@ -23,6 +23,13 @@ test("upgrades known provider artwork URLs without dropping their fallback", () 
   });
 });
 
+test("falls back from unavailable YouTube maxres artwork to hq artwork", () => {
+  assert.deepEqual(getArtworkUrls("https://i.ytimg.com/vi/example/maxresdefault.jpg"), {
+    primary: "https://i.ytimg.com/vi/example/maxresdefault.jpg",
+    fallback: "https://i.ytimg.com/vi/example/hqdefault.jpg",
+  });
+});
+
 test("derives a high-resolution YouTube thumbnail when Lavalink omits artwork", () => {
   assert.equal(
     getTrackArtworkSource({ info: { sourceName: "youtube", identifier: "dQw4w9WgXcQ" } }),

@@ -38,12 +38,33 @@ function getHighResolutionArtworkUrl(value) {
 }
 
 function getArtworkUrls(value) {
-  const fallback = String(value || "").trim() || null;
-  const primary = getHighResolutionArtworkUrl(fallback);
+  const original = String(value || "").trim() || null;
+  const primary = getHighResolutionArtworkUrl(original);
+  const fallback = getArtworkFallbackUrl(original, primary);
   return {
-    primary: primary || fallback,
-    fallback: primary && fallback && primary !== fallback ? fallback : null,
+    primary: primary || original,
+    fallback,
   };
+}
+
+function getArtworkFallbackUrl(original, primary) {
+  if (!original) return null;
+  if (primary && primary !== original) return original;
+
+  try {
+    const url = new URL(original);
+    const host = url.hostname.toLowerCase();
+    const isYoutubeImage = host === "i.ytimg.com" || host.endsWith(".ytimg.com") || host === "img.youtube.com";
+
+    if (isYoutubeImage && /\/maxresdefault\.(jpe?g|webp)$/i.test(url.pathname)) {
+      url.pathname = url.pathname.replace(/\/maxresdefault\.(jpe?g|webp)$/i, "/hqdefault.$1");
+      return url.toString();
+    }
+  } catch {
+    // Retain the original primary artwork URL when it cannot be parsed.
+  }
+
+  return null;
 }
 
 function getTrackArtworkSource(track) {
@@ -67,6 +88,7 @@ function getTrackArtworkSource(track) {
 
 module.exports = {
   getArtworkUrls,
+  getArtworkFallbackUrl,
   getHighResolutionArtworkUrl,
   getTrackArtworkSource,
 };

@@ -4,6 +4,7 @@ const { getHighResolutionArtworkUrl } = require("../helpers/artwork");
 const { buildControlRows } = require("../helpers/buttons");
 const { playerEmbed } = require("../helpers/embeds");
 const { getGuildState, updateGuildState } = require("../helpers/guildState.js");
+const { getDisplayTrackMetadata } = require("../helpers/lavalink/displayMetadata");
 const { createPoru } = require("../helpers/lavalink/index");
 const Log = require("../helpers/logs/log");
 const { formatDuration } = require("../helpers/utils");
@@ -27,8 +28,9 @@ module.exports = {
       poru.on("trackStartUI", async (player, track) => {
         try {
           const info = track?.info || {};
+          const display = getDisplayTrackMetadata(track);
 
-          if (!info.title) {
+          if (!display.title) {
             Log.warning(
               "trackStartUI fired with track missing title",
               "",
@@ -62,10 +64,10 @@ module.exports = {
               : player.currentTrack?.pluginInfo?.quality || null;
 
           const embed = playerEmbed(
-            info.title,
+            display.title,
             info.uri,
             artwork,
-            info.author ?? "Unknown",
+            display.author,
             info.requesterTag ?? "Unknown",
             info.requesterAvatar ?? null,
             duration,

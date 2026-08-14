@@ -280,6 +280,7 @@ function createPoru(client) {
     );
 
     state.currentTrack = null;
+    state.lastEndedTrack = endedTrack ? cloneTrack(endedTrack) : state.lastEndedTrack || null;
     state.paused = false;
     playbackState.set(player.guildId, state);
     clearLyricsState(player.guildId);
@@ -319,7 +320,7 @@ function createPoru(client) {
     Log.info("🏁 Queue ended", `guild=${player.guildId}`);
 
     const state = ensurePlaybackState(player.guildId);
-    const lastTrack = state.currentTrack;
+    const lastTrack = state.currentTrack || state.lastEndedTrack || null;
 
     Log.debug(
       "Queue end state",
@@ -359,6 +360,7 @@ function createPoru(client) {
     }
 
     state.currentTrack = null;
+    state.lastEndedTrack = null;
     state.paused = false;
     playbackState.set(player.guildId, state);
 
@@ -382,11 +384,17 @@ function createPoru(client) {
       const lastTitle = lastTrack?.info?.title || "Unknown";
       Log.info("🔁 Autoplay fetching", `basedOn=${lastTitle}`, `guild=${player.guildId}`);
 
-      const { queueAutoplayTrack, isAutoplayInFlight } = require("./autoplay");
-      const prefetchWasInFlight = isAutoplayInFlight(player.guildId);
+      const { queueAutoplayTrack, getAutoplayInFlight } = require("./autoplay");
+      const pendingPrefetch = getAutoplayInFlight(player.guildId);
+      if (pendingPrefetch) {
+        Log.info("⏳ Awaiting autoplay prefetch after queue end", `guild=${player.guildId}`);
+        const prefetchAdded = await pendingPrefetch.catch(() => false);
+        if (prefetchAdded || player.currentTrack || player.queue.length) return;
+        Log.warning("Autoplay prefetch ended without a playable track; retrying", "", `guild=${player.guildId}`);
+      }
       const added = await queueAutoplayTrack(player, lastTrack, player.textChannel);
 
-      if (added || prefetchWasInFlight || isAutoplayInFlight(player.guildId)) {
+      if (added || player.currentTrack || player.queue.length) {
         return;
       }
     }

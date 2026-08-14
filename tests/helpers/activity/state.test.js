@@ -38,6 +38,17 @@ test.describe("Activity state serialization", () => {
     );
   });
 
+  test("uses canonical autoplay metadata for display without changing provider identity", () => {
+    const track = serializeTrack({
+      info: { identifier: "youtube-id", title: "TACONAFIDE - Kryptowaluty (audio)", author: "Kamil Taconafide", sourceName: "youtube" },
+      userData: { autoplay: true, autoplayReference: { title: "Kryptowaluty", artist: "TACONAFIDE" } },
+    });
+
+    assert.equal(track.title, "Kryptowaluty");
+    assert.equal(track.author, "TACONAFIDE");
+    assert.equal(track.source, "youtube");
+  });
+
   test("normalizes synced and static lyrics into an Activity payload", () => {
     const synced = serializeLyrics({ source: "LRCLIB", synced: true, lyrics: "one\ntwo", lines: [{ timestamp: 1200, line: "one" }] });
     const staticLyrics = serializeLyrics({ source: "Genius", synced: false, lyrics: "full text" });
