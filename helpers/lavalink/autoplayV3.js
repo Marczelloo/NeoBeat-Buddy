@@ -1,5 +1,6 @@
 const { getGuildState } = require("../guildState");
 const Log = require("../logs/log");
+const { rerankCandidatesWithAIDJ } = require("./aiDj");
 const { getAutoplayExposureSnapshot, getExposureKey } = require("./autoplayExposure");
 const { areGenreFamiliesCompatible, getGenreFamilies } = require("./genreUtils");
 const { getLastFmTagProfile } = require("./lastfmClient");
@@ -192,7 +193,7 @@ function selectV3Candidates(candidates, context) {
   return { ranked: accepted.sort((left, right) => right.score - left.score), rejected };
 }
 
-async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack) {
+async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack, aiResult = null) {
   for (const entry of ranked) {
     const track = await resolveToPlayable(entry.candidate, guildId, { referenceTitle: referenceTrack.info?.title || "" });
     if (!track) continue;
@@ -203,6 +204,15 @@ async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack)
       autoplayAnchor: { artist: anchorTrack.info?.author || "Unknown", title: anchorTrack.info?.title || "Unknown" },
       autoplayScore: entry.score,
       autoplayScoreDetails: entry.details,
+      aiDJ: aiResult?.decision && entry.aiDjCandidateId === aiResult.decision.candidateId
+        ? {
+            model: aiResult.model || null,
+            confidence: aiResult.decision.confidence,
+            transitionScore: aiResult.decision.transitionScore,
+            reasons: aiResult.decision.reasons,
+            cached: Boolean(aiResult.cached),
+          }
+        : null,
     };
     return { track, entry };
   }
@@ -241,7 +251,15 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
     sources: ["sameAlbum", "lastfm", "youtubeMix"],
   });
   const { ranked, rejected } = selectV3Candidates(candidates, context);
-  const resolved = await resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack);
+  const aiResult = await rerankCandidatesWithAIDJ({
+    guildId,
+    anchorTrack,
+    referenceTrack,
+    profile,
+    context,
+    ranked,
+  });
+  const resolved = await resolveV3Candidates(aiResult.ranked, guildId, referenceTrack, anchorTrack, aiResult);
 
   Log.info(
     "Autoplay V3 selection",
@@ -254,6 +272,7 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
     `artistStreak=${context.artistStreak}`,
     `albumStreak=${context.albumStreak}`,
     `rejected=${Object.entries(rejected).map(([key, value]) => `${key}:${value}`).join(",") || "none"}`,
+    `aiDj=${aiResult.status}${aiResult.decision ? `:${aiResult.decision.candidateId}/${aiResult.decision.confidence}` : ""}`,
     `winner=${resolved ? `${resolved.track.info?.author} - ${resolved.track.info?.title} (${resolved.entry.score})` : "none"}`
   );
 

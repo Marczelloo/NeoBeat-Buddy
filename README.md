@@ -40,6 +40,7 @@ MewBit is a Discord music bot with a shared listening **Discord Activity**. It u
 - Keeps tempo styles such as nightcore, slowed, and sped-up available as valid autoplay lanes, while requiring remix/live/acoustic/cover variants to match the current version lane.
 - Uses direct YouTube Mix candidates only as a constrained, score-gated fallback for tracks with insufficient metadata (for example niche or meme uploads), rather than broad unrelated search.
 - Places manually queued tracks ahead of autoplay tracks; a manually added track goes after other manual items and before the autoplay tail.
+- Optional AI DJ reinforcement uses the OpenAI Responses API with Structured Outputs to choose only from V3's already verified shortlist. It cannot create a new candidate or bypass duplicate, variant, genre, skip, album, or artist guards. Timeouts, unavailable API access, invalid output, and low-confidence decisions retain the deterministic V3 result.
 
 ### Discord Activity
 
@@ -158,6 +159,13 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_V3` | `true` | Uses the simpler trusted-source DJ selector. Set to `false` only to temporarily roll back to the legacy scorer. |
 | `AUTOPLAY_V3_MAX_ALBUM_STREAK` | `2` | Maximum consecutive tracks from one album before V3 requires a different album. |
 | `AUTOPLAY_V3_MAX_ARTIST_STREAK` | `3` | Maximum consecutive tracks by one artist before V3 requires a different artist. |
+| `AI_DJ_ENABLED` | `false` | Enables the OpenAI AI DJ reranker after V3's deterministic hard filters. |
+| `OPENAI_API_KEY` | — | Secret API key for the OpenAI Responses API. Keep it only in local/server `.env` files. |
+| `AI_DJ_MODEL` | `gpt-5-mini` | Responses API model used for structured AI DJ decisions. |
+| `AI_DJ_TIMEOUT_MS` | `4500` | Maximum AI DJ wait before falling back to V3. |
+| `AI_DJ_CACHE_TTL_MS` | `300000` | Caches an identical sanitized listening context to avoid duplicate API calls. |
+| `AI_DJ_MAX_CANDIDATES` | `12` | Maximum V3-approved candidates presented to the model. |
+| `AI_DJ_MIN_CONFIDENCE` | `0.55` | AI decisions below this confidence leave V3's ordering unchanged. |
 | `TRACK_HISTORY_LIMIT` | `80` | Number of tracks retained in the active playback history. |
 | `AUTOPLAY_EXPOSURE_TTL_MS` | `1209600000` | How long cross-session autoplay exposure is remembered (14 days). |
 | `AUTOPLAY_EXPOSURE_LIMIT` | `300` | Maximum canonical recommendations remembered per guild. |
