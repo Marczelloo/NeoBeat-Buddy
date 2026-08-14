@@ -13,13 +13,16 @@ const {
   resolveToPlayable,
 } = require("./smartAutoplay");
 const { cloneTrack, ensurePlaybackState, playbackState } = require("./state");
+const { hasTrackIdentity } = require("./trackIdentity");
 const { cleanArtistName, normalizeComparableText } = require("./trackNormalization");
 
 const MAX_CONSECUTIVE_ALBUM_TRACKS = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ALBUM_STREAK ?? 2), 1);
 const MAX_CONSECUTIVE_ARTIST_TRACKS = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ARTIST_STREAK ?? 3), 1);
-const MAX_ALBUM_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK ?? 6), MAX_CONSECUTIVE_ALBUM_TRACKS);
+const MAX_ALBUM_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK ?? 3), MAX_CONSECUTIVE_ALBUM_TRACKS);
 const MAX_ARTIST_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ARTIST_CONTINUITY_STREAK ?? 6), MAX_CONSECUTIVE_ARTIST_TRACKS);
 const REPEAT_COOLDOWN_MS = Math.max(Number(process.env.AUTOPLAY_REPEAT_COOLDOWN_MS ?? 60 * 60 * 1000), 0);
+const AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS = Math.max(Number(process.env.AI_DJ_MAX_ARTIST_STREAK ?? 5), MAX_CONSECUTIVE_ARTIST_TRACKS);
+const AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS = Math.max(Number(process.env.AI_DJ_MAX_ALBUM_STREAK ?? 3), MAX_CONSECUTIVE_ALBUM_TRACKS);
 
 function sourceSet(candidate) {
   return new Set([candidate?.source, ...(candidate?.providerSources || [])].filter(Boolean));
@@ -54,7 +57,15 @@ function consecutiveCount(tracks, predicate) {
 }
 
 function getRecentTracks(profile, referenceTrack) {
-  const tracks = [...(profile.recentTracks || []), referenceTrack].filter(Boolean);
+  // `history` is populated by player events and some provider track shapes can
+  // arrive without the encoded `track` field used by that event path. The
+  // dedicated autoplay history is populated for every accepted autoplay pick,
+  // so combine both histories before calculating continuity limits.
+  const tracks = [
+    ...(profile.recentTracks || []),
+    ...(profile.recentAutoplayTracks || []),
+    referenceTrack,
+  ].filter(Boolean);
   const seen = new Set();
   return tracks.filter((track) => {
     const key = getExposureKey(track) || `${track?.info?.identifier || ""}|${track?.info?.title || ""}`;
@@ -210,22 +221,31 @@ function selectV3Candidates(candidates, context) {
       continue;
     }
     const strongContinuation = hasStrongContinuation(candidate, context);
+    const aiDirected = sources.has("ai_dj");
     if (candidateArtist && candidateArtist === context.referenceArtist && context.artistStreak >= MAX_CONSECUTIVE_ARTIST_TRACKS) {
-      if (!strongContinuation) {
+      if (aiDirected && context.artistStreak >= AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS) {
+        bump("ai-artist-streak");
+        continue;
+      }
+      if (!aiDirected && !strongContinuation) {
         bump("artist-streak");
         continue;
       }
-      if (context.artistStreak >= MAX_ARTIST_CONTINUITY_STREAK) {
+      if (!aiDirected && context.artistStreak >= MAX_ARTIST_CONTINUITY_STREAK) {
         bump("artist-continuity-limit");
         continue;
       }
     }
     if (candidateAlbum && candidateAlbum === context.referenceAlbum && context.albumStreak >= MAX_CONSECUTIVE_ALBUM_TRACKS) {
-      if (!strongContinuation) {
+      if (aiDirected && context.albumStreak >= AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS) {
+        bump("ai-album-streak");
+        continue;
+      }
+      if (!aiDirected && !strongContinuation) {
         bump("album-streak");
         continue;
       }
-      if (context.albumStreak >= MAX_ALBUM_CONTINUITY_STREAK) {
+      if (!aiDirected && context.albumStreak >= MAX_ALBUM_CONTINUITY_STREAK) {
         bump("album-continuity-limit");
         continue;
       }
@@ -236,18 +256,28 @@ function selectV3Candidates(candidates, context) {
   return { ranked: accepted.sort((left, right) => right.score - left.score), rejected };
 }
 
-function buildAIDJCandidates(aiResult) {
+function getVerifiedCatalogMatch(proposal, catalogCandidates) {
+  return (catalogCandidates || []).find((candidate) =>
+    hasTrackIdentity([candidate?.track || candidate], proposal, { includeIdentifier: false })
+  ) || null;
+}
+
+function buildAIDJCandidates(aiResult, catalogCandidates = []) {
   if (aiResult?.status !== "planned" || !Array.isArray(aiResult.plan?.candidates)) return [];
 
-  return aiResult.plan.candidates.map((proposal, index) => ({
-    artist: proposal.artist,
-    title: proposal.title,
-    albumTitle: proposal.album || null,
+  return aiResult.plan.candidates.map((proposal, index) => {
+    const verified = getVerifiedCatalogMatch(proposal, catalogCandidates);
+    return {
+    ...(verified || {}),
+    artist: verified?.artist || verified?.track?.info?.author || proposal.artist,
+    title: verified?.title || verified?.track?.info?.title || proposal.title,
+    albumTitle: verified?.albumTitle || verified?.track?.userData?.albumTitle || proposal.album || null,
     source: "ai_dj",
-    providerSources: ["ai_dj"],
-    genres: [],
+    providerSources: ["ai_dj", ...(verified?.providerSources || []), verified?.source].filter(Boolean),
+    genres: verified?.genres || [],
     similarity: null,
     aiDjRank: index,
+    aiDjVerifiedCatalog: Boolean(verified),
     aiDJ: {
       model: aiResult.model || null,
       confidence: aiResult.plan.confidence,
@@ -256,14 +286,24 @@ function buildAIDJCandidates(aiResult) {
       proposalReason: proposal.reason,
       cached: Boolean(aiResult.cached),
     },
-  }));
+  };
+  });
 }
 
-async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack) {
+async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack, context) {
   for (const entry of ranked) {
-    const track = await resolveToPlayable(entry.candidate, guildId, { referenceTitle: referenceTrack.info?.title || "" });
+    const aiDirected = sourceSet(entry.candidate).has("ai_dj");
+    const track = await resolveToPlayable(entry.candidate, guildId, {
+      referenceTitle: referenceTrack.info?.title || "",
+      providerSources: aiDirected && !entry.candidate.track ? ["youtube", "deezer", "soundcloud", "spotify"] : null,
+      debugLabel: aiDirected ? `ai-dj:${entry.candidate.artist} - ${entry.candidate.title}` : "v3-candidate",
+    });
     if (!track) continue;
     applyCandidateMetadata(track, entry.candidate);
+    if (hasRecentExposure(track, context.profile, context.exposure, context.referenceTrack)) {
+      Log.info("Autoplay resolved track rejected as a cross-provider repeat", "", `guild=${guildId}`, `track=${track.info?.author || "Unknown"} - ${track.info?.title || "Unknown"}`);
+      continue;
+    }
     track.userData = {
       ...(track.userData || {}),
       autoplayV3: true,
@@ -307,26 +347,17 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
   };
 
   const reference = getAutoplayReference(referenceTrack);
-  // The director and provider collection intentionally run concurrently. The AI has
-  // agency to propose a lane from the session itself; providers only validate that
-  // an exact, playable recording actually exists.
-  const aiPlanPromise = planNextTrackWithAIDJ({
-    guildId,
-    anchorTrack,
-    referenceTrack,
-    profile,
-    context,
-  });
-  const candidatesPromise = collectCandidates(referenceTrack, guildId, profile, reference, {
+  const candidates = await collectCandidates(referenceTrack, guildId, profile, reference, {
     sources: ["sameAlbum", "lastfm", "youtubeMix"],
   });
-  const [aiResult, candidates] = await Promise.all([aiPlanPromise, candidatesPromise]);
+  profile.verifiedCatalogCandidates = candidates;
+  const aiResult = await planNextTrackWithAIDJ({ guildId, anchorTrack, referenceTrack, profile, context });
 
-  const aiCandidates = buildAIDJCandidates(aiResult);
+  const aiCandidates = buildAIDJCandidates(aiResult, candidates);
   const { ranked: aiRanked, rejected: aiRejected } = selectV3Candidates(aiCandidates, context);
-  const aiResolved = await resolveV3Candidates(aiRanked, guildId, referenceTrack, anchorTrack);
+  const aiResolved = await resolveV3Candidates(aiRanked, guildId, referenceTrack, anchorTrack, context);
   const { ranked, rejected } = selectV3Candidates(candidates, context);
-  const resolved = aiResolved || await resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack);
+  const resolved = aiResolved || await resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack, context);
 
   Log.info(
     "Autoplay V3 selection",
@@ -336,6 +367,7 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
     `reference=${referenceTrack.info?.author || "Unknown"} - ${referenceTrack.info?.title || "Unknown"}`,
     `candidates=${candidates.length}`,
     `eligible=${ranked.length}`,
+    `verifiedCatalog=${candidates.length}`,
     `aiCandidates=${aiCandidates.length}`,
     `aiEligible=${aiRanked.length}`,
     `artistStreak=${context.artistStreak}`,
@@ -354,9 +386,12 @@ module.exports = {
   MAX_CONSECUTIVE_ALBUM_TRACKS,
   MAX_CONSECUTIVE_ARTIST_TRACKS,
   MAX_ARTIST_CONTINUITY_STREAK,
+  AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS,
+  AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS,
   REPEAT_COOLDOWN_MS,
   buildAIDJCandidates,
   fetchAutoplayV3Track,
+  getRecentTracks,
   selectV3Candidates,
   scoreCandidateV3,
   hasRecentExposure,

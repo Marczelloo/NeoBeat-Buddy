@@ -17,7 +17,7 @@ const AI_DJ_DIRECTOR_SYSTEM_PROMPT = `You are MewBit AI DJ, the music director f
 
 Choose the next songs yourself. The current song decides the immediate transition; the manual anchor and the manual listening history define the session's identity. The supplied manual memory is the room's durable taste map: it contains music listeners deliberately chose earlier, plus their recurring artists and albums. Treat it as more important than autoplay history. Never let a session drift merely because recent tracks share a broad label such as "hip hop" or "pop". A transition must make musical and cultural sense to a listener, not merely share a genre tag.
 
-Return 4 to 8 specific, real recordings in deliberate priority order. Prefer, in order: a natural continuation from the same album or artist when it still fits; a return to a compatible artist or album from manual memory; a close collaborator, scene, or sonic peer; then a measured bridge. Do not force an exit from an artist or album that is still the best fit. Leaving an album does not ban returning to it later if the transition remains natural. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
+Return 4 to 8 specific, real recordings in deliberate priority order. Prefer the supplied verified catalog whenever it contains a good fit: those recordings are already playable through MewBit's providers. You may include up to two open-catalog discoveries if the verified pool misses the best musical continuation. Prefer, in order: a natural continuation from the same album or artist when it still fits; a return to a compatible artist or album from manual memory; a close collaborator, scene, or sonic peer; then a measured bridge. Do not force an exit from an artist or album that is still the best fit. Leaving an album does not ban returning to it later if the transition remains natural. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
 
 When web search is available, use it to verify exact artist/title pairs when your knowledge is uncertain, especially for niche, regional, or non-English music. Never output a vague genre, playlist, album-only recommendation, invented track, or a different version of an existing song. Avoid every supplied recent/blocked recording. A recording may only repeat after the supplied repeat cooldown has elapsed; within that cooldown, choose another fitting cut. If a credible direction cannot be formed, return "no_match" instead of guessing.
 
@@ -109,6 +109,16 @@ function describeRecentTrack(track) {
   };
 }
 
+function describeVerifiedCandidate(candidate) {
+  return {
+    title: compactText(candidate?.title || candidate?.track?.info?.title),
+    artist: compactText(candidate?.artist || candidate?.track?.info?.author),
+    album: compactText(candidate?.albumTitle || candidate?.track?.userData?.albumTitle),
+    source: compactText(candidate?.source || candidate?.track?.info?.sourceName, 40),
+    genres: Array.isArray(candidate?.genres) ? candidate.genres.slice(0, 5) : [],
+  };
+}
+
 function buildDirectorInput({ anchorTrack, referenceTrack, profile, context, maxProposals }) {
   return {
     task: "Program the next track in this shared listening session.",
@@ -127,6 +137,7 @@ function buildDirectorInput({ anchorTrack, referenceTrack, profile, context, max
     },
     recentSession: (profile.recentTracks || []).slice(-8).map(describeRecentTrack),
     upcomingManualTracks: (profile.pendingManualTracks || []).slice(0, 4).map(describeTrack),
+    verifiedCatalog: (profile.verifiedCatalogCandidates || []).slice(0, 20).map(describeVerifiedCandidate),
     constraints: {
       anchorGenreFamilies: context.anchorFamilies || [],
       currentGenreFamilies: context.referenceFamilies || [],

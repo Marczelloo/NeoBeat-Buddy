@@ -33,7 +33,10 @@ function input() {
     guildId: "ai-dj-test",
     anchorTrack: track("Frascati", "Taco Hemingway", { albumTitle: "Frascati" }),
     referenceTrack: track("Nostalgia", "Taco Hemingway", { albumTitle: "Frascati" }),
-    profile: { recentTracks: [], manualHistory: [], pendingManualTracks: [], manualTasteGenres: [], manualTasteGenreFamilies: [] },
+    profile: {
+      recentTracks: [], manualHistory: [], pendingManualTracks: [], manualTasteGenres: [], manualTasteGenreFamilies: [],
+      verifiedCatalogCandidates: [{ artist: "Taco Hemingway", title: "Wosk", albumTitle: "Frascati", source: "same_album", genres: ["hip hop"] }],
+    },
     context: { anchorFamilies: ["hiphop"], referenceFamilies: ["hiphop"], artistStreak: 1, albumStreak: 1, skippedArtists: new Set() },
   };
 }
@@ -91,6 +94,7 @@ describe("AI DJ director", () => {
     assert.match(request.input[0].content[0].text, /music director/);
     assert.match(AI_DJ_DIRECTOR_SYSTEM_PROMPT, /web search is available/);
     assert.match(AI_DJ_DIRECTOR_SYSTEM_PROMPT, /durable taste map/);
+    assert.match(request.input[1].content[0].text, /verifiedCatalog/);
   });
 
   it("caches an identical listening context", async () => {

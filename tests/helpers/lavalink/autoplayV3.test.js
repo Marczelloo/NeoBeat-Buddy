@@ -6,7 +6,10 @@ const {
   MAX_CONSECUTIVE_ALBUM_TRACKS,
   MAX_CONSECUTIVE_ARTIST_TRACKS,
   MAX_ARTIST_CONTINUITY_STREAK,
+  AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS,
+  AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS,
   buildAIDJCandidates,
+  getRecentTracks,
   hasRecentExposure,
   selectV3Candidates,
 } = require("../../../helpers/lavalink/autoplayV3");
@@ -40,6 +43,20 @@ function context(overrides = {}) {
 }
 
 describe("Autoplay V3 selection", () => {
+  it("uses durable autoplay history when player history misses provider-shaped tracks", () => {
+    const taco = (title, identifier) => ({
+      info: { title, author: "Taco Hemingway", identifier },
+      userData: { autoplay: true },
+    });
+    const seed = { info: { title: "Tamagotchi", author: "Taco Hemingway", identifier: "seed" } };
+    const recent = getRecentTracks({
+      recentTracks: [seed, taco("Następna stacja", "one")],
+      recentAutoplayTracks: [taco("Następna stacja", "one"), taco("A mówiłem Ci", "two"), taco("Od zera", "three")],
+    }, taco("Od zera", "three"));
+
+    assert.deepStrictEqual(recent.map((track) => track.info.identifier), ["seed", "one", "two", "three"]);
+  });
+
   it("allows a recording to return after the short-session repeat cooldown", () => {
     const now = Date.now();
     const candidate = { artist: "Taco Hemingway", title: "Nostalgia" };
@@ -92,6 +109,27 @@ describe("Autoplay V3 selection", () => {
     assert.strictEqual(allowed.ranked.length, 1);
     assert.strictEqual(blocked.ranked.length, 0);
     assert.strictEqual(blocked.rejected["artist-streak"], 1);
+  });
+
+  it("gives an AI-directed same-artist run a wider but bounded ceiling", () => {
+    const aiCandidate = candidate("Fiji", "Taco Hemingway", "ai_dj", { genres: ["hip hop"] });
+    const allowed = selectV3Candidates([aiCandidate], context({ artistStreak: AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS - 1 }));
+    const blocked = selectV3Candidates([aiCandidate], context({ artistStreak: AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS }));
+
+    assert.strictEqual(allowed.ranked.length, 1);
+    assert.strictEqual(blocked.ranked.length, 0);
+    assert.strictEqual(blocked.rejected["ai-artist-streak"], 1);
+  });
+
+  it("makes an AI album run bridge outward after its bounded ceiling", () => {
+    const aiCandidate = candidate("Wosk", "Taco Hemingway", "ai_dj", { albumId: "frascati", genres: ["hip hop"] });
+    const { ranked, rejected } = selectV3Candidates([aiCandidate], context({
+      artistStreak: AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS,
+      albumStreak: AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS,
+    }));
+
+    assert.deepStrictEqual(ranked, []);
+    assert.strictEqual(rejected["ai-album-streak"], 1);
   });
 
   it("retains an emergency continuity cap to prevent endless album or artist loops", () => {
@@ -162,6 +200,19 @@ describe("Autoplay V3 selection", () => {
     assert.deepStrictEqual(rejected, {});
     assert.strictEqual(ranked[0].candidate.title, "Wosk");
     assert.strictEqual(ranked[0].candidate.source, "ai_dj");
+  });
+
+  it("uses a matching verified catalog track directly for an AI proposal", () => {
+    const directTrack = { info: { title: "Wosk", author: "Taco Hemingway", identifier: "wosk-direct" }, userData: { albumTitle: "Frascati" } };
+    const aiCandidates = buildAIDJCandidates({
+      status: "planned", model: "gpt-5.6-luna",
+      plan: { confidence: 0.9, direction: { summary: "Polish rap", energy: "mid", mood: "night" }, reasons: ["Fit"], candidates: [
+        { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", reason: "Verified continuation." },
+      ] },
+    }, [{ artist: "Taco Hemingway", title: "Wosk", albumTitle: "Frascati", source: "youtube_mix", track: directTrack }]);
+
+    assert.strictEqual(aiCandidates[0].track, directTrack);
+    assert.strictEqual(aiCandidates[0].aiDjVerifiedCatalog, true);
   });
 
   it("still rejects an AI proposal that was already played in the session", () => {

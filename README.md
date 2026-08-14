@@ -40,7 +40,7 @@ MewBit is a Discord music bot with a shared listening **Discord Activity**. It u
 - Keeps tempo styles such as nightcore, slowed, and sped-up available as valid autoplay lanes, while requiring remix/live/acoustic/cover variants to match the current version lane.
 - Uses direct YouTube Mix candidates only as a constrained, score-gated fallback for tracks with insufficient metadata (for example niche or meme uploads), rather than broad unrelated search.
 - Places manually queued tracks ahead of autoplay tracks; a manually added track goes after other manual items and before the autoplay tail.
-- Optional AI DJ mode is the primary music director. It uses fast `gpt-5.6-luna` with the first user-selected track as a durable anchor, a longer memory of user-picked tracks, recurring artists and albums, the current track, the autoplay trail, and the pending manual queue. It can return naturally to a compatible user-picked artist or album after a detour, while a short-session cooldown blocks duplicate recordings. Every proposal still has to resolve through a music provider and pass mirror, version, skip, album, artist, and repeat safeguards. V3 remains a constrained fallback only when the AI plan is unavailable, invalid, low confidence, or cannot be resolved.
+- Optional AI DJ mode is the primary music director. It uses fast `gpt-5.6-luna` with the first user-selected track as a durable anchor, a longer memory of user-picked tracks, recurring artists and albums, the current track, the autoplay trail, the pending manual queue, and a compact catalog of already provider-verified candidates. It prefers that playable catalog but may discover two additional recordings. Open proposals resolve through YouTube/YouTube Music, Deezer, SoundCloud, then Spotify; every resolved result is rechecked for mirror, version, skip, album, artist, and repeat safety before it can be queued. V3 remains a constrained fallback only when the AI plan is unavailable, invalid, low confidence, or cannot be resolved.
 
 ### Discord Activity
 
@@ -166,9 +166,11 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AI_DJ_TIMEOUT_MS` | `12000` | Maximum AI DJ wait before falling back to V3. Planning runs in parallel with provider fallback collection. |
 | `AI_DJ_CACHE_TTL_MS` | `300000` | Caches an identical sanitized listening context to avoid duplicate API calls. |
 | `AI_DJ_MAX_PROPOSALS` | `8` | Maximum exact artist/title recordings in one AI DJ plan. |
+| `AI_DJ_MAX_ARTIST_STREAK` | `5` | AI-only ceiling for a deliberate, compatible same-artist run. |
+| `AI_DJ_MAX_ALBUM_STREAK` | `3` | AI-only ceiling for a deliberate same-album run before a bridge is required. |
 | `AI_DJ_WEB_SEARCH` | `false` | Optional paid OpenAI web lookup. Provider resolution still verifies every proposal; enable only when you explicitly want external lookup costs. |
 | `AI_DJ_MIN_CONFIDENCE` | `0.55` | AI plans below this confidence leave V3 as the fallback. |
-| `AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK` | `6` | Emergency cap for a direct, genre-compatible album run after its soft cap. |
+| `AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK` | `3` | Emergency cap for a direct, genre-compatible album run after its soft cap. |
 | `AUTOPLAY_V3_MAX_ARTIST_CONTINUITY_STREAK` | `6` | Emergency cap for a direct, genre-compatible artist run after its soft cap. |
 | `TRACK_HISTORY_LIMIT` | `80` | Number of tracks retained in the active playback history. |
 | `AUTOPLAY_EXPOSURE_TTL_MS` | `1209600000` | How long cross-session autoplay exposure is remembered (14 days). |

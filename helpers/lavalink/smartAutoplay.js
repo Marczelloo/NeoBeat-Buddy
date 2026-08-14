@@ -13,6 +13,7 @@ const { areGenreFamiliesCompatible, getGenreFamilies, normalizeGenreTags } = req
 const { getLastFmSimilarTracks, getLastFmTagProfile } = require("./lastfmClient");
 const { normalizeReleaseYear } = require("./metadataValidation");
 const { getPoru } = require("./players");
+const { searchSingleSource } = require("./searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 const { buildSessionProfile, genreCache, getTrackMetadata, isAutoplayTrack } = require("./sessionProfile");
 const { getSkipPatterns } = require("./skipLearning");
@@ -173,8 +174,12 @@ async function mapWithConcurrency(items, limit, worker) {
 }
 
 function getRelevantPlayableTrack(tracks, query) {
+  return getRelevantPlayableTracks(tracks, query)[0] || null;
+}
+
+function getRelevantPlayableTracks(tracks, query) {
   const playable = filterPlayableSearchResults(filterValidSongs(tracks || []), query);
-  return rankSearchResults(playable, query)[0] || null;
+  return rankSearchResults(playable, query);
 }
 
 function getTokenCoverage(needle, haystack) {
@@ -912,7 +917,7 @@ async function collectCandidates(referenceTrack, guildId, profile, reference, { 
  * @param {string} guildId - Guild identifier
  * @returns {Promise<Object|null>} Poru track object or null
  */
-async function resolveToPlayable(candidate, guildId, { referenceTitle = "" } = {}) {
+async function resolveToPlayable(candidate, guildId, { referenceTitle = "", providerSources = null, debugLabel = "candidate" } = {}) {
   const candidateVersion = getAutoplayVersionCompatibility(candidate?.title, referenceTitle);
   if (!candidateVersion.allowed) {
     Log.debug(
@@ -964,79 +969,50 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "" } = {
   const poru = getPoru();
   const searchTitle = getVariantKinds(candidate.title).length ? candidate.title : getBaseTitle(candidate.title);
   const searchQuery = `${candidate.artist} ${searchTitle}`;
+  const sources = Array.isArray(providerSources) && providerSources.length ? providerSources : ["legacy-youtube"];
 
-  try {
-    const searchRes = await poru.resolve({ query: `ytsearch:${searchQuery}` });
-    const validTracks = filterValidSongs(searchRes.tracks || []);
-
-    if (validTracks.length > 0) {
-      const track = getRelevantPlayableTrack(validTracks, searchQuery);
-      if (!track) return null;
-
-      if (!getAutoplayVersionCompatibility(track.info?.title, candidate.title).allowed) {
-        Log.debug(
-          "Skipping mismatched resolved autoplay version",
-          "",
-          `guild=${guildId}`,
-          `resolved=${formatLogValue(track.info?.title)}`,
-          `requested=${formatLogValue(candidate.title)}`
-        );
-        return null;
-      }
-      const providerIssue = getProviderValidationIssue(candidate, track);
-      if (providerIssue) {
-        Log.debug(
-          "Skipping resolved autoplay track with suspicious identity",
-          "",
-          `guild=${guildId}`,
-          `reason=${providerIssue}`,
-          `resolved=${formatLogValue(`${track.info?.author} - ${track.info?.title}`)}`
-        );
-        return null;
-      }
-      if (!matchesAutoplayCandidate(candidate, track)) {
-        Log.debug(
-          "Skipping resolved autoplay track with mismatched canonical identity",
-          "",
-          `guild=${guildId}`,
-          `expected=${formatLogValue(`${candidate.artist} - ${candidate.title}`)}`,
-          `resolved=${formatLogValue(`${track.info?.author} - ${track.info?.title}`)}`
-        );
-        return null;
+  for (const source of sources) {
+    try {
+      const tracks = source === "legacy-youtube"
+        ? (await poru.resolve({ query: `ytsearch:${searchQuery}` })).tracks || []
+        : await searchSingleSource(poru, searchQuery, source);
+      const rankedTracks = getRelevantPlayableTracks(tracks, searchQuery).slice(0, 6);
+      if (!rankedTracks.length) {
+        Log.debug("Autoplay proposal provider returned no playable result", "", `guild=${guildId}`, `label=${debugLabel}`, `provider=${source}`, `query=${formatLogValue(searchQuery)}`);
+        continue;
       }
 
-      applyCandidateMetadata(track, candidate);
+      for (const track of rankedTracks) {
+        if (!getAutoplayVersionCompatibility(track.info?.title, candidate.title).allowed) {
+          Log.debug("Autoplay proposal rejected after provider resolution", "", `guild=${guildId}`, `label=${debugLabel}`, `provider=${source}`, "reason=version-mismatch");
+          continue;
+        }
+        const providerIssue = getProviderValidationIssue(candidate, track);
+        if (providerIssue) {
+          Log.debug("Autoplay proposal rejected after provider resolution", "", `guild=${guildId}`, `label=${debugLabel}`, `provider=${source}`, `reason=${providerIssue}`);
+          continue;
+        }
+        if (!matchesAutoplayCandidate(candidate, track)) {
+          Log.debug("Autoplay proposal rejected after provider resolution", "", `guild=${guildId}`, `label=${debugLabel}`, `provider=${source}`, "reason=canonical-identity-mismatch");
+          continue;
+        }
 
-      if (track.info?.identifier) {
-        genreCache.set(track.info.identifier, {
-          genres: candidate.genres || [],
-          features: candidate.features || null,
-          derivedFeatures: candidate.derivedFeatures || null,
-          metadataConfidence: candidate.metadataConfidence || 0,
-          metadataProvider: candidate.metadataProvider || null,
-          metadataSources: candidate.metadataSources || [],
-          releaseYear: candidate.releaseYear || null,
-          deezerId: candidate.deezerId || null,
-          artistId: candidate.artistId || null,
-          albumId: candidate.albumId || null,
-          albumTitle: candidate.albumTitle || null,
-          trackPosition: candidate.trackPosition || null,
-          diskNumber: candidate.diskNumber || null,
-        });
+        applyCandidateMetadata(track, candidate);
+        if (track.info?.identifier) {
+          genreCache.set(track.info.identifier, {
+            genres: candidate.genres || [], features: candidate.features || null, derivedFeatures: candidate.derivedFeatures || null,
+            metadataConfidence: candidate.metadataConfidence || 0, metadataProvider: candidate.metadataProvider || null,
+            metadataSources: candidate.metadataSources || [], releaseYear: candidate.releaseYear || null,
+            deezerId: candidate.deezerId || null, artistId: candidate.artistId || null, albumId: candidate.albumId || null,
+            albumTitle: candidate.albumTitle || null, trackPosition: candidate.trackPosition || null, diskNumber: candidate.diskNumber || null,
+          });
+        }
+        Log.info("Resolved candidate to playable track", "", `guild=${guildId}`, `label=${debugLabel}`, `provider=${source}`, `query=${formatLogValue(searchQuery)}`, `genres=${candidate.genres?.join(", ") || "unknown"}`);
+        return track;
       }
-
-      Log.info(
-        "Resolved candidate to playable track",
-        "",
-        `guild=${guildId}`,
-        `query=${formatLogValue(searchQuery)}`,
-        `genres=${candidate.genres?.join(", ") || "unknown"}`
-      );
-
-      return track;
+    } catch (err) {
+      Log.debug("Autoplay proposal provider resolution failed", err.message, `guild=${guildId}`, `label=${debugLabel}`, `provider=${source}`, `query=${formatLogValue(searchQuery)}`);
     }
-  } catch (err) {
-    Log.error("Failed to resolve candidate", err, `guild=${guildId}`, `query=${formatLogValue(searchQuery)}`);
   }
 
   return null;
@@ -1687,6 +1663,7 @@ module.exports = {
   attachFallbackOrigin,
   enrichCandidatesWithLastFmTags,
   getRelevantPlayableTrack,
+  getRelevantPlayableTracks,
   matchesAutoplayCandidate,
   getProviderValidationIssue,
   resolveToPlayable,

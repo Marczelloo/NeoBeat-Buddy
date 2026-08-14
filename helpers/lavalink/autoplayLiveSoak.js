@@ -3,6 +3,7 @@ const { EventEmitter } = require("node:events");
 const { getGuildState } = require("../guildState");
 const { clearAutoplayExposureForGuild, recordAutoplayExposure } = require("./autoplayExposure");
 const { getTempoDistance } = require("./autoplayMetadata");
+const { fetchAutoplayV3Track } = require("./autoplayV3");
 const { normalizeArtist } = require("./candidateScoring");
 const { createPoru } = require("./client");
 const { getGenreBridgeStrength, getGenreFamilies, areGenreFamiliesCompatible } = require("./genreUtils");
@@ -147,7 +148,12 @@ function updateMetrics(
   const recentArtists = metrics.artists.slice(-artistWindowSize);
   if (recentArtists.filter((entry) => entry === artist).length > maxArtistAppearancesInWindow) {
     metrics.artistWindowViolations += 1;
-    if (!sameAlbum) metrics.artistWindowDiversityViolations += 1;
+    // Album metadata is occasionally absent from the first YouTube resolve.
+    // A dense same-artist window is only an actionable drift signal when the
+    // current run also exceeds the verified cross-album diversity streak.
+    if (!sameAlbum && diversityStreak > maxArtistAppearancesInWindow) {
+      metrics.artistWindowDiversityViolations += 1;
+    }
   }
 
   const source = selectedTrack.info?.sourceName || "unknown";
@@ -218,12 +224,13 @@ async function runLiveAutoplaySoak({
   metrics.currentArtistStreak = 1;
   metrics.maxConsecutiveArtist = 1;
   let reference = cloneTrack(seed);
+  const selectAutoplayTrack = process.env.AUTOPLAY_V3 === "false" ? fetchSmartAutoplayTrack : fetchAutoplayV3Track;
   pushTrackHistory(guildId, reference);
   fullHistory.push(cloneTrack(reference));
 
   try {
     for (let step = 1; step <= steps; step += 1) {
-      const selected = await fetchSmartAutoplayTrack(reference, guildId, { pendingManualTracks });
+      const selected = await selectAutoplayTrack(reference, guildId, { pendingManualTracks });
       const stepTrace = {
         step,
         reference: getTrackSummary(reference),
