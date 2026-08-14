@@ -1,6 +1,6 @@
 const { getGuildState } = require("../guildState");
 const Log = require("../logs/log");
-const { rerankCandidatesWithAIDJ } = require("./aiDj");
+const { planNextTrackWithAIDJ } = require("./aiDj");
 const { getAutoplayExposureSnapshot, getExposureKey } = require("./autoplayExposure");
 const { areGenreFamiliesCompatible, getGenreFamilies } = require("./genreUtils");
 const { getLastFmTagProfile } = require("./lastfmClient");
@@ -138,6 +138,8 @@ function scoreCandidateV3(candidate, context) {
     ? 40 + Math.round((Number(candidate.similarity) || 0) * 10)
     : sources.has("same_album")
       ? 44
+      : sources.has("ai_dj")
+        ? 62 - Math.min(18, Math.max(0, Number(candidate.aiDjRank) || 0) * 2)
       : sources.has("youtube_mix")
         ? 30
         : 0;
@@ -177,7 +179,7 @@ function selectV3Candidates(candidates, context) {
     seen.add(identity);
 
     const sources = sourceSet(candidate);
-    if (!sources.has("lastfm_similar") && !sources.has("youtube_mix") && !sources.has("same_album")) {
+    if (!sources.has("lastfm_similar") && !sources.has("youtube_mix") && !sources.has("same_album") && !sources.has("ai_dj")) {
       bump("unrelated-source");
       continue;
     }
@@ -228,7 +230,30 @@ function selectV3Candidates(candidates, context) {
   return { ranked: accepted.sort((left, right) => right.score - left.score), rejected };
 }
 
-async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack, aiResult = null) {
+function buildAIDJCandidates(aiResult) {
+  if (aiResult?.status !== "planned" || !Array.isArray(aiResult.plan?.candidates)) return [];
+
+  return aiResult.plan.candidates.map((proposal, index) => ({
+    artist: proposal.artist,
+    title: proposal.title,
+    albumTitle: proposal.album || null,
+    source: "ai_dj",
+    providerSources: ["ai_dj"],
+    genres: [],
+    similarity: null,
+    aiDjRank: index,
+    aiDJ: {
+      model: aiResult.model || null,
+      confidence: aiResult.plan.confidence,
+      direction: aiResult.plan.direction,
+      reasons: aiResult.plan.reasons,
+      proposalReason: proposal.reason,
+      cached: Boolean(aiResult.cached),
+    },
+  }));
+}
+
+async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack) {
   for (const entry of ranked) {
     const track = await resolveToPlayable(entry.candidate, guildId, { referenceTitle: referenceTrack.info?.title || "" });
     if (!track) continue;
@@ -239,15 +264,7 @@ async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack,
       autoplayAnchor: { artist: anchorTrack.info?.author || "Unknown", title: anchorTrack.info?.title || "Unknown" },
       autoplayScore: entry.score,
       autoplayScoreDetails: entry.details,
-      aiDJ: aiResult?.decision && entry.aiDjCandidateId === aiResult.decision.candidateId
-        ? {
-            model: aiResult.model || null,
-            confidence: aiResult.decision.confidence,
-            transitionScore: aiResult.decision.transitionScore,
-            reasons: aiResult.decision.reasons,
-            cached: Boolean(aiResult.cached),
-          }
-        : null,
+      aiDJ: entry.candidate.aiDJ || null,
     };
     return { track, entry };
   }
@@ -282,19 +299,26 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
   };
 
   const reference = getAutoplayReference(referenceTrack);
-  const candidates = await collectCandidates(referenceTrack, guildId, profile, reference, {
-    sources: ["sameAlbum", "lastfm", "youtubeMix"],
-  });
-  const { ranked, rejected } = selectV3Candidates(candidates, context);
-  const aiResult = await rerankCandidatesWithAIDJ({
+  // The director and provider collection intentionally run concurrently. The AI has
+  // agency to propose a lane from the session itself; providers only validate that
+  // an exact, playable recording actually exists.
+  const aiPlanPromise = planNextTrackWithAIDJ({
     guildId,
     anchorTrack,
     referenceTrack,
     profile,
     context,
-    ranked,
   });
-  const resolved = await resolveV3Candidates(aiResult.ranked, guildId, referenceTrack, anchorTrack, aiResult);
+  const candidatesPromise = collectCandidates(referenceTrack, guildId, profile, reference, {
+    sources: ["sameAlbum", "lastfm", "youtubeMix"],
+  });
+  const [aiResult, candidates] = await Promise.all([aiPlanPromise, candidatesPromise]);
+
+  const aiCandidates = buildAIDJCandidates(aiResult);
+  const { ranked: aiRanked, rejected: aiRejected } = selectV3Candidates(aiCandidates, context);
+  const aiResolved = await resolveV3Candidates(aiRanked, guildId, referenceTrack, anchorTrack);
+  const { ranked, rejected } = selectV3Candidates(candidates, context);
+  const resolved = aiResolved || await resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack);
 
   Log.info(
     "Autoplay V3 selection",
@@ -304,11 +328,14 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
     `reference=${referenceTrack.info?.author || "Unknown"} - ${referenceTrack.info?.title || "Unknown"}`,
     `candidates=${candidates.length}`,
     `eligible=${ranked.length}`,
+    `aiCandidates=${aiCandidates.length}`,
+    `aiEligible=${aiRanked.length}`,
     `artistStreak=${context.artistStreak}`,
     `albumStreak=${context.albumStreak}`,
-    `rejected=${Object.entries(rejected).map(([key, value]) => `${key}:${value}`).join(",") || "none"}`,
-    `aiDj=${aiResult.status}${aiResult.decision ? `:${aiResult.decision.candidateId}/${aiResult.decision.confidence}` : ""}`,
-    `winner=${resolved ? `${resolved.track.info?.author} - ${resolved.track.info?.title} (${resolved.entry.score})` : "none"}`
+    `rejected=${Object.entries({ ...rejected, ...Object.fromEntries(Object.entries(aiRejected).map(([key, value]) => [`ai-${key}`, value])) }).map(([key, value]) => `${key}:${value}`).join(",") || "none"}`,
+    `aiDj=${aiResult.status}${aiResult.plan ? `:${aiResult.plan.confidence}/${aiResult.plan.direction.summary}` : ""}`,
+    `aiProposals=${aiCandidates.slice(0, 4).map((candidate) => `${candidate.artist} - ${candidate.title}`).join(" | ") || "none"}`,
+    `winner=${resolved ? `${resolved.track.info?.author} - ${resolved.track.info?.title} (${resolved.entry.score})${aiResolved ? ";ai-director" : ";fallback-v3"}` : "none"}`
   );
 
   return resolved?.track || null;
@@ -319,6 +346,7 @@ module.exports = {
   MAX_CONSECUTIVE_ALBUM_TRACKS,
   MAX_CONSECUTIVE_ARTIST_TRACKS,
   MAX_ARTIST_CONTINUITY_STREAK,
+  buildAIDJCandidates,
   fetchAutoplayV3Track,
   selectV3Candidates,
   scoreCandidateV3,

@@ -5,34 +5,54 @@ const { getTrackMetadata } = require("./sessionProfile");
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_REASONING_EFFORT = "low";
-const DEFAULT_TIMEOUT_MS = 7000;
+const DEFAULT_TIMEOUT_MS = 12000;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
-const DEFAULT_MAX_CANDIDATES = 12;
+const DEFAULT_MAX_PROPOSALS = 8;
 const DEFAULT_MIN_CONFIDENCE = 0.55;
-const DEFAULT_MIN_BASELINE_DELTA = 8;
 const CACHE_LIMIT = 300;
 const REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 
-const AI_DJ_SYSTEM_PROMPT = `You are MewBit AI DJ, a conservative music-programming judge for a shared Discord listening room.
+const AI_DJ_DIRECTOR_SYSTEM_PROMPT = `You are MewBit AI DJ, the music director for a shared Discord listening room.
 
-The deterministic baseline is candidate c1. Your job is not to rubber-stamp it: only promote c2 or later when its supplied evidence gives it a clearly, materially better transition than c1. If no candidate clearly beats c1, select c1 with baselineDelta 0. You are not a search engine and must never invent, rename, or request music outside the candidate IDs.
+Choose the next songs yourself. The current song decides the immediate transition; the manual anchor and the manual listening history define the session's identity. Never let a session drift merely because recent tracks share a broad label such as "hip hop" or "pop". A transition must make musical and cultural sense to a listener, not merely share a genre tag.
 
-The manual anchor is the room's strongest taste signal. Preserve its genre, emotional tone, energy, and cultural lane while making the transition from the current song feel intentional. Prefer explicit relationship evidence (Last.fm similarity, album neighbours, trusted YouTube Mix) over title similarity or popularity.
+Return 4 to 8 specific, real recordings in deliberate priority order. Prefer, in order: a natural continuation from the same album or artist when it still fits; a close collaborator, scene, or sonic peer; then a measured bridge. Do not force an exit from an artist or album that is still the best fit. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
 
-Hard constraints have already been enforced before you see the shortlist: no provider mirrors/duplicates, forbidden alternate versions, incompatible genre jumps, skipped artists, and continuity safety limits. Do not try to override them. A same-artist or same-album continuation is desirable when it has a direct relationship and stays genre-compatible; do not force variety for its own sake.
+Use web search to verify exact artist/title pairs when your knowledge is uncertain, especially for niche, regional, or non-English music. Never output a vague genre, playlist, album-only recommendation, invented track, or a different version of an existing song. Avoid every supplied recent/blocked recording. If a credible direction cannot be formed, return "no_match" instead of guessing.
 
-Use only the supplied metadata. Do not claim knowledge of audio, lyrics, chart success, artists, or albums that is absent from the input. If none of the candidates forms a convincing transition, return decision "no_match" with candidateId "none". Keep reasons short and evidence-based.`;
+The bot will independently resolve every proposal with music providers and reject anything that is unavailable, misidentified, duplicated, skipped, or an incompatible version. Keep reasons compact and describe the transition, not generic praise.`;
 
-const AI_DJ_RESPONSE_SCHEMA = {
+const AI_DJ_DIRECTOR_RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["decision", "candidateId", "confidence", "transitionScore", "baselineDelta", "reasons"],
+  required: ["decision", "direction", "confidence", "candidates", "reasons"],
   properties: {
-    decision: { type: "string", enum: ["select", "no_match"] },
-    candidateId: { type: "string" },
+    decision: { type: "string", enum: ["propose", "no_match"] },
+    direction: {
+      type: "object",
+      additionalProperties: false,
+      required: ["summary", "energy", "mood"],
+      properties: {
+        summary: { type: "string" },
+        energy: { type: "string" },
+        mood: { type: "string" },
+      },
+    },
     confidence: { type: "number" },
-    transitionScore: { type: "integer" },
-    baselineDelta: { type: "integer", minimum: -100, maximum: 100 },
+    candidates: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["artist", "title", "album", "reason"],
+        properties: {
+          artist: { type: "string" },
+          title: { type: "string" },
+          album: { type: "string" },
+          reason: { type: "string" },
+        },
+      },
+    },
     reasons: { type: "array", items: { type: "string" } },
   },
 };
@@ -58,9 +78,9 @@ function getConfig() {
     reasoningEffort: readReasoningEffort(process.env.AI_DJ_REASONING_EFFORT),
     timeoutMs: readPositiveNumber(process.env.AI_DJ_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, { min: 500, max: 15000 }),
     cacheTtlMs: readPositiveNumber(process.env.AI_DJ_CACHE_TTL_MS, DEFAULT_CACHE_TTL_MS, { min: 0, max: 60 * 60 * 1000 }),
-    maxCandidates: Math.floor(readPositiveNumber(process.env.AI_DJ_MAX_CANDIDATES, DEFAULT_MAX_CANDIDATES, { min: 2, max: 20 })),
+    maxProposals: Math.floor(readPositiveNumber(process.env.AI_DJ_MAX_PROPOSALS, DEFAULT_MAX_PROPOSALS, { min: 2, max: 12 })),
+    useWebSearch: process.env.AI_DJ_WEB_SEARCH !== "false",
     minConfidence: readPositiveNumber(process.env.AI_DJ_MIN_CONFIDENCE, DEFAULT_MIN_CONFIDENCE, { min: 0, max: 1 }),
-    minBaselineDelta: readPositiveNumber(process.env.AI_DJ_MIN_BASELINE_DELTA, DEFAULT_MIN_BASELINE_DELTA, { min: 0, max: 50 }),
   };
 }
 
@@ -81,50 +101,34 @@ function describeTrack(track) {
   };
 }
 
-function describeCandidate(entry, candidateId) {
-  const candidate = entry.candidate || {};
+function describeRecentTrack(track) {
   return {
-    id: candidateId,
-    title: compactText(candidate.title),
-    artist: compactText(candidate.artist),
-    album: compactText(candidate.albumTitle),
-    genres: Array.isArray(candidate.genres) ? candidate.genres.slice(0, 6) : [],
-    source: compactText(candidate.source, 32),
-    relation: Number.isFinite(entry.details?.relation) ? entry.details.relation : 0,
-    genreFit: Number.isFinite(entry.details?.genreScore) ? entry.details.genreScore : 0,
-    sameArtist: Boolean(entry.details?.sameArtist),
-    sameAlbum: Boolean(entry.details?.sameAlbum),
-    similarity: Number.isFinite(candidate.similarity) ? Number(candidate.similarity.toFixed(3)) : null,
+    ...describeTrack(track),
+    autoplay: Boolean(track?.userData?.autoplay || track?.info?.autoplayed),
   };
 }
 
-function buildDecisionInput({ anchorTrack, referenceTrack, profile, context, ranked, maxCandidates }) {
-  const annotatedRanked = ranked.map((entry, index) => (
-    index < maxCandidates ? { ...entry, aiDjCandidateId: `c${index + 1}` } : entry
-  ));
-  const shortlist = annotatedRanked.slice(0, maxCandidates).map((entry) => ({
-    entry,
-    data: describeCandidate(entry, entry.aiDjCandidateId),
-  }));
-
+function buildDirectorInput({ anchorTrack, referenceTrack, profile, context, maxProposals }) {
   return {
-    ranked: annotatedRanked,
-    shortlist,
-    prompt: {
-      task: "Select the next track for the shared room.",
-      manualAnchor: describeTrack(anchorTrack),
-      currentTrack: describeTrack(referenceTrack),
-      recentTransitions: (profile.recentTracks || []).slice(-6).map(describeTrack),
-      upcomingManualTracks: (profile.pendingManualTracks || []).slice(0, 4).map(describeTrack),
-      constraints: {
-        anchorGenreFamilies: context.anchorFamilies || [],
-        currentGenreFamilies: context.referenceFamilies || [],
-        sameArtistStreak: context.artistStreak || 0,
-        sameAlbumStreak: context.albumStreak || 0,
-      },
-      baselineCandidateId: shortlist[0]?.entry.aiDjCandidateId || null,
-      promotionRule: "Select c2 or later only when it has a material evidence-based advantage over c1. Report that advantage in baselineDelta; use 0 when selecting c1.",
-      candidates: shortlist.map(({ data }) => data),
+    task: "Program the next track in this shared listening session.",
+    manualAnchor: describeTrack(anchorTrack),
+    currentTrack: describeTrack(referenceTrack),
+    manualTaste: {
+      genres: (profile.manualTasteGenres || []).slice(0, 8),
+      genreFamilies: (profile.manualTasteGenreFamilies || []).slice(0, 8),
+      features: profile.manualTasteFeatures || null,
+    },
+    manualHistory: (profile.manualHistory || []).slice(-8).map(describeRecentTrack),
+    recentSession: (profile.recentTracks || []).slice(-8).map(describeRecentTrack),
+    upcomingManualTracks: (profile.pendingManualTracks || []).slice(0, 4).map(describeTrack),
+    constraints: {
+      anchorGenreFamilies: context.anchorFamilies || [],
+      currentGenreFamilies: context.referenceFamilies || [],
+      blockedArtists: [...(context.skippedArtists || [])].slice(0, 12),
+      sameArtistStreak: context.artistStreak || 0,
+      sameAlbumStreak: context.albumStreak || 0,
+      maximumProposals: maxProposals,
+      forbidden: "recent repeats, provider mirrors, unrequested alternate versions, generic algorithmic or playlist suggestions",
     },
   };
 }
@@ -145,10 +149,7 @@ function getCachedDecision(key, now = Date.now()) {
 function cacheDecision(key, decision, ttlMs) {
   if (ttlMs <= 0) return;
   decisionCache.set(key, { decision, expiresAt: Date.now() + ttlMs });
-  if (decisionCache.size > CACHE_LIMIT) {
-    const oldest = decisionCache.keys().next().value;
-    decisionCache.delete(oldest);
-  }
+  if (decisionCache.size > CACHE_LIMIT) decisionCache.delete(decisionCache.keys().next().value);
 }
 
 function extractOutputText(payload) {
@@ -161,24 +162,38 @@ function extractOutputText(payload) {
   return "";
 }
 
-function validateDecision(value, allowedCandidateIds) {
+function validateDirectorPlan(value, maxProposals) {
   if (!value || typeof value !== "object") return null;
   const decision = value.decision;
-  const candidateId = String(value.candidateId || "");
   const confidence = Number(value.confidence);
-  const transitionScore = Number(value.transitionScore);
-  const baselineDelta = Number(value.baselineDelta);
-  const reasons = Array.isArray(value.reasons) ? value.reasons.map((reason) => compactText(reason, 160)).filter(Boolean).slice(0, 3) : [];
+  const direction = value.direction && typeof value.direction === "object" ? {
+    summary: compactText(value.direction.summary, 180),
+    energy: compactText(value.direction.energy, 80),
+    mood: compactText(value.direction.mood, 100),
+  } : null;
+  const reasons = Array.isArray(value.reasons)
+    ? value.reasons.map((reason) => compactText(reason, 180)).filter(Boolean).slice(0, 3)
+    : [];
+  const seen = new Set();
+  const candidates = Array.isArray(value.candidates) ? value.candidates.flatMap((candidate) => {
+    const artist = compactText(candidate?.artist, 120);
+    const title = compactText(candidate?.title, 160);
+    const album = compactText(candidate?.album, 160);
+    const reason = compactText(candidate?.reason, 180);
+    const key = `${artist.toLowerCase()}|${title.toLowerCase()}`;
+    if (!artist || !title || !reason || seen.has(key)) return [];
+    seen.add(key);
+    return [{ artist, title, album, reason }];
+  }).slice(0, maxProposals) : [];
 
-  if (!['select', 'no_match'].includes(decision) || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) return null;
-  if (!Number.isInteger(transitionScore) || transitionScore < 0 || transitionScore > 100 || !Number.isInteger(baselineDelta) || baselineDelta < -100 || baselineDelta > 100 || !reasons.length) return null;
-  if (decision === "select" && !allowedCandidateIds.has(candidateId)) return null;
-  if (decision === "no_match" && candidateId !== "none") return null;
-
-  return { decision, candidateId, confidence, transitionScore, baselineDelta, reasons };
+  if (!['propose', 'no_match'].includes(decision) || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) return null;
+  if (!direction?.summary || !direction.energy || !direction.mood || !reasons.length) return null;
+  if (decision === "propose" && !candidates.length) return null;
+  if (decision === "no_match" && candidates.length) return null;
+  return { decision, confidence, direction, candidates, reasons };
 }
 
-async function requestDecision(config, prompt) {
+async function requestDirectorPlan(config, prompt) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   timeout.unref?.();
@@ -186,25 +201,24 @@ async function requestDecision(config, prompt) {
   try {
     const response = await (fetchForTests || globalThis.fetch)(OPENAI_RESPONSES_URL, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: config.model,
         store: false,
-        max_output_tokens: 600,
+        max_output_tokens: 1100,
         reasoning: { effort: config.reasoningEffort },
+        tools: config.useWebSearch ? [{ type: "web_search", search_context_size: "low" }] : undefined,
+        tool_choice: config.useWebSearch ? "required" : undefined,
         input: [
-          { role: "system", content: [{ type: "input_text", text: AI_DJ_SYSTEM_PROMPT }] },
+          { role: "system", content: [{ type: "input_text", text: AI_DJ_DIRECTOR_SYSTEM_PROMPT }] },
           { role: "user", content: [{ type: "input_text", text: JSON.stringify(prompt) }] },
         ],
         text: {
           format: {
             type: "json_schema",
-            name: "mewbit_ai_dj_decision",
+            name: "mewbit_ai_dj_plan",
             strict: true,
-            schema: AI_DJ_RESPONSE_SCHEMA,
+            schema: AI_DJ_DIRECTOR_RESPONSE_SCHEMA,
           },
         },
       }),
@@ -215,7 +229,7 @@ async function requestDecision(config, prompt) {
     const outputText = extractOutputText(payload);
     if (!outputText) {
       const incompleteReason = compactText(payload?.incomplete_details?.reason, 80);
-      throw new Error(`OpenAI returned no structured decision${incompleteReason ? ` (${incompleteReason})` : ""}`);
+      throw new Error(`OpenAI returned no structured director plan${incompleteReason ? ` (${incompleteReason})` : ""}`);
     }
     return JSON.parse(outputText);
   } finally {
@@ -223,52 +237,31 @@ async function requestDecision(config, prompt) {
   }
 }
 
-async function rerankCandidatesWithAIDJ(input) {
+async function planNextTrackWithAIDJ(input) {
   const config = getConfig();
-  const original = input.ranked || [];
-  if (!original.length) return { ranked: original, status: "empty" };
-  if (!config.enabled) return { ranked: original, status: "disabled" };
-  if (!config.apiKey) return { ranked: original, status: "missing-api-key" };
-  if (typeof (fetchForTests || globalThis.fetch) !== "function") return { ranked: original, status: "fetch-unavailable" };
+  if (!config.enabled) return { status: "disabled", plan: null };
+  if (!config.apiKey) return { status: "missing-api-key", plan: null };
+  if (typeof (fetchForTests || globalThis.fetch) !== "function") return { status: "fetch-unavailable", plan: null };
 
-  const { ranked, shortlist, prompt } = buildDecisionInput({ ...input, maxCandidates: config.maxCandidates });
-  const entriesById = new Map(shortlist.map(({ entry }) => [entry.aiDjCandidateId, entry]));
-  const cacheKey = getCacheKey(config.model, prompt);
-  let decision = getCachedDecision(cacheKey);
-  let cached = Boolean(decision);
+  const prompt = buildDirectorInput({ ...input, maxProposals: config.maxProposals });
+  const cacheKey = getCacheKey(`${config.model}:director:${config.useWebSearch}`, prompt);
+  let plan = getCachedDecision(cacheKey);
+  const cached = Boolean(plan);
 
   try {
-    if (!decision) {
-      decision = await requestDecision(config, prompt);
-      decision = validateDecision(decision, new Set(entriesById.keys()));
-      if (!decision) throw new Error("OpenAI returned an invalid AI DJ decision");
-      cacheDecision(cacheKey, decision, config.cacheTtlMs);
+    if (!plan) {
+      plan = validateDirectorPlan(await requestDirectorPlan(config, prompt), config.maxProposals);
+      if (!plan) throw new Error("OpenAI returned an invalid AI DJ director plan");
+      cacheDecision(cacheKey, plan, config.cacheTtlMs);
     }
   } catch (error) {
-    Log.warning("AI DJ unavailable; using deterministic V3 selection", "", `error=${compactText(error.message, 180)}`);
-    return { ranked: original, status: "fallback-error" };
+    Log.warning("AI DJ director unavailable; using deterministic V3 fallback", "", `error=${compactText(error.message, 180)}`);
+    return { status: "fallback-error", plan: null };
   }
 
-  if (decision.decision !== "select") return { ranked: original, status: "no-match", decision, cached };
-  if (decision.confidence < config.minConfidence) return { ranked: original, status: "low-confidence", decision, cached };
-
-  const baselineCandidateId = shortlist[0]?.entry.aiDjCandidateId;
-  if (decision.candidateId === baselineCandidateId) {
-    return { ranked: original, status: "baseline-confirmed", decision, cached, model: config.model };
-  }
-  if (decision.baselineDelta < config.minBaselineDelta) {
-    return { ranked: original, status: "baseline-not-beaten", decision, cached, model: config.model };
-  }
-
-  const selected = entriesById.get(decision.candidateId);
-  const remaining = ranked.filter((entry) => entry.aiDjCandidateId !== decision.candidateId);
-  return {
-    ranked: [selected, ...remaining],
-    status: "selected",
-    decision,
-    cached,
-    model: config.model,
-  };
+  if (plan.decision !== "propose") return { status: "no-match", plan, cached, model: config.model };
+  if (plan.confidence < config.minConfidence) return { status: "low-confidence", plan, cached, model: config.model };
+  return { status: "planned", plan, cached, model: config.model };
 }
 
 function clearAIDJCacheForTests() {
@@ -280,10 +273,10 @@ function setAIDJFetchForTests(value) {
 }
 
 module.exports = {
-  AI_DJ_RESPONSE_SCHEMA,
-  AI_DJ_SYSTEM_PROMPT,
-  buildDecisionInput,
+  AI_DJ_DIRECTOR_RESPONSE_SCHEMA,
+  AI_DJ_DIRECTOR_SYSTEM_PROMPT,
+  buildDirectorInput,
   clearAIDJCacheForTests,
-  rerankCandidatesWithAIDJ,
+  planNextTrackWithAIDJ,
   setAIDJFetchForTests,
 };

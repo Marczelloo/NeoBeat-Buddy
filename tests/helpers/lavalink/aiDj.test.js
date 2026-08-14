@@ -2,9 +2,9 @@ const assert = require("node:assert");
 const { afterEach, beforeEach, describe, it } = require("node:test");
 
 const {
-  AI_DJ_SYSTEM_PROMPT,
+  AI_DJ_DIRECTOR_SYSTEM_PROMPT,
   clearAIDJCacheForTests,
-  rerankCandidatesWithAIDJ,
+  planNextTrackWithAIDJ,
   setAIDJFetchForTests,
 } = require("../../../helpers/lavalink/aiDj");
 
@@ -15,6 +15,8 @@ const envKeys = [
   "AI_DJ_REASONING_EFFORT",
   "AI_DJ_MIN_CONFIDENCE",
   "AI_DJ_CACHE_TTL_MS",
+  "AI_DJ_WEB_SEARCH",
+  "AI_DJ_MAX_PROPOSALS",
 ];
 let savedEnvironment = {};
 
@@ -25,38 +27,27 @@ function track(title, artist, options = {}) {
   };
 }
 
-function entry(title, artist, score, options = {}) {
-  return {
-    candidate: {
-      title,
-      artist,
-      source: options.source || "lastfm_similar",
-      genres: options.genres || ["hip hop"],
-      albumTitle: options.albumTitle || null,
-      similarity: options.similarity ?? 0.8,
-    },
-    score,
-    details: {
-      relation: 40,
-      genreScore: 30,
-      sameArtist: Boolean(options.sameArtist),
-      sameAlbum: Boolean(options.sameAlbum),
-    },
-  };
-}
-
-function input(ranked) {
+function input() {
   return {
     guildId: "ai-dj-test",
     anchorTrack: track("Frascati", "Taco Hemingway", { albumTitle: "Frascati" }),
     referenceTrack: track("Nostalgia", "Taco Hemingway", { albumTitle: "Frascati" }),
-    profile: { recentTracks: [], pendingManualTracks: [] },
-    context: { anchorFamilies: ["hiphop"], referenceFamilies: ["hiphop"], artistStreak: 1, albumStreak: 1 },
-    ranked,
+    profile: { recentTracks: [], manualHistory: [], pendingManualTracks: [], manualTasteGenres: [], manualTasteGenreFamilies: [] },
+    context: { anchorFamilies: ["hiphop"], referenceFamilies: ["hiphop"], artistStreak: 1, albumStreak: 1, skippedArtists: new Set() },
   };
 }
 
-describe("AI DJ reranker", () => {
+function plannedResponse(candidates = [{ artist: "Taco Hemingway", title: "Wosk", album: "Frascati", reason: "Direct album continuation." }]) {
+  return {
+    decision: "propose",
+    confidence: 0.9,
+    direction: { summary: "Stay in Frascati's intimate Warsaw rap lane.", energy: "steady-mid", mood: "late-night, reflective" },
+    candidates,
+    reasons: ["Manual anchor and current cut both favour reflective Polish rap."],
+  };
+}
+
+describe("AI DJ director", () => {
   beforeEach(() => {
     savedEnvironment = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
     process.env.AI_DJ_ENABLED = "true";
@@ -65,6 +56,8 @@ describe("AI DJ reranker", () => {
     process.env.AI_DJ_REASONING_EFFORT = "low";
     process.env.AI_DJ_MIN_CONFIDENCE = "0.55";
     process.env.AI_DJ_CACHE_TTL_MS = "300000";
+    process.env.AI_DJ_WEB_SEARCH = "true";
+    process.env.AI_DJ_MAX_PROPOSALS = "8";
     clearAIDJCacheForTests();
     setAIDJFetchForTests(null);
   });
@@ -78,161 +71,56 @@ describe("AI DJ reranker", () => {
     setAIDJFetchForTests(null);
   });
 
-  it("uses strict structured output and promotes only a supplied candidate", async () => {
+  it("uses structured output and web-grounded music direction", async () => {
     let request;
     setAIDJFetchForTests(async (_url, options) => {
       request = JSON.parse(options.body);
-      return {
-        ok: true,
-        json: async () => ({
-          output_text: JSON.stringify({
-            decision: "select",
-            candidateId: "c2",
-            confidence: 0.91,
-            transitionScore: 88,
-            baselineDelta: 14,
-            reasons: ["Stronger continuity with the manual anchor."],
-          }),
-        }),
-      };
+      return { ok: true, json: async () => ({ output_text: JSON.stringify(plannedResponse()) }) };
     });
 
-    const result = await rerankCandidatesWithAIDJ(input([
-      entry("Safe First", "Artist One", 80),
-      entry("Best Transition", "Artist Two", 76),
-    ]));
+    const result = await planNextTrackWithAIDJ(input());
 
-    assert.strictEqual(result.status, "selected");
-    assert.strictEqual(result.ranked[0].candidate.title, "Best Transition");
-    assert.strictEqual(result.ranked.filter((candidate) => candidate.candidate.title === "Best Transition").length, 1);
+    assert.strictEqual(result.status, "planned");
+    assert.strictEqual(result.plan.candidates[0].title, "Wosk");
     assert.strictEqual(request.model, "gpt-5.6-terra");
-    assert.strictEqual(request.reasoning.effort, "low");
     assert.strictEqual(request.store, false);
-    assert.strictEqual(request.text.format.type, "json_schema");
-    assert.strictEqual(request.text.format.strict, true);
-    assert.match(request.input[0].content[0].text, /MewBit AI DJ/);
-    assert.match(AI_DJ_SYSTEM_PROMPT, /must never invent/);
-    assert.strictEqual(request.input[1].content[0].text.includes("deterministicScore"), false);
-  });
-
-  it("rejects an invented candidate and preserves deterministic V3 order", async () => {
-    setAIDJFetchForTests(async () => ({
-      ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          decision: "select",
-            candidateId: "made-up-track",
-            confidence: 0.99,
-            transitionScore: 99,
-            baselineDelta: 99,
-            reasons: ["Nope"],
-        }),
-      }),
-    }));
-
-    const result = await rerankCandidatesWithAIDJ(input([entry("Deterministic Winner", "Artist One", 80)]));
-
-    assert.strictEqual(result.status, "fallback-error");
-    assert.strictEqual(result.ranked[0].candidate.title, "Deterministic Winner");
-  });
-
-  it("keeps V3 order for a low-confidence decision", async () => {
-    setAIDJFetchForTests(async () => ({
-      ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          decision: "select",
-            candidateId: "c2",
-            confidence: 0.2,
-            transitionScore: 61,
-            baselineDelta: 20,
-            reasons: ["Weak evidence"],
-        }),
-      }),
-    }));
-
-    const result = await rerankCandidatesWithAIDJ(input([
-      entry("Deterministic Winner", "Artist One", 80),
-      entry("Uncertain Option", "Artist Two", 76),
-    ]));
-
-    assert.strictEqual(result.status, "low-confidence");
-    assert.strictEqual(result.ranked[0].candidate.title, "Deterministic Winner");
+    assert.strictEqual(request.tools[0].type, "web_search");
+    assert.strictEqual(request.tool_choice, "required");
+    assert.strictEqual(request.text.format.name, "mewbit_ai_dj_plan");
+    assert.match(request.input[0].content[0].text, /music director/);
+    assert.match(AI_DJ_DIRECTOR_SYSTEM_PROMPT, /Use web search to verify/);
   });
 
   it("caches an identical listening context", async () => {
     let calls = 0;
     setAIDJFetchForTests(async () => {
       calls += 1;
-      return {
-        ok: true,
-        json: async () => ({
-          output_text: JSON.stringify({
-            decision: "select",
-            candidateId: "c1",
-            confidence: 0.8,
-            transitionScore: 80,
-            baselineDelta: 0,
-            reasons: ["Reliable direct relation"],
-          }),
-        }),
-      };
+      return { ok: true, json: async () => ({ output_text: JSON.stringify(plannedResponse()) }) };
     });
 
-    const payload = input([entry("Cached Choice", "Artist One", 80)]);
-    const first = await rerankCandidatesWithAIDJ(payload);
-    const second = await rerankCandidatesWithAIDJ(payload);
+    const first = await planNextTrackWithAIDJ(input());
+    const second = await planNextTrackWithAIDJ(input());
 
     assert.strictEqual(calls, 1);
     assert.strictEqual(first.cached, false);
     assert.strictEqual(second.cached, true);
   });
 
-  it("keeps V3's first candidate when AI confirms the baseline", async () => {
+  it("deduplicates proposals and falls back if the plan is unsafe or invalid", async () => {
     setAIDJFetchForTests(async () => ({
       ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          decision: "select",
-          candidateId: "c1",
-          confidence: 0.94,
-          transitionScore: 89,
-          baselineDelta: 0,
-          reasons: ["The baseline has the strongest direct relationship."],
-        }),
-      }),
+      json: async () => ({ output_text: JSON.stringify(plannedResponse([
+        { artist: "Artist", title: "Track", album: "", reason: "Fit" },
+        { artist: "Artist", title: "Track", album: "", reason: "Duplicate" },
+      ])) }),
     }));
+    const result = await planNextTrackWithAIDJ(input());
+    assert.strictEqual(result.status, "planned");
+    assert.strictEqual(result.plan.candidates.length, 1);
 
-    const result = await rerankCandidatesWithAIDJ(input([
-      entry("Deterministic Winner", "Artist One", 80),
-      entry("Alternative", "Artist Two", 76),
-    ]));
-
-    assert.strictEqual(result.status, "baseline-confirmed");
-    assert.strictEqual(result.ranked[0].candidate.title, "Deterministic Winner");
-  });
-
-  it("rejects an AI promotion without a material baseline advantage", async () => {
-    setAIDJFetchForTests(async () => ({
-      ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          decision: "select",
-          candidateId: "c2",
-          confidence: 0.96,
-          transitionScore: 90,
-          baselineDelta: 3,
-          reasons: ["Only a minor difference from the baseline."],
-        }),
-      }),
-    }));
-
-    const result = await rerankCandidatesWithAIDJ(input([
-      entry("Deterministic Winner", "Artist One", 80),
-      entry("Weakly Better", "Artist Two", 76),
-    ]));
-
-    assert.strictEqual(result.status, "baseline-not-beaten");
-    assert.strictEqual(result.ranked[0].candidate.title, "Deterministic Winner");
+    clearAIDJCacheForTests();
+    setAIDJFetchForTests(async () => ({ ok: true, json: async () => ({ output_text: "not-json" }) }));
+    const fallback = await planNextTrackWithAIDJ(input());
+    assert.strictEqual(fallback.status, "fallback-error");
   });
 });

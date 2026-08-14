@@ -6,6 +6,7 @@ const {
   MAX_CONSECUTIVE_ALBUM_TRACKS,
   MAX_CONSECUTIVE_ARTIST_TRACKS,
   MAX_ARTIST_CONTINUITY_STREAK,
+  buildAIDJCandidates,
   selectV3Candidates,
 } = require("../../../helpers/lavalink/autoplayV3");
 
@@ -124,5 +125,49 @@ describe("Autoplay V3 selection", () => {
     assert.strictEqual(rejected["skipped-artist"], 1);
     assert.strictEqual(ranked.length, 1);
     assert.strictEqual(ranked[0].candidate.title, "Mix Continuation");
+  });
+
+  it("puts an AI director's exact proposals ahead of generic provider fallback candidates", () => {
+    const aiCandidates = buildAIDJCandidates({
+      status: "planned",
+      model: "gpt-5.6-terra",
+      plan: {
+        confidence: 0.91,
+        direction: { summary: "Reflective Polish rap", energy: "mid", mood: "late-night" },
+        reasons: ["Protect the manual lane."],
+        candidates: [
+          { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", reason: "Direct album continuation." },
+        ],
+      },
+    });
+    const { ranked, rejected } = selectV3Candidates([
+      ...aiCandidates,
+      candidate("Broad Mix Result", "Unrelated Artist", "youtube_mix", { genres: ["hip hop"] }),
+    ], context());
+
+    assert.deepStrictEqual(rejected, {});
+    assert.strictEqual(ranked[0].candidate.title, "Wosk");
+    assert.strictEqual(ranked[0].candidate.source, "ai_dj");
+  });
+
+  it("still rejects an AI proposal that was already played in the session", () => {
+    const aiCandidates = buildAIDJCandidates({
+      status: "planned",
+      model: "gpt-5.6-terra",
+      plan: {
+        confidence: 0.91,
+        direction: { summary: "Reflective Polish rap", energy: "mid", mood: "late-night" },
+        reasons: ["Protect the manual lane."],
+        candidates: [
+          { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", reason: "Direct album continuation." },
+        ],
+      },
+    });
+    const { ranked, rejected } = selectV3Candidates(aiCandidates, context({
+      profile: { cooldownTracks: [{ info: { title: "Wosk", author: "Taco Hemingway" } }] },
+    }));
+
+    assert.deepStrictEqual(ranked, []);
+    assert.strictEqual(rejected["recent-duplicate"], 1);
   });
 });
