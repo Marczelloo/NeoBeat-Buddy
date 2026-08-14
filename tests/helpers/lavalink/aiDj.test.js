@@ -12,6 +12,7 @@ const envKeys = [
   "AI_DJ_ENABLED",
   "OPENAI_API_KEY",
   "AI_DJ_MODEL",
+  "AI_DJ_REASONING_EFFORT",
   "AI_DJ_MIN_CONFIDENCE",
   "AI_DJ_CACHE_TTL_MS",
 ];
@@ -60,7 +61,8 @@ describe("AI DJ reranker", () => {
     savedEnvironment = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
     process.env.AI_DJ_ENABLED = "true";
     process.env.OPENAI_API_KEY = "test-key";
-    process.env.AI_DJ_MODEL = "gpt-5-mini";
+    process.env.AI_DJ_MODEL = "gpt-5.6-terra";
+    process.env.AI_DJ_REASONING_EFFORT = "low";
     process.env.AI_DJ_MIN_CONFIDENCE = "0.55";
     process.env.AI_DJ_CACHE_TTL_MS = "300000";
     clearAIDJCacheForTests();
@@ -102,7 +104,8 @@ describe("AI DJ reranker", () => {
     assert.strictEqual(result.status, "selected");
     assert.strictEqual(result.ranked[0].candidate.title, "Best Transition");
     assert.strictEqual(result.ranked.filter((candidate) => candidate.candidate.title === "Best Transition").length, 1);
-    assert.strictEqual(request.model, "gpt-5-mini");
+    assert.strictEqual(request.model, "gpt-5.6-terra");
+    assert.strictEqual(request.reasoning.effort, "low");
     assert.strictEqual(request.store, false);
     assert.strictEqual(request.text.format.type, "json_schema");
     assert.strictEqual(request.text.format.strict, true);

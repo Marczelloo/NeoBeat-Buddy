@@ -3,12 +3,14 @@ const Log = require("../logs/log");
 const { getTrackMetadata } = require("./sessionProfile");
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const DEFAULT_MODEL = "gpt-5-mini";
+const DEFAULT_MODEL = "gpt-5.6-terra";
+const DEFAULT_REASONING_EFFORT = "low";
 const DEFAULT_TIMEOUT_MS = 4500;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_CANDIDATES = 12;
 const DEFAULT_MIN_CONFIDENCE = 0.55;
 const CACHE_LIMIT = 300;
+const REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 
 const AI_DJ_SYSTEM_PROMPT = `You are MewBit AI DJ, a conservative music-programming judge for a shared Discord listening room.
 
@@ -41,11 +43,17 @@ function readPositiveNumber(value, fallback, { min = 0, max = Number.POSITIVE_IN
   return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
 }
 
+function readReasoningEffort(value) {
+  const normalized = String(value || DEFAULT_REASONING_EFFORT).trim().toLowerCase();
+  return REASONING_EFFORTS.has(normalized) ? normalized : DEFAULT_REASONING_EFFORT;
+}
+
 function getConfig() {
   return {
     enabled: process.env.AI_DJ_ENABLED === "true",
     apiKey: String(process.env.OPENAI_API_KEY || "").trim(),
     model: String(process.env.AI_DJ_MODEL || DEFAULT_MODEL).trim() || DEFAULT_MODEL,
+    reasoningEffort: readReasoningEffort(process.env.AI_DJ_REASONING_EFFORT),
     timeoutMs: readPositiveNumber(process.env.AI_DJ_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, { min: 500, max: 15000 }),
     cacheTtlMs: readPositiveNumber(process.env.AI_DJ_CACHE_TTL_MS, DEFAULT_CACHE_TTL_MS, { min: 0, max: 60 * 60 * 1000 }),
     maxCandidates: Math.floor(readPositiveNumber(process.env.AI_DJ_MAX_CANDIDATES, DEFAULT_MAX_CANDIDATES, { min: 2, max: 20 })),
@@ -181,7 +189,7 @@ async function requestDecision(config, prompt) {
         model: config.model,
         store: false,
         max_output_tokens: 600,
-        reasoning: { effort: "minimal" },
+        reasoning: { effort: config.reasoningEffort },
         input: [
           { role: "system", content: [{ type: "input_text", text: AI_DJ_SYSTEM_PROMPT }] },
           { role: "user", content: [{ type: "input_text", text: JSON.stringify(prompt) }] },

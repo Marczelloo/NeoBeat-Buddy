@@ -161,7 +161,8 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_V3_MAX_ARTIST_STREAK` | `3` | Maximum consecutive tracks by one artist before V3 requires a different artist. |
 | `AI_DJ_ENABLED` | `false` | Enables the OpenAI AI DJ reranker after V3's deterministic hard filters. |
 | `OPENAI_API_KEY` | — | Secret API key for the OpenAI Responses API. Keep it only in local/server `.env` files. |
-| `AI_DJ_MODEL` | `gpt-5-mini` | Responses API model used for structured AI DJ decisions. |
+| `AI_DJ_MODEL` | `gpt-5.6-terra` | Quality/cost-balanced Responses API model used for structured AI DJ decisions. |
+| `AI_DJ_REASONING_EFFORT` | `low` | GPT-5.6 reasoning depth; `low` keeps autoplay decisions responsive. |
 | `AI_DJ_TIMEOUT_MS` | `4500` | Maximum AI DJ wait before falling back to V3. |
 | `AI_DJ_CACHE_TTL_MS` | `300000` | Caches an identical sanitized listening context to avoid duplicate API calls. |
 | `AI_DJ_MAX_CANDIDATES` | `12` | Maximum V3-approved candidates presented to the model. |
