@@ -88,7 +88,7 @@ describe("AI DJ director", () => {
     assert.strictEqual(request.tool_choice, "required");
     assert.strictEqual(request.text.format.name, "mewbit_ai_dj_plan");
     assert.match(request.input[0].content[0].text, /music director/);
-    assert.match(AI_DJ_DIRECTOR_SYSTEM_PROMPT, /Use web search to verify/);
+    assert.match(AI_DJ_DIRECTOR_SYSTEM_PROMPT, /web search is available/);
   });
 
   it("caches an identical listening context", async () => {
@@ -104,6 +104,21 @@ describe("AI DJ director", () => {
     assert.strictEqual(calls, 1);
     assert.strictEqual(first.cached, false);
     assert.strictEqual(second.cached, true);
+  });
+
+  it("does not invoke a paid web search unless explicitly enabled", async () => {
+    process.env.AI_DJ_WEB_SEARCH = "false";
+    let request;
+    setAIDJFetchForTests(async (_url, options) => {
+      request = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ output_text: JSON.stringify(plannedResponse()) }) };
+    });
+
+    const result = await planNextTrackWithAIDJ(input());
+
+    assert.strictEqual(result.status, "planned");
+    assert.strictEqual(request.tools, undefined);
+    assert.strictEqual(request.tool_choice, undefined);
   });
 
   it("deduplicates proposals and falls back if the plan is unsafe or invalid", async () => {

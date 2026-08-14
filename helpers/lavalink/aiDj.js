@@ -18,7 +18,7 @@ Choose the next songs yourself. The current song decides the immediate transitio
 
 Return 4 to 8 specific, real recordings in deliberate priority order. Prefer, in order: a natural continuation from the same album or artist when it still fits; a close collaborator, scene, or sonic peer; then a measured bridge. Do not force an exit from an artist or album that is still the best fit. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
 
-Use web search to verify exact artist/title pairs when your knowledge is uncertain, especially for niche, regional, or non-English music. Never output a vague genre, playlist, album-only recommendation, invented track, or a different version of an existing song. Avoid every supplied recent/blocked recording. If a credible direction cannot be formed, return "no_match" instead of guessing.
+When web search is available, use it to verify exact artist/title pairs when your knowledge is uncertain, especially for niche, regional, or non-English music. Never output a vague genre, playlist, album-only recommendation, invented track, or a different version of an existing song. Avoid every supplied recent/blocked recording. If a credible direction cannot be formed, return "no_match" instead of guessing.
 
 The bot will independently resolve every proposal with music providers and reject anything that is unavailable, misidentified, duplicated, skipped, or an incompatible version. Keep reasons compact and describe the transition, not generic praise.`;
 
@@ -79,7 +79,7 @@ function getConfig() {
     timeoutMs: readPositiveNumber(process.env.AI_DJ_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, { min: 500, max: 15000 }),
     cacheTtlMs: readPositiveNumber(process.env.AI_DJ_CACHE_TTL_MS, DEFAULT_CACHE_TTL_MS, { min: 0, max: 60 * 60 * 1000 }),
     maxProposals: Math.floor(readPositiveNumber(process.env.AI_DJ_MAX_PROPOSALS, DEFAULT_MAX_PROPOSALS, { min: 2, max: 12 })),
-    useWebSearch: process.env.AI_DJ_WEB_SEARCH !== "false",
+    useWebSearch: process.env.AI_DJ_WEB_SEARCH === "true",
     minConfidence: readPositiveNumber(process.env.AI_DJ_MIN_CONFIDENCE, DEFAULT_MIN_CONFIDENCE, { min: 0, max: 1 }),
   };
 }

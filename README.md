@@ -166,7 +166,7 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AI_DJ_TIMEOUT_MS` | `12000` | Maximum AI DJ wait before falling back to V3. Planning runs in parallel with provider fallback collection. |
 | `AI_DJ_CACHE_TTL_MS` | `300000` | Caches an identical sanitized listening context to avoid duplicate API calls. |
 | `AI_DJ_MAX_PROPOSALS` | `8` | Maximum exact artist/title recordings in one AI DJ plan. |
-| `AI_DJ_WEB_SEARCH` | `true` | Makes the director use OpenAI web search to verify exact recordings. Set `false` to use only model knowledge and provider resolution. |
+| `AI_DJ_WEB_SEARCH` | `false` | Optional paid OpenAI web lookup. Provider resolution still verifies every proposal; enable only when you explicitly want external lookup costs. |
 | `AI_DJ_MIN_CONFIDENCE` | `0.55` | AI plans below this confidence leave V3 as the fallback. |
 | `AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK` | `6` | Emergency cap for a direct, genre-compatible album run after its soft cap. |
 | `AUTOPLAY_V3_MAX_ARTIST_CONTINUITY_STREAK` | `6` | Emergency cap for a direct, genre-compatible artist run after its soft cap. |
