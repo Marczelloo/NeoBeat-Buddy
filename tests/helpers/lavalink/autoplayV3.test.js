@@ -7,6 +7,7 @@ const {
   MAX_CONSECUTIVE_ARTIST_TRACKS,
   MAX_ARTIST_CONTINUITY_STREAK,
   buildAIDJCandidates,
+  hasRecentExposure,
   selectV3Candidates,
 } = require("../../../helpers/lavalink/autoplayV3");
 
@@ -39,6 +40,19 @@ function context(overrides = {}) {
 }
 
 describe("Autoplay V3 selection", () => {
+  it("allows a recording to return after the short-session repeat cooldown", () => {
+    const now = Date.now();
+    const candidate = { artist: "Taco Hemingway", title: "Nostalgia" };
+    const track = {
+      info: { identifier: "nostalgia", author: "Taco Hemingway", title: "Nostalgia" },
+      userData: { autoplayPlayedAt: now - (61 * 60 * 1000) },
+    };
+
+    assert.strictEqual(hasRecentExposure(candidate, { cooldownTracks: [track] }, { tracks: [] }, null, now), false);
+    track.userData.autoplayPlayedAt = now - 1000;
+    assert.strictEqual(hasRecentExposure(candidate, { cooldownTracks: [track] }, { tracks: [] }, null, now), true);
+  });
+
   it("prioritizes a compatible same-album neighbour over a broad Last.fm relation", () => {
     const { ranked } = selectV3Candidates(
       [

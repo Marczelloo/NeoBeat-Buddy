@@ -8,6 +8,7 @@ const sessionStartTime = new Map();
 const genreCache = new Map();
 const AUTOPLAY_VIBE_WEIGHT = 0.3;
 const MANUAL_CONTEXT_LIMIT = Math.max(Number(process.env.AUTOPLAY_MANUAL_CONTEXT_LIMIT ?? 12), 1);
+const MANUAL_MEMORY_LIMIT = Math.max(Number(process.env.AUTOPLAY_MANUAL_MEMORY_LIMIT ?? 40), MANUAL_CONTEXT_LIMIT);
 const PENDING_MANUAL_CONTEXT_LIMIT = Math.max(Number(process.env.AUTOPLAY_PENDING_MANUAL_CONTEXT_LIMIT ?? 4), 1);
 const AUTOPLAY_ARTIST_WINDOW = Math.max(Number(process.env.AUTOPLAY_ARTIST_WINDOW ?? 5), 3);
 
@@ -92,6 +93,53 @@ function buildManualTasteProfile(manualTracks) {
   };
 }
 
+function getManualMemoryTracks(tracks) {
+  const seen = new Set();
+  const newestFirst = [];
+  for (let index = tracks.length - 1; index >= 0; index -= 1) {
+    const track = tracks[index];
+    if (!track) continue;
+    const key = getTrackContextKey(track);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    newestFirst.push(track);
+    if (newestFirst.length >= MANUAL_MEMORY_LIMIT) break;
+  }
+  return newestFirst.reverse();
+}
+
+function buildManualMemory(manualTracks) {
+  const tracks = getManualMemoryTracks(manualTracks);
+  const artists = new Map();
+  const albums = new Map();
+
+  tracks.forEach((track, index) => {
+    const artist = getSessionArtist(track);
+    if (artist) {
+      const entry = artists.get(artist) || { artist, count: 0, lastIndex: index };
+      entry.count += 1;
+      entry.lastIndex = index;
+      artists.set(artist, entry);
+    }
+
+    const metadata = getTrackMetadata(track);
+    const album = String(metadata.albumTitle || "").trim();
+    if (!album || !artist) return;
+    const key = `${artist.toLowerCase()}|${album.toLowerCase()}`;
+    const entry = albums.get(key) || { artist, album, count: 0, lastIndex: index };
+    entry.count += 1;
+    entry.lastIndex = index;
+    albums.set(key, entry);
+  });
+
+  const sortMemory = (left, right) => right.count - left.count || right.lastIndex - left.lastIndex;
+  return {
+    tracks,
+    artists: [...artists.values()].sort(sortMemory).slice(0, 16).map(({ artist, count }) => ({ artist, count })),
+    albums: [...albums.values()].sort(sortMemory).slice(0, 16).map(({ artist, album, count }) => ({ artist, album, count })),
+  };
+}
+
 function getTrackMetadata(track) {
   const identifier = track?.info?.identifier;
   const direct = track?.userData || {};
@@ -169,6 +217,7 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
   const manualAnchorRecords = buildManualAnchorRecords(manualHistoryWithReference, pendingManual);
   const manualAnchorTracks = manualAnchorRecords.map((record) => record.track);
   const manualTaste = buildManualTasteProfile(manualHistoryWithReference);
+  const manualMemory = buildManualMemory(manualHistoryWithReference);
   const manualAnchorGenreFamilies = [
     ...new Set(manualAnchorRecords.flatMap((record) => getGenreFamilies(getTrackMetadata(record.track).genres))),
   ];
@@ -231,6 +280,9 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
       manualTasteGenres: [],
       manualTasteGenreFamilies: [],
       manualTasteFeatures: null,
+      manualMemoryTracks: [],
+      manualArtistMemory: [],
+      manualAlbumMemory: [],
       recentAutoplayArtists: [],
       autoplayArtistStreak: 0,
       referenceIsManual: isManualTrack(referenceTrack),
@@ -459,6 +511,9 @@ function buildSessionProfile(guildId, referenceTrack, { pendingManualTracks = []
     manualTasteGenres: manualTaste.genres,
     manualTasteGenreFamilies: manualTaste.genreFamilies,
     manualTasteFeatures: manualTaste.features,
+    manualMemoryTracks: manualMemory.tracks,
+    manualArtistMemory: manualMemory.artists,
+    manualAlbumMemory: manualMemory.albums,
     recentAutoplayArtists,
     autoplayArtistStreak,
     referenceIsManual: isManualTrack(referenceTrack),
@@ -476,4 +531,5 @@ module.exports = {
   genreCache,
   getContinuityFeatures,
   getSmoothedTarget,
+  buildManualMemory,
 };

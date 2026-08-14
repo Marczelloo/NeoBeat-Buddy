@@ -1,9 +1,10 @@
 const crypto = require("node:crypto");
 const Log = require("../logs/log");
 const { getTrackMetadata } = require("./sessionProfile");
+const { getTrackIdentityKeys } = require("./trackIdentity");
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const DEFAULT_MODEL = "gpt-5.6-terra";
+const DEFAULT_MODEL = "gpt-5.6-luna";
 const DEFAULT_REASONING_EFFORT = "low";
 const DEFAULT_TIMEOUT_MS = 12000;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -14,11 +15,11 @@ const REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "ma
 
 const AI_DJ_DIRECTOR_SYSTEM_PROMPT = `You are MewBit AI DJ, the music director for a shared Discord listening room.
 
-Choose the next songs yourself. The current song decides the immediate transition; the manual anchor and the manual listening history define the session's identity. Never let a session drift merely because recent tracks share a broad label such as "hip hop" or "pop". A transition must make musical and cultural sense to a listener, not merely share a genre tag.
+Choose the next songs yourself. The current song decides the immediate transition; the manual anchor and the manual listening history define the session's identity. The supplied manual memory is the room's durable taste map: it contains music listeners deliberately chose earlier, plus their recurring artists and albums. Treat it as more important than autoplay history. Never let a session drift merely because recent tracks share a broad label such as "hip hop" or "pop". A transition must make musical and cultural sense to a listener, not merely share a genre tag.
 
-Return 4 to 8 specific, real recordings in deliberate priority order. Prefer, in order: a natural continuation from the same album or artist when it still fits; a close collaborator, scene, or sonic peer; then a measured bridge. Do not force an exit from an artist or album that is still the best fit. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
+Return 4 to 8 specific, real recordings in deliberate priority order. Prefer, in order: a natural continuation from the same album or artist when it still fits; a return to a compatible artist or album from manual memory; a close collaborator, scene, or sonic peer; then a measured bridge. Do not force an exit from an artist or album that is still the best fit. Leaving an album does not ban returning to it later if the transition remains natural. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
 
-When web search is available, use it to verify exact artist/title pairs when your knowledge is uncertain, especially for niche, regional, or non-English music. Never output a vague genre, playlist, album-only recommendation, invented track, or a different version of an existing song. Avoid every supplied recent/blocked recording. If a credible direction cannot be formed, return "no_match" instead of guessing.
+When web search is available, use it to verify exact artist/title pairs when your knowledge is uncertain, especially for niche, regional, or non-English music. Never output a vague genre, playlist, album-only recommendation, invented track, or a different version of an existing song. Avoid every supplied recent/blocked recording. A recording may only repeat after the supplied repeat cooldown has elapsed; within that cooldown, choose another fitting cut. If a credible direction cannot be formed, return "no_match" instead of guessing.
 
 The bot will independently resolve every proposal with music providers and reject anything that is unavailable, misidentified, duplicated, skipped, or an incompatible version. Keep reasons compact and describe the transition, not generic praise.`;
 
@@ -119,6 +120,11 @@ function buildDirectorInput({ anchorTrack, referenceTrack, profile, context, max
       features: profile.manualTasteFeatures || null,
     },
     manualHistory: (profile.manualHistory || []).slice(-8).map(describeRecentTrack),
+    manualMemory: {
+      tracks: (profile.manualMemoryTracks || []).slice(-24).map(describeTrack),
+      artists: (profile.manualArtistMemory || []).slice(0, 12),
+      albums: (profile.manualAlbumMemory || []).slice(0, 12),
+    },
     recentSession: (profile.recentTracks || []).slice(-8).map(describeRecentTrack),
     upcomingManualTracks: (profile.pendingManualTracks || []).slice(0, 4).map(describeTrack),
     constraints: {
@@ -127,6 +133,7 @@ function buildDirectorInput({ anchorTrack, referenceTrack, profile, context, max
       blockedArtists: [...(context.skippedArtists || [])].slice(0, 12),
       sameArtistStreak: context.artistStreak || 0,
       sameAlbumStreak: context.albumStreak || 0,
+      repeatCooldownMinutes: Math.round((Number(context.repeatCooldownMs) || 0) / 60_000),
       maximumProposals: maxProposals,
       forbidden: "recent repeats, provider mirrors, unrequested alternate versions, generic algorithmic or playlist suggestions",
     },
@@ -193,6 +200,32 @@ function validateDirectorPlan(value, maxProposals) {
   return { decision, confidence, direction, candidates, reasons };
 }
 
+function isSameRecording(proposal, track) {
+  const proposalKeys = new Set(getTrackIdentityKeys(proposal, { includeIdentifier: false }));
+  if (!proposalKeys.size) return false;
+  return getTrackIdentityKeys(track, { includeIdentifier: false }).some((key) => proposalKeys.has(key));
+}
+
+function filterPlanRepeats(plan, { referenceTrack, profile, context }, now = Date.now()) {
+  if (!plan?.candidates?.length) return plan;
+  const repeatCooldownMs = Math.max(Number(context?.repeatCooldownMs) || 0, 0);
+  const rememberedTracks = [
+    ...(profile?.cooldownTracks || []),
+    ...(profile?.recentTracks || []),
+    ...(profile?.manualHistory || []),
+  ].filter(Boolean);
+  const candidates = plan.candidates.filter((proposal) => {
+    if (isSameRecording(proposal, referenceTrack)) return false;
+    if (repeatCooldownMs <= 0) return true;
+    return !rememberedTracks.some((track) => {
+      if (!isSameRecording(proposal, track)) return false;
+      const playedAt = Number(track?.userData?.autoplayPlayedAt);
+      return !Number.isFinite(playedAt) || now - playedAt < repeatCooldownMs;
+    });
+  });
+  return { ...plan, candidates };
+}
+
 async function requestDirectorPlan(config, prompt) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -252,6 +285,7 @@ async function planNextTrackWithAIDJ(input) {
     if (!plan) {
       plan = validateDirectorPlan(await requestDirectorPlan(config, prompt), config.maxProposals);
       if (!plan) throw new Error("OpenAI returned an invalid AI DJ director plan");
+      plan = filterPlanRepeats(plan, input);
       cacheDecision(cacheKey, plan, config.cacheTtlMs);
     }
   } catch (error) {
@@ -259,7 +293,7 @@ async function planNextTrackWithAIDJ(input) {
     return { status: "fallback-error", plan: null };
   }
 
-  if (plan.decision !== "propose") return { status: "no-match", plan, cached, model: config.model };
+  if (plan.decision !== "propose" || !plan.candidates.length) return { status: "no-match", plan, cached, model: config.model };
   if (plan.confidence < config.minConfidence) return { status: "low-confidence", plan, cached, model: config.model };
   return { status: "planned", plan, cached, model: config.model };
 }
@@ -277,6 +311,7 @@ module.exports = {
   AI_DJ_DIRECTOR_SYSTEM_PROMPT,
   buildDirectorInput,
   clearAIDJCacheForTests,
+  filterPlanRepeats,
   planNextTrackWithAIDJ,
   setAIDJFetchForTests,
 };

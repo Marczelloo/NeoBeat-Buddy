@@ -40,7 +40,7 @@ MewBit is a Discord music bot with a shared listening **Discord Activity**. It u
 - Keeps tempo styles such as nightcore, slowed, and sped-up available as valid autoplay lanes, while requiring remix/live/acoustic/cover variants to match the current version lane.
 - Uses direct YouTube Mix candidates only as a constrained, score-gated fallback for tracks with insufficient metadata (for example niche or meme uploads), rather than broad unrelated search.
 - Places manually queued tracks ahead of autoplay tracks; a manually added track goes after other manual items and before the autoplay tail.
-- Optional AI DJ mode is the primary music director. It receives the first user-selected track as a durable session anchor, the current track, manual history, recent autoplay trail, and pending manual queue; it then proposes exact next recordings and may use web search to verify uncertain artist/title pairs. Every proposal still has to resolve through a music provider and pass duplicate, mirror, version, skip, album, and artist safeguards. V3 remains a constrained fallback only when the AI plan is unavailable, invalid, low confidence, or cannot be resolved.
+- Optional AI DJ mode is the primary music director. It uses fast `gpt-5.6-luna` with the first user-selected track as a durable anchor, a longer memory of user-picked tracks, recurring artists and albums, the current track, the autoplay trail, and the pending manual queue. It can return naturally to a compatible user-picked artist or album after a detour, while a short-session cooldown blocks duplicate recordings. Every proposal still has to resolve through a music provider and pass mirror, version, skip, album, artist, and repeat safeguards. V3 remains a constrained fallback only when the AI plan is unavailable, invalid, low confidence, or cannot be resolved.
 
 ### Discord Activity
 
@@ -161,7 +161,7 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_V3_MAX_ARTIST_STREAK` | `3` | Maximum consecutive tracks by one artist before V3 requires a different artist. |
 | `AI_DJ_ENABLED` | `false` | Enables OpenAI as the primary autoplay music director; V3 is retained as a safe playback fallback. |
 | `OPENAI_API_KEY` | — | Secret API key for the OpenAI Responses API. Keep it only in local/server `.env` files. |
-| `AI_DJ_MODEL` | `gpt-5.6-terra` | Quality/cost-balanced Responses API model used for structured AI DJ plans. |
+| `AI_DJ_MODEL` | `gpt-5.6-luna` | Fast Responses API model used for structured AI DJ plans. |
 | `AI_DJ_REASONING_EFFORT` | `low` | GPT-5.6 reasoning depth; `low` keeps autoplay decisions responsive. |
 | `AI_DJ_TIMEOUT_MS` | `12000` | Maximum AI DJ wait before falling back to V3. Planning runs in parallel with provider fallback collection. |
 | `AI_DJ_CACHE_TTL_MS` | `300000` | Caches an identical sanitized listening context to avoid duplicate API calls. |
@@ -181,10 +181,12 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_SELECTION_QUALITY_ADVANTAGE` | `3` | Transition-quality advantage required for a wider exploration pick. |
 | `AUTOPLAY_MIX_FALLBACK_MIN_SCORE` | `58` | Minimum fit score for metadata-free YouTube Mix fallback candidates; Mix never enters the normal safe pool. |
 | `AUTOPLAY_MANUAL_CONTEXT_LIMIT` | `12` | Number of recently played user-selected tracks retained as strong autoplay anchors. |
+| `AUTOPLAY_MANUAL_MEMORY_LIMIT` | `40` | Durable user-selected memory supplied to the AI DJ as exact tracks plus recurring artists and albums. |
 | `AUTOPLAY_PENDING_MANUAL_CONTEXT_LIMIT` | `4` | Upcoming manual queue tracks used to shape recommendations before they play. |
 | `AUTOPLAY_DRIFT_GUARD_AFTER` | `1` | Enforces the manual-anchor corridor after the first automatic transition, preventing multi-step drift before it starts. |
 | `AUTOPLAY_MANUAL_ANCHOR_MIN_SCORE` | `42` | Minimum normalized fit to a manual anchor while drift protection is active. |
 | `AUTOPLAY_UNVERIFIED_DRIFT_PENALTY` | `18` | Penalty for candidates without enough evidence against the manual listening context. |
+| `AUTOPLAY_REPEAT_COOLDOWN_MS` | `3600000` | Prevents duplicate recordings during a short session; after one hour a natural repeat can be considered again. |
 | `AUTOPLAY_SKIP_GENRE_PENALTY_MAX` | `30` | Caps learned genre penalties; one skipped track contributes one specific-genre penalty instead of one penalty per tag. |
 | `AUTOPLAY_ARTIST_WINDOW` | `5` | Recent automatic tracks considered for artist repetition control. |
 | `AUTOPLAY_ARTIST_MAX_IN_WINDOW` | `2` | Maximum automatic appearances by one artist in that window before deferral. |

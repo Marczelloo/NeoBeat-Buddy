@@ -4,6 +4,7 @@ const { afterEach, beforeEach, describe, it } = require("node:test");
 const {
   AI_DJ_DIRECTOR_SYSTEM_PROMPT,
   clearAIDJCacheForTests,
+  filterPlanRepeats,
   planNextTrackWithAIDJ,
   setAIDJFetchForTests,
 } = require("../../../helpers/lavalink/aiDj");
@@ -52,7 +53,7 @@ describe("AI DJ director", () => {
     savedEnvironment = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
     process.env.AI_DJ_ENABLED = "true";
     process.env.OPENAI_API_KEY = "test-key";
-    process.env.AI_DJ_MODEL = "gpt-5.6-terra";
+    process.env.AI_DJ_MODEL = "gpt-5.6-luna";
     process.env.AI_DJ_REASONING_EFFORT = "low";
     process.env.AI_DJ_MIN_CONFIDENCE = "0.55";
     process.env.AI_DJ_CACHE_TTL_MS = "300000";
@@ -82,13 +83,14 @@ describe("AI DJ director", () => {
 
     assert.strictEqual(result.status, "planned");
     assert.strictEqual(result.plan.candidates[0].title, "Wosk");
-    assert.strictEqual(request.model, "gpt-5.6-terra");
+    assert.strictEqual(request.model, "gpt-5.6-luna");
     assert.strictEqual(request.store, false);
     assert.strictEqual(request.tools[0].type, "web_search");
     assert.strictEqual(request.tool_choice, "required");
     assert.strictEqual(request.text.format.name, "mewbit_ai_dj_plan");
     assert.match(request.input[0].content[0].text, /music director/);
     assert.match(AI_DJ_DIRECTOR_SYSTEM_PROMPT, /web search is available/);
+    assert.match(AI_DJ_DIRECTOR_SYSTEM_PROMPT, /durable taste map/);
   });
 
   it("caches an identical listening context", async () => {
@@ -137,5 +139,23 @@ describe("AI DJ director", () => {
     setAIDJFetchForTests(async () => ({ ok: true, json: async () => ({ output_text: "not-json" }) }));
     const fallback = await planNextTrackWithAIDJ(input());
     assert.strictEqual(fallback.status, "fallback-error");
+  });
+
+  it("removes a current or short-session repeat from an otherwise valid AI plan", () => {
+    const repeated = track("Nostalgia", "Taco Hemingway", { albumTitle: "Frascati" });
+    repeated.userData.autoplayPlayedAt = Date.now() - 1000;
+    const plan = plannedResponse([
+      { artist: "Taco Hemingway", title: "Nostalgia", album: "Frascati", reason: "Repeat." },
+      { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", reason: "Continue." },
+    ]);
+
+    const filtered = filterPlanRepeats(plan, {
+      ...input(),
+      referenceTrack: repeated,
+      profile: { cooldownTracks: [repeated], recentTracks: [], manualHistory: [] },
+      context: { repeatCooldownMs: 60 * 60 * 1000 },
+    });
+
+    assert.deepStrictEqual(filtered.candidates.map((candidate) => candidate.title), ["Wosk"]);
   });
 });

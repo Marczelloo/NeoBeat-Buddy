@@ -62,6 +62,10 @@ const pushTrackHistory = (guildId, track) => {
   const state = ensurePlaybackState(guildId);
   const history = state.history;
   const snapshot = cloneTrack(track);
+  snapshot.userData = {
+    ...(snapshot.userData || {}),
+    autoplayPlayedAt: Date.now(),
+  };
   history.push(snapshot);
 
   if (!isAutoplayTrack(track)) {

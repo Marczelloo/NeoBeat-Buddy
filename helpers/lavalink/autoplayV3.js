@@ -19,6 +19,7 @@ const MAX_CONSECUTIVE_ALBUM_TRACKS = Math.max(Number(process.env.AUTOPLAY_V3_MAX
 const MAX_CONSECUTIVE_ARTIST_TRACKS = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ARTIST_STREAK ?? 3), 1);
 const MAX_ALBUM_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK ?? 6), MAX_CONSECUTIVE_ALBUM_TRACKS);
 const MAX_ARTIST_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ARTIST_CONTINUITY_STREAK ?? 6), MAX_CONSECUTIVE_ARTIST_TRACKS);
+const REPEAT_COOLDOWN_MS = Math.max(Number(process.env.AUTOPLAY_REPEAT_COOLDOWN_MS ?? 60 * 60 * 1000), 0);
 
 function sourceSet(candidate) {
   return new Set([candidate?.source, ...(candidate?.providerSources || [])].filter(Boolean));
@@ -97,11 +98,16 @@ async function enrichAnchorGenres(anchorTrack) {
   return anchorTrack;
 }
 
-function hasRecentExposure(candidate, profile, exposure) {
+function hasRecentExposure(candidate, profile, exposure, referenceTrack = null, now = Date.now()) {
   const key = getExposureKey(candidate);
   if (!key) return false;
-  const inSession = (profile.cooldownTracks || []).some((track) => getExposureKey(track) === key);
-  const remembered = (exposure?.tracks || []).some((entry) => entry.key === key);
+  if (referenceTrack && getExposureKey(referenceTrack) === key) return true;
+  const inSession = (profile.cooldownTracks || []).some((track) => {
+    if (getExposureKey(track) !== key) return false;
+    const playedAt = Number(track?.userData?.autoplayPlayedAt);
+    return !Number.isFinite(playedAt) || now - playedAt < REPEAT_COOLDOWN_MS;
+  });
+  const remembered = (exposure?.tracks || []).some((entry) => entry.key === key && now - Number(entry.lastSeen || 0) < REPEAT_COOLDOWN_MS);
   return inSession || remembered;
 }
 
@@ -183,7 +189,7 @@ function selectV3Candidates(candidates, context) {
       bump("unrelated-source");
       continue;
     }
-    if (hasRecentExposure(candidate, context.profile, context.exposure)) {
+    if (hasRecentExposure(candidate, context.profile, context.exposure, context.referenceTrack)) {
       bump("recent-duplicate");
       continue;
     }
@@ -296,6 +302,8 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
     artistStreak: consecutiveCount(recentTracks, (track) => artistKey(track.userData?.autoplayReference?.artist || track.info?.author) === referenceArtist),
     albumStreak: referenceAlbum ? consecutiveCount(recentTracks, (track) => albumKey(track) === referenceAlbum) : 0,
     skippedArtists,
+    referenceTrack,
+    repeatCooldownMs: REPEAT_COOLDOWN_MS,
   };
 
   const reference = getAutoplayReference(referenceTrack);
@@ -346,8 +354,10 @@ module.exports = {
   MAX_CONSECUTIVE_ALBUM_TRACKS,
   MAX_CONSECUTIVE_ARTIST_TRACKS,
   MAX_ARTIST_CONTINUITY_STREAK,
+  REPEAT_COOLDOWN_MS,
   buildAIDJCandidates,
   fetchAutoplayV3Track,
   selectV3Candidates,
   scoreCandidateV3,
+  hasRecentExposure,
 };
