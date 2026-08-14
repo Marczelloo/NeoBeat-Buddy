@@ -5,32 +5,34 @@ const { getTrackMetadata } = require("./sessionProfile");
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = "gpt-5.6-terra";
 const DEFAULT_REASONING_EFFORT = "low";
-const DEFAULT_TIMEOUT_MS = 4500;
+const DEFAULT_TIMEOUT_MS = 7000;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_CANDIDATES = 12;
 const DEFAULT_MIN_CONFIDENCE = 0.55;
+const DEFAULT_MIN_BASELINE_DELTA = 8;
 const CACHE_LIMIT = 300;
 const REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 
 const AI_DJ_SYSTEM_PROMPT = `You are MewBit AI DJ, a conservative music-programming judge for a shared Discord listening room.
 
-Choose the most natural NEXT transition from the supplied safe candidates only. You are not a search engine and must never invent, rename, or request music outside the candidate IDs.
+The deterministic baseline is candidate c1. Your job is not to rubber-stamp it: only promote c2 or later when its supplied evidence gives it a clearly, materially better transition than c1. If no candidate clearly beats c1, select c1 with baselineDelta 0. You are not a search engine and must never invent, rename, or request music outside the candidate IDs.
 
 The manual anchor is the room's strongest taste signal. Preserve its genre, emotional tone, energy, and cultural lane while making the transition from the current song feel intentional. Prefer explicit relationship evidence (Last.fm similarity, album neighbours, trusted YouTube Mix) over title similarity or popularity.
 
-Hard constraints have already been enforced before you see the shortlist: no provider mirrors/duplicates, forbidden alternate versions, incompatible genre jumps, skipped artists, and album/artist streak caps. Do not try to override them. A same-artist or same-album continuation is valid when it is musically justified; do not force variety for its own sake.
+Hard constraints have already been enforced before you see the shortlist: no provider mirrors/duplicates, forbidden alternate versions, incompatible genre jumps, skipped artists, and continuity safety limits. Do not try to override them. A same-artist or same-album continuation is desirable when it has a direct relationship and stays genre-compatible; do not force variety for its own sake.
 
 Use only the supplied metadata. Do not claim knowledge of audio, lyrics, chart success, artists, or albums that is absent from the input. If none of the candidates forms a convincing transition, return decision "no_match" with candidateId "none". Keep reasons short and evidence-based.`;
 
 const AI_DJ_RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["decision", "candidateId", "confidence", "transitionScore", "reasons"],
+  required: ["decision", "candidateId", "confidence", "transitionScore", "baselineDelta", "reasons"],
   properties: {
     decision: { type: "string", enum: ["select", "no_match"] },
     candidateId: { type: "string" },
     confidence: { type: "number" },
     transitionScore: { type: "integer" },
+    baselineDelta: { type: "integer", minimum: -100, maximum: 100 },
     reasons: { type: "array", items: { type: "string" } },
   },
 };
@@ -58,6 +60,7 @@ function getConfig() {
     cacheTtlMs: readPositiveNumber(process.env.AI_DJ_CACHE_TTL_MS, DEFAULT_CACHE_TTL_MS, { min: 0, max: 60 * 60 * 1000 }),
     maxCandidates: Math.floor(readPositiveNumber(process.env.AI_DJ_MAX_CANDIDATES, DEFAULT_MAX_CANDIDATES, { min: 2, max: 20 })),
     minConfidence: readPositiveNumber(process.env.AI_DJ_MIN_CONFIDENCE, DEFAULT_MIN_CONFIDENCE, { min: 0, max: 1 }),
+    minBaselineDelta: readPositiveNumber(process.env.AI_DJ_MIN_BASELINE_DELTA, DEFAULT_MIN_BASELINE_DELTA, { min: 0, max: 50 }),
   };
 }
 
@@ -92,7 +95,6 @@ function describeCandidate(entry, candidateId) {
     sameArtist: Boolean(entry.details?.sameArtist),
     sameAlbum: Boolean(entry.details?.sameAlbum),
     similarity: Number.isFinite(candidate.similarity) ? Number(candidate.similarity.toFixed(3)) : null,
-    deterministicScore: Number.isFinite(entry.score) ? entry.score : 0,
   };
 }
 
@@ -120,6 +122,8 @@ function buildDecisionInput({ anchorTrack, referenceTrack, profile, context, ran
         sameArtistStreak: context.artistStreak || 0,
         sameAlbumStreak: context.albumStreak || 0,
       },
+      baselineCandidateId: shortlist[0]?.entry.aiDjCandidateId || null,
+      promotionRule: "Select c2 or later only when it has a material evidence-based advantage over c1. Report that advantage in baselineDelta; use 0 when selecting c1.",
       candidates: shortlist.map(({ data }) => data),
     },
   };
@@ -163,14 +167,15 @@ function validateDecision(value, allowedCandidateIds) {
   const candidateId = String(value.candidateId || "");
   const confidence = Number(value.confidence);
   const transitionScore = Number(value.transitionScore);
+  const baselineDelta = Number(value.baselineDelta);
   const reasons = Array.isArray(value.reasons) ? value.reasons.map((reason) => compactText(reason, 160)).filter(Boolean).slice(0, 3) : [];
 
   if (!['select', 'no_match'].includes(decision) || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) return null;
-  if (!Number.isInteger(transitionScore) || transitionScore < 0 || transitionScore > 100 || !reasons.length) return null;
+  if (!Number.isInteger(transitionScore) || transitionScore < 0 || transitionScore > 100 || !Number.isInteger(baselineDelta) || baselineDelta < -100 || baselineDelta > 100 || !reasons.length) return null;
   if (decision === "select" && !allowedCandidateIds.has(candidateId)) return null;
   if (decision === "no_match" && candidateId !== "none") return null;
 
-  return { decision, candidateId, confidence, transitionScore, reasons };
+  return { decision, candidateId, confidence, transitionScore, baselineDelta, reasons };
 }
 
 async function requestDecision(config, prompt) {
@@ -246,6 +251,14 @@ async function rerankCandidatesWithAIDJ(input) {
 
   if (decision.decision !== "select") return { ranked: original, status: "no-match", decision, cached };
   if (decision.confidence < config.minConfidence) return { ranked: original, status: "low-confidence", decision, cached };
+
+  const baselineCandidateId = shortlist[0]?.entry.aiDjCandidateId;
+  if (decision.candidateId === baselineCandidateId) {
+    return { ranked: original, status: "baseline-confirmed", decision, cached, model: config.model };
+  }
+  if (decision.baselineDelta < config.minBaselineDelta) {
+    return { ranked: original, status: "baseline-not-beaten", decision, cached, model: config.model };
+  }
 
   const selected = entriesById.get(decision.candidateId);
   const remaining = ranked.filter((entry) => entry.aiDjCandidateId !== decision.candidateId);

@@ -2,8 +2,10 @@ const assert = require("node:assert");
 const { describe, it } = require("node:test");
 
 const {
+  MAX_ALBUM_CONTINUITY_STREAK,
   MAX_CONSECUTIVE_ALBUM_TRACKS,
   MAX_CONSECUTIVE_ARTIST_TRACKS,
+  MAX_ARTIST_CONTINUITY_STREAK,
   selectV3Candidates,
 } = require("../../../helpers/lavalink/autoplayV3");
 
@@ -36,7 +38,7 @@ function context(overrides = {}) {
 }
 
 describe("Autoplay V3 selection", () => {
-  it("prefers a compatible Last.fm relation over a same-album neighbour", () => {
+  it("prioritizes a compatible same-album neighbour over a broad Last.fm relation", () => {
     const { ranked } = selectV3Candidates(
       [
         candidate("Frascati Interlude", "Taco Hemingway", "same_album", {
@@ -51,17 +53,17 @@ describe("Autoplay V3 selection", () => {
       context()
     );
 
-    assert.strictEqual(ranked[0].candidate.title, "Related Track");
+    assert.strictEqual(ranked[0].candidate.title, "Frascati Interlude");
   });
 
-  it("caps album runs instead of continuing an album indefinitely", () => {
+  it("keeps a direct same-album continuation after the soft caps while the vibe is compatible", () => {
     const { ranked, rejected } = selectV3Candidates(
       [candidate("Another Album Cut", "Taco Hemingway", "same_album", { albumId: "frascati", genres: ["hip hop"] })],
-      context({ albumStreak: MAX_CONSECUTIVE_ALBUM_TRACKS })
+      context({ albumStreak: MAX_CONSECUTIVE_ALBUM_TRACKS, artistStreak: MAX_CONSECUTIVE_ARTIST_TRACKS })
     );
 
-    assert.deepStrictEqual(ranked, []);
-    assert.strictEqual(rejected["album-streak"], 1);
+    assert.strictEqual(ranked.length, 1);
+    assert.deepStrictEqual(rejected, {});
   });
 
   it("allows a good artist continuation until the explicit artist cap", () => {
@@ -70,11 +72,21 @@ describe("Autoplay V3 selection", () => {
       genres: ["hip hop"],
     });
     const allowed = selectV3Candidates([followUp], context({ artistStreak: MAX_CONSECUTIVE_ARTIST_TRACKS - 1 }));
-    const blocked = selectV3Candidates([followUp], context({ artistStreak: MAX_CONSECUTIVE_ARTIST_TRACKS }));
+    const blocked = selectV3Candidates([candidate("Generic Follow-up", "Taco Hemingway", "youtube_mix", { genres: ["hip hop"] })], context({ artistStreak: MAX_CONSECUTIVE_ARTIST_TRACKS }));
 
     assert.strictEqual(allowed.ranked.length, 1);
     assert.strictEqual(blocked.ranked.length, 0);
     assert.strictEqual(blocked.rejected["artist-streak"], 1);
+  });
+
+  it("retains an emergency continuity cap to prevent endless album or artist loops", () => {
+    const { ranked, rejected } = selectV3Candidates(
+      [candidate("One Track Too Far", "Taco Hemingway", "same_album", { albumId: "frascati", genres: ["hip hop"] })],
+      context({ albumStreak: MAX_ALBUM_CONTINUITY_STREAK, artistStreak: MAX_ARTIST_CONTINUITY_STREAK })
+    );
+
+    assert.deepStrictEqual(ranked, []);
+    assert.strictEqual(rejected["artist-continuity-limit"], 1);
   });
 
   it("rejects a genre jump even when the candidate comes from a trusted source", () => {

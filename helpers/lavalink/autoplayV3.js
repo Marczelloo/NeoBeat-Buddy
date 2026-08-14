@@ -17,6 +17,8 @@ const { cleanArtistName, normalizeComparableText } = require("./trackNormalizati
 
 const MAX_CONSECUTIVE_ALBUM_TRACKS = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ALBUM_STREAK ?? 2), 1);
 const MAX_CONSECUTIVE_ARTIST_TRACKS = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ARTIST_STREAK ?? 3), 1);
+const MAX_ALBUM_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK ?? 6), MAX_CONSECUTIVE_ALBUM_TRACKS);
+const MAX_ARTIST_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ARTIST_CONTINUITY_STREAK ?? 6), MAX_CONSECUTIVE_ARTIST_TRACKS);
 
 function sourceSet(candidate) {
   return new Set([candidate?.source, ...(candidate?.providerSources || [])].filter(Boolean));
@@ -107,6 +109,24 @@ function candidateIdentityKey(candidate) {
   return getExposureKey(candidate) || `${artistKey(candidate?.artist)}|${normalizeComparableText(candidate?.title)}`;
 }
 
+function hasStrongContinuation(candidate, context) {
+  const candidateArtist = artistKey(candidate.artist);
+  const candidateAlbum = candidateAlbumKey(candidate);
+  const sameArtist = candidateArtist && candidateArtist === context.referenceArtist;
+  const sameAlbum = candidateAlbum && candidateAlbum === context.referenceAlbum;
+  if (!sameArtist && !sameAlbum) return false;
+
+  const candidateFamilies = getGenreFamilies(candidate.genres || []);
+  const genreCompatible = !context.referenceFamilies.length
+    || !candidateFamilies.length
+    || areGenreFamiliesCompatible(context.referenceFamilies, candidateFamilies);
+  if (!genreCompatible) return false;
+
+  const sources = sourceSet(candidate);
+  return (sameAlbum && sources.has("same_album"))
+    || (sameArtist && sources.has("lastfm_similar") && Number(candidate.similarity) >= 0.7);
+}
+
 function scoreCandidateV3(candidate, context) {
   const sources = sourceSet(candidate);
   const candidateGenres = getGenreFamilies(candidate.genres || []);
@@ -116,10 +136,10 @@ function scoreCandidateV3(candidate, context) {
   const sameAlbum = candidateAlbum && candidateAlbum === context.referenceAlbum;
   const relation = sources.has("lastfm_similar")
     ? 40 + Math.round((Number(candidate.similarity) || 0) * 10)
-    : sources.has("youtube_mix")
-      ? 30
-      : sources.has("same_album")
-        ? 22
+    : sources.has("same_album")
+      ? 44
+      : sources.has("youtube_mix")
+        ? 30
         : 0;
 
   const anchorMatch = context.anchorFamilies.length && candidateGenres.length
@@ -129,13 +149,16 @@ function scoreCandidateV3(candidate, context) {
     ? candidateGenres.filter((genre) => context.referenceFamilies.includes(genre)).length / candidateGenres.length
     : 0;
   const genreScore = Math.round(Math.min(1, anchorMatch * 0.7 + referenceMatch * 0.3) * 30);
-  const continuityScore = sameAlbum ? 6 : sameArtist ? 4 : 0;
+  const continuationDepth = sameAlbum ? Math.max(context.albumStreak, context.artistStreak) : context.artistStreak;
+  const softCap = sameAlbum ? MAX_CONSECUTIVE_ALBUM_TRACKS : MAX_CONSECUTIVE_ARTIST_TRACKS;
+  const continuationScore = sameAlbum ? 12 : sameArtist ? 8 : 0;
+  const continuationPenalty = Math.max(0, continuationDepth - softCap + 1) * (sameAlbum ? 3 : 4);
   const diversityScore = sameArtist ? 0 : 6;
 
   return {
     candidate,
-    score: relation + genreScore + continuityScore + diversityScore,
-    details: { relation, genreScore, continuityScore, diversityScore, sameArtist, sameAlbum },
+    score: relation + genreScore + continuationScore + diversityScore - continuationPenalty,
+    details: { relation, genreScore, continuationScore, continuationPenalty, diversityScore, sameArtist, sameAlbum },
   };
 }
 
@@ -169,15 +192,6 @@ function selectV3Candidates(candidates, context) {
       bump("skipped-artist");
       continue;
     }
-    if (candidateArtist && candidateArtist === context.referenceArtist && context.artistStreak >= MAX_CONSECUTIVE_ARTIST_TRACKS) {
-      bump("artist-streak");
-      continue;
-    }
-    if (candidateAlbum && candidateAlbum === context.referenceAlbum && context.albumStreak >= MAX_CONSECUTIVE_ALBUM_TRACKS) {
-      bump("album-streak");
-      continue;
-    }
-
     const candidateFamilies = getGenreFamilies(candidate.genres || []);
     if (context.anchorFamilies.length && candidateFamilies.length && !areGenreFamiliesCompatible(context.anchorFamilies, candidateFamilies)) {
       bump("anchor-genre-drift");
@@ -186,6 +200,27 @@ function selectV3Candidates(candidates, context) {
     if (context.referenceFamilies.length && candidateFamilies.length && !areGenreFamiliesCompatible(context.referenceFamilies, candidateFamilies)) {
       bump("transition-genre-drift");
       continue;
+    }
+    const strongContinuation = hasStrongContinuation(candidate, context);
+    if (candidateArtist && candidateArtist === context.referenceArtist && context.artistStreak >= MAX_CONSECUTIVE_ARTIST_TRACKS) {
+      if (!strongContinuation) {
+        bump("artist-streak");
+        continue;
+      }
+      if (context.artistStreak >= MAX_ARTIST_CONTINUITY_STREAK) {
+        bump("artist-continuity-limit");
+        continue;
+      }
+    }
+    if (candidateAlbum && candidateAlbum === context.referenceAlbum && context.albumStreak >= MAX_CONSECUTIVE_ALBUM_TRACKS) {
+      if (!strongContinuation) {
+        bump("album-streak");
+        continue;
+      }
+      if (context.albumStreak >= MAX_ALBUM_CONTINUITY_STREAK) {
+        bump("album-continuity-limit");
+        continue;
+      }
     }
     accepted.push(scoreCandidateV3(candidate, context));
   }
@@ -280,8 +315,10 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
 }
 
 module.exports = {
+  MAX_ALBUM_CONTINUITY_STREAK,
   MAX_CONSECUTIVE_ALBUM_TRACKS,
   MAX_CONSECUTIVE_ARTIST_TRACKS,
+  MAX_ARTIST_CONTINUITY_STREAK,
   fetchAutoplayV3Track,
   selectV3Candidates,
   scoreCandidateV3,
