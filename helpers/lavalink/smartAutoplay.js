@@ -28,7 +28,7 @@ const {
   getVariantKinds,
   normalizeComparableText,
 } = require("./trackNormalization");
-const { filterValidSongs } = require("./trackValidation");
+const { filterAutoplaySongs } = require("./trackValidation");
 
 const USE_SPOTIFY_AUTOPLAY = process.env.USE_SPOTIFY_AUTOPLAY === "true";
 const USE_SPOTIFY_METADATA = process.env.USE_SPOTIFY_METADATA === "true";
@@ -178,7 +178,7 @@ function getRelevantPlayableTrack(tracks, query) {
 }
 
 function getRelevantPlayableTracks(tracks, query) {
-  const playable = filterPlayableSearchResults(filterValidSongs(tracks || []), query);
+  const playable = filterPlayableSearchResults(filterAutoplaySongs(tracks || []), query);
   return rankSearchResults(playable, query);
 }
 
@@ -406,7 +406,7 @@ async function fetchDeezerCandidates(guildId, cleanTitle, searchArtist) {
         const deezerRecTracks = await loadLavalinkTracks(deezerRecQuery);
 
         if (deezerRecTracks.length > 0) {
-          const validTracks = filterValidSongs(deezerRecTracks).slice(0, 25);
+          const validTracks = filterAutoplaySongs(deezerRecTracks).slice(0, 25);
 
           for (const track of validTracks) {
             candidates.push({
@@ -710,7 +710,7 @@ async function fetchYouTubeMixCandidates(identifier, guildId) {
     const radioRes = await poru.resolve({ query: radioQuery });
 
     if (radioRes?.tracks?.length > 1) {
-      const validTracks = filterValidSongs(radioRes.tracks.slice(1, 21));
+      const validTracks = filterAutoplaySongs(radioRes.tracks.slice(1, 21));
 
       validTracks.forEach((track) => {
         candidates.push({
@@ -757,7 +757,7 @@ async function fetchYouTubeSearchCandidates(cleanTitle, searchArtist, guildId) {
     const searchRes = await poru.resolve({ query: searchQuery });
 
     if (searchRes?.tracks?.length > 0) {
-      const validTracks = filterValidSongs(searchRes.tracks).slice(0, 15);
+      const validTracks = filterAutoplaySongs(searchRes.tracks).slice(0, 15);
 
       validTracks.forEach((track) => {
         candidates.push({
@@ -790,7 +790,7 @@ async function fetchSoundCloudCandidates(searchArtist, guildId) {
 
   try {
     const tracks = await loadLavalinkTracks(`scsearch:${searchArtist}`);
-    const validTracks = filterValidSongs(tracks).slice(0, 15);
+    const validTracks = filterAutoplaySongs(tracks).slice(0, 15);
 
     validTracks.forEach((track) => {
       candidates.push({
@@ -834,7 +834,7 @@ async function fetchTopArtistCandidates(profile, guildId) {
   try {
     Log.info("🎵 Trying top artist search", "", `guild=${guildId}`, `artist=${topArtist}`);
     const searchRes = await poru.resolve({ query: `ytsearch:${topArtist}` });
-    const validTracks = filterValidSongs(searchRes.tracks || []).slice(0, 10);
+    const validTracks = filterAutoplaySongs(searchRes.tracks || []).slice(0, 10);
 
     validTracks.forEach((track) => {
       candidates.push({

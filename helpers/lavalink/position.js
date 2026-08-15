@@ -1,7 +1,7 @@
+const { resyncLyricsSession } = require("./lyricsFormatter");
 const { getPlayer } = require("./players");
 const { ensurePlaybackState, playbackState } = require("./state");
 const { clearInactivityTimer } = require("./timers");
-const { resyncLyricsSession } = require("./lyricsFormatter");
 
 async function lavalinkSeekTo(guildId, positionMs) {
   const player = getPlayer(guildId);

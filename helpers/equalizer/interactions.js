@@ -6,6 +6,7 @@ const {
   lavalinkSetEqualizer,
   lavalinkSetFilterPreset,
 } = require("../lavalink/filters");
+const { SAFE_EQ_MAX_GAIN, SAFE_EQ_MIN_GAIN } = require("../lavalink/filters");
 const Log = require("../logs/log");
 const { saveUserPreset } = require("./customPresets");
 const {
@@ -154,7 +155,7 @@ async function handleGainNudge(interaction, guildId, direction, isShift) {
   const currentGain = Number(bands[selectedBandIndex]) || 0;
   const newGain = currentGain + change;
 
-  bands[selectedBandIndex] = Math.max(-0.25, Math.min(1.0, newGain));
+  bands[selectedBandIndex] = Math.max(SAFE_EQ_MIN_GAIN, Math.min(SAFE_EQ_MAX_GAIN, newGain));
 
   // First, defer the update immediately to acknowledge the interaction
   await interaction.deferUpdate();
@@ -248,10 +249,10 @@ async function showFineTuneModal(interaction) {
 
   const input = new TextInputBuilder()
     .setCustomId("eq:bands:input")
-    .setLabel("Enter 15 gain values (-0.25 to 1.0)")
+    .setLabel(`Enter 15 gain values (${SAFE_EQ_MIN_GAIN} to ${SAFE_EQ_MAX_GAIN})`)
     .setStyle(TextInputStyle.Paragraph)
     .setValue(currentValues)
-    .setPlaceholder("0, 0, 0.25, 0.5, 1.0, ...")
+    .setPlaceholder("0, 0, 0.08, 0.12, 0.20, ...")
     .setRequired(true);
 
   modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -262,9 +263,9 @@ async function handleFineTuneSubmit(interaction, guildId) {
   const input = interaction.fields.getTextInputValue("eq:bands:input");
   const values = input.split(",").map((v) => parseFloat(v.trim()));
 
-  if (values.length !== 15 || values.some((v) => isNaN(v) || v < -0.25 || v > 1.0)) {
+  if (values.length !== 15 || values.some((v) => isNaN(v) || v < SAFE_EQ_MIN_GAIN || v > SAFE_EQ_MAX_GAIN)) {
     await interaction.reply({
-      content: "❌ Invalid input. Please provide exactly 15 values between -0.25 and 1.0 (-12dB to +6dB)",
+      content: `❌ Invalid input. Please provide exactly 15 values between ${SAFE_EQ_MIN_GAIN} and ${SAFE_EQ_MAX_GAIN}.`,
       ephemeral: true,
     });
     return;

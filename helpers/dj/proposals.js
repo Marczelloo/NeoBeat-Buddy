@@ -20,7 +20,7 @@ function clone(payload) {
   if (payload == null) return payload;
   try {
     return structuredClone(payload);
-  } catch (error) {
+    } catch {
     return JSON.parse(JSON.stringify(payload));
   }
 }

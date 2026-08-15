@@ -58,12 +58,12 @@ async function updateLavalinkLatency() {
             metrics.lavalink.latency = Math.round(latency);
             metrics.lavalink.connected = true;
           }
-        } catch (err) {
+        } catch {
           // Request failed, node might be disconnecting
         }
       }
     }
-  } catch (err) {
+  } catch {
     // Poru not available yet
   }
 }
@@ -133,7 +133,7 @@ function recordError(error, context = {}) {
     // Sanitize context to prevent circular references
     const sanitizedContext = {};
     for (const key in context) {
-      if (context.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(context, key)) {
         const value = context[key];
         // Only include simple values
         if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -159,7 +159,7 @@ function recordError(error, context = {}) {
     }
 
     // DO NOT call Log.error here - it creates infinite loop!
-  } catch (err) {
+  } catch {
     // Failed to record error - silently fail to prevent infinite loops
   }
 }

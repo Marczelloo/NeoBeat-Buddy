@@ -1,6 +1,7 @@
 const { inspect } = require("util");
 const Log = require("../logs/log");
 const { INACTIVITY_TIMEOUT_MS, PROGRESS_UPDATE_INTERVAL_MS } = require("./constants");
+const { clearRecoverySnapshot } = require("./recovery");
 const { playbackState, inactivityTimers } = require("./state");
 
 let refreshNowPlayingMessageCached = null;
@@ -60,6 +61,7 @@ const { restoreVoiceChannelStatus } = require("../discord/voiceChannelStatus");
 
       await current.destroy();
       playbackState.delete(player.guildId);
+      await clearRecoverySnapshot(player.guildId);
     } catch (error) {
       const summary = error instanceof Error ? error.message : inspect(error, { depth: 1 });
       Log.error("Failed to disconnect after inactivity", "", `guild=${player.guildId}`, `error=${summary}`);

@@ -1,5 +1,5 @@
-const test = require("node:test");
 const assert = require("node:assert/strict");
+const test = require("node:test");
 const { serializeFilters, serializeLyrics, serializePlaylistDetails, serializeTrack } = require("../../../helpers/activity/state");
 
 test.describe("Activity state serialization", () => {
@@ -47,6 +47,14 @@ test.describe("Activity state serialization", () => {
     assert.equal(track.title, "Kryptowaluty");
     assert.equal(track.author, "TACONAFIDE");
     assert.equal(track.source, "youtube");
+  });
+
+  test("keeps provider explicit metadata available for Activity result badges", () => {
+    const track = serializeTrack({
+      info: { identifier: "explicit-id", title: "Uncut Version", author: "Artist", sourceName: "spotify", isExplicit: true },
+    });
+
+    assert.equal(track.explicit, true);
   });
 
   test("normalizes synced and static lyrics into an Activity payload", () => {

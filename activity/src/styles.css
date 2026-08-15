@@ -208,6 +208,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .icon-button:hover { color: var(--text); border-color: var(--line); background: var(--surface-soft); }
 .icon-button:active, .play-button:active, .result-action:active, .primary-button:active, .secondary-button:active { transform: scale(0.96); }
 .icon-button.is-active { color: var(--cyan); border-color: rgb(101 231 255 / 0.24); background: rgb(101 231 255 / 0.08); }
+.icon-button.is-loading, .play-button:disabled, .bar-play:disabled, .autoplay-control:disabled, .result-action:disabled, .secondary-button:disabled { cursor: wait; opacity: 0.74; }
+.button-spinner { animation: button-spin 720ms linear infinite; }
+@keyframes button-spin { to { transform: rotate(360deg); } }
 .subtle-icon { width: 30px; height: 30px; }
 .play-button { width: 52px; height: 52px; border-radius: 16px; color: var(--bg); background: var(--cyan); box-shadow: 0 8px 24px rgb(101 231 255 / 0.18); }
 .play-button:hover { background: var(--cyan-soft); }
@@ -257,6 +260,12 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
 .result-copy strong, .playlist-copy strong, .queue-track-copy strong { display: block; overflow: hidden; color: var(--text); font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .result-copy span, .playlist-copy span, .queue-track-copy span { display: block; overflow: hidden; margin-top: 4px; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .result-copy > div { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+.track-badges { min-width: 0; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.track-badge { display: inline-flex; align-items: center; min-height: 17px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: rgb(255 255 255 / 0.025); font: 700 8px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.025em; text-transform: uppercase; }
+.track-badge-explicit { color: #ff9ab6; border-color: rgb(255 111 152 / 0.3); background: rgb(255 111 152 / 0.08); }
+.track-badge-clean { color: #aee7a1; border-color: rgb(174 231 161 / 0.28); background: rgb(174 231 161 / 0.07); }
+.track-badge-live { color: #ffd28a; border-color: rgb(255 210 138 / 0.26); background: rgb(255 210 138 / 0.07); }
+.track-badge-remix { color: var(--violet); border-color: rgb(154 131 255 / 0.28); background: rgb(154 131 255 / 0.07); }
 .result-duration, .queue-duration { color: var(--muted); font: 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
 .result-action { min-height: 34px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgb(101 231 255 / 0.27); border-radius: 10px; padding: 0 10px; color: var(--cyan); background: rgb(101 231 255 / 0.07); font-size: 11px; font-weight: 700; }
 .result-action:hover { background: rgb(101 231 255 / 0.14); }
@@ -286,7 +295,9 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
 .direct-link-actions { display: inline-flex; align-items: center; gap: 7px; }
 .direct-link-actions .secondary-button { min-height: 34px; font-size: 11px; }
 .queue-list { display: grid; gap: 7px; }
-.queue-row { display: grid; grid-template-columns: 14px 38px minmax(0, 1fr) 32px; gap: 6px; padding: 6px; cursor: grab; }
+.queue-autoplay-divider { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 11px 4px 2px; color: var(--magenta); font: 700 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.09em; text-transform: uppercase; }
+.queue-autoplay-divider i { height: 1px; min-width: 0; flex: 1; background: linear-gradient(90deg, rgb(242 106 200 / 0.42), transparent); }
+.queue-row { display: grid; grid-template-columns: 14px 38px minmax(0, 1fr) 32px 32px; gap: 6px; padding: 6px; cursor: grab; }
 .queue-row .artwork-small { width: 38px; height: 38px; flex-basis: 38px; }
 .queue-row:active { cursor: grabbing; }
 .queue-row.is-dragged { opacity: 0.55; border-color: var(--cyan); }
@@ -296,7 +307,11 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
 .queue-track-meta { min-width: 0; display: flex; align-items: center; gap: 5px; margin-top: 5px; }
 .queue-track-copy .queue-track-meta > span { display: inline-flex; margin-top: 0; overflow: visible; }
 .queue-track-meta .source-tag { min-height: 17px; padding: 3px 5px; border-radius: 6px; font-size: 8px; }
+.queue-track-meta .track-badges { gap: 3px; overflow: hidden; }
+.queue-track-meta .track-badge { min-height: 16px; padding: 2px 4px; font-size: 7px; }
 .queue-duration { min-width: 0; margin-left: auto; text-align: right; }
+.queue-play-next { width: 32px; height: 32px; color: var(--muted); }
+.queue-play-next:hover { color: var(--cyan); border-color: rgb(101 231 255 / 0.3); background: rgb(101 231 255 / 0.08); }
 .queue-remove { width: 32px; height: 32px; color: var(--muted); }
 .queue-remove:hover { color: var(--danger); border-color: rgb(255 127 158 / 0.3); background: rgb(255 127 158 / 0.08); }
 .autoplay-mark { display: inline-grid; place-items: center; color: var(--magenta); }
@@ -460,9 +475,11 @@ select { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border
 .activity-footer > span:first-child { display: inline-flex; align-items: center; gap: 7px; }
 .toast { position: fixed; right: 22px; bottom: 22px; z-index: var(--z-toast); max-width: min(420px, calc(100vw - 44px)); display: flex; align-items: center; gap: 9px; padding: 12px 12px 12px 14px; border: 1px solid var(--line); border-radius: 13px; color: var(--muted-strong); background: #1a1f28; box-shadow: 0 18px 50px rgb(0 0 0 / 0.3); font-size: 12px; animation: toast-in 180ms ease-out both; }
 .toast > span { display: inline-grid; color: var(--cyan); }
+.toast .toast-message { min-width: 0; color: inherit; }
 .toast-error > span { color: var(--danger); }
 .toast button { width: 26px; height: 26px; display: grid; place-items: center; margin-left: auto; border: 0; border-radius: 8px; color: var(--muted); background: transparent; }
 .toast button:hover { color: var(--text); background: var(--surface-soft); }
+.toast .toast-action { width: auto; min-height: 28px; padding: 0 9px; margin-left: 2px; border: 1px solid rgb(101 231 255 / 0.32); color: var(--cyan); background: rgb(101 231 255 / 0.08); font-size: 11px; font-weight: 700; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 /* Spotify-like Activity shell: dynamic center with slide-out library and queue. */

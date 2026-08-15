@@ -1,8 +1,8 @@
 const { SlashCommandBuilder } = require("discord.js");
 const { refreshNowPlayingMessage } = require("../../helpers/buttons");
 const { errorEmbed, successEmbed } = require("../../helpers/embeds");
-const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { requireDj } = require("../../helpers/interactions/djGuards");
+const { requireSharedVoice } = require("../../helpers/interactions/voiceGuards");
 const { lavalinkSetVolume, createPoru } = require("../../helpers/lavalink/index");
 const Log = require("../../helpers/logs/log");
 

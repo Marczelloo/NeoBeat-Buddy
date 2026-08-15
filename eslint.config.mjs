@@ -1,9 +1,9 @@
 import js from "@eslint/js";
-import globals from "globals";
+import { defineConfig } from "eslint/config";
 import importPlugin from "eslint-plugin-import";
 import n from "eslint-plugin-n";
 import unusedImports from "eslint-plugin-unused-imports";
-import { defineConfig } from "eslint/config";
+import globals from "globals";
 
 export default defineConfig([
   {
@@ -35,5 +35,10 @@ export default defineConfig([
       "n/no-missing-require": "error",
       "unused-imports/no-unused-imports": "error",
     },
+  },
+  {
+    files: ["**/*.mjs"],
+    languageOptions: { sourceType: "module" },
+    rules: { "import/no-unresolved": "off" },
   },
 ]);

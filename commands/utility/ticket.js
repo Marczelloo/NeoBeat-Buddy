@@ -1,3 +1,5 @@
+const fs = require("node:fs/promises");
+const path = require("node:path");
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -9,10 +11,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
 } = require("discord.js");
-const fs = require("node:fs/promises");
-const path = require("node:path");
 const Log = require("../../helpers/logs/log");
 
 const DATA_FILE = path.join(__dirname, "..", "..", "helpers", "data", "tickets.json");
@@ -220,7 +219,6 @@ module.exports = {
     await loadData();
 
     const focusedOption = interaction.options.getFocused(true);
-    const subcommand = interaction.options.getSubcommand();
     const subcommandGroup = interaction.options.getSubcommandGroup();
 
     if (focusedOption.name === "id") {

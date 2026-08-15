@@ -41,6 +41,7 @@ function serializeTrack(track, index = null) {
     source,
     sourceLabel: SOURCE_LABELS[source] || source,
     isStream: Boolean(info.isStream),
+    explicit: Boolean(info.isExplicit ?? info.explicit ?? track.pluginInfo?.isExplicit ?? track.pluginInfo?.explicit),
     requester: info.requesterTag || info.requester || null,
     autoplay: Boolean(track.userData?.autoplay || info.autoplayed),
   };

@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const { errorEmbed, successEmbed } = require("../../helpers/embeds");
 const { getPlayer } = require("../../helpers/lavalink");
-const { addTrack, removeTrack, getLikedSongs, isTrackInPlaylist } = require("../../helpers/playlists/store");
+const { addTrack, getLikedSongs, isTrackInPlaylist } = require("../../helpers/playlists/store");
 
 module.exports = {
   data: new SlashCommandBuilder()

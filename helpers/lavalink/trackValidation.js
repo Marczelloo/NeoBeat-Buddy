@@ -3,7 +3,7 @@ const Log = require("../logs/log");
 function isValidSong(trackInfo, options = {}) {
   if (!trackInfo) return false;
 
-  const { allowStreams = true, strictDuration = false } = options;
+  const { allowStreams = true, strictDuration = false, excludeInterludes = false } = options;
   const { title, author, length, isStream } = trackInfo;
 
   if (isStream && !allowStreams) {
@@ -34,6 +34,16 @@ function isValidSong(trackInfo, options = {}) {
   }
 
   const titleLower = (title || "").toLowerCase();
+  const interludePattern = /\b(?:interlude|skit|spoken\s+interlude|transition|intermission|voicemail)\b/i;
+  const shortAlbumBreakPattern = /\b(?:intro|outro)\b/i;
+  const duration = Number(length) || 0;
+  if (
+    excludeInterludes &&
+    (interludePattern.test(titleLower) || (shortAlbumBreakPattern.test(titleLower) && duration > 0 && duration <= 150_000))
+  ) {
+    Log.debug("Autoplay candidate rejected: album break", "", `title=${title}`);
+    return false;
+  }
   const blacklistedKeywords = [
     "tutorial",
     "how to",
@@ -117,7 +127,7 @@ function isValidSong(trackInfo, options = {}) {
     authorLower.includes("official") ||
     authorLower.includes(" - topic");
 
-  const specialCharPattern = /[@#🎀🗿🕷✨💫]/g;
+  const specialCharPattern = /[@#🎀🗿🕷✨💫]/gu;
   const specialCharCount = (title.match(specialCharPattern) || []).length;
 
   if (specialCharCount > 2 && !hasOfficialIndicators) {
@@ -137,7 +147,12 @@ function filterValidSongs(tracks, options = {}) {
   return tracks.filter((track) => isValidSong(track.info, options));
 }
 
+function filterAutoplaySongs(tracks, options = {}) {
+  return filterValidSongs(tracks, { ...options, allowStreams: false, strictDuration: true, excludeInterludes: true });
+}
+
 module.exports = {
   isValidSong,
   filterValidSongs,
+  filterAutoplaySongs,
 };

@@ -6,7 +6,7 @@ const {
   isLatestAutocompleteRequest,
 } = require("../../../helpers/interactions/autocompleteGuard");
 const { buildFallbackQueries, isVerifiedFallbackMatch } = require("../../../helpers/lavalink/fallbacks");
-const { clearSearchCache, searchAcrossSources, searchSingleSource } = require("../../../helpers/lavalink/searchAggregator");
+const { clearSearchCache, getSearchCacheSize, searchAcrossSources, searchSingleSource } = require("../../../helpers/lavalink/searchAggregator");
 const { parseSearchIdentifier } = require("../../../helpers/lavalink/searchIdentifier");
 const {
   getFallbackSources,
@@ -163,6 +163,28 @@ describe("Search source selection", () => {
     assert.strictEqual(tracks.length, 1);
     assert.ok(calls.length >= 1);
     assert.ok(calls.every((call) => call.source === "scsearch"));
+  });
+
+  it("coalesces simultaneous identical searches instead of multiplying provider work", async () => {
+    clearSearchCache();
+    let calls = 0;
+    const poru = {
+      resolve: async () => {
+        calls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return { tracks: [] };
+      },
+    };
+
+    await Promise.all([
+      searchAcrossSources(poru, "Tamagotchi", { preferredSource: "youtube" }),
+      searchAcrossSources(poru, "Tamagotchi", { preferredSource: "youtube" }),
+    ]);
+
+    // Four query normalizations are checked across five provider lanes once,
+    // not twice for the two Activity clients.
+    assert.strictEqual(calls, 20);
+    assert.strictEqual(getSearchCacheSize(), 1);
   });
 
   it("parses source-pinned autocomplete values without double-prefixing them", () => {

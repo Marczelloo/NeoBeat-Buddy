@@ -1,3 +1,4 @@
+const { randomUUID } = require("node:crypto");
 const http = require("node:http");
 const { URL } = require("node:url");
 const { WebSocketServer } = require("ws");
@@ -34,7 +35,7 @@ const { getPoru } = require("../lavalink/players");
 const { searchAcrossSources, searchSingleSource } = require("../lavalink/searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
 const { skipWithLearning } = require("../lavalink/skipLearning");
-const { getLyricsState, playbackState, setLyricsState } = require("../lavalink/state");
+const { cloneTrack, getLyricsState, playbackState, setLyricsState } = require("../lavalink/state");
 const Log = require("../logs/log");
 const { importPlaylistFromUrl } = require("../playlists/import");
 const playlistStore = require("../playlists/store");
@@ -45,6 +46,9 @@ const DEFAULT_PORT = 8787;
 const MAX_BODY_SIZE = 64 * 1024;
 const MAX_ARTWORK_SIZE = 8 * 1024 * 1024;
 const CLIENT_CACHE_TTL = 5 * 60 * 1000;
+const MAX_IDENTITY_CACHE_ENTRIES = 1_000;
+const QUEUE_UNDO_TTL_MS = 15_000;
+const ACTIVITY_STATE_HEARTBEAT_MS = Math.max(1_000, Number(process.env.ACTIVITY_STATE_HEARTBEAT_MS) || 5_000);
 const ARTWORK_HOSTS = Object.freeze([
   "dzcdn.net",
   "sndcdn.com",
@@ -61,6 +65,7 @@ const ARTWORK_HOSTS = Object.freeze([
 ]);
 const identityCache = new Map();
 const sockets = new Set();
+const queueUndoSnapshots = new Map();
 
 function isTrue(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").toLowerCase());
@@ -239,7 +244,9 @@ async function fetchDiscordUser(token) {
     member: null,
     dev: false,
   };
+  identityCache.delete(token);
   identityCache.set(token, { timestamp: Date.now(), identity });
+  while (identityCache.size > MAX_IDENTITY_CACHE_ENTRIES) identityCache.delete(identityCache.keys().next().value);
   return identity;
 }
 
@@ -277,8 +284,10 @@ function assertControlPermission(guildId, identity, action) {
     "previous",
     "stop",
     "remove_queue",
+    "play_next",
     "move_queue",
     "clear_queue",
+    "undo_queue",
     "shuffle",
     "volume",
     "seek",
@@ -301,6 +310,34 @@ function getVoiceChannelName(client, player) {
 
 function getSerializedQueue(player) {
   return Array.from(player?.queue || []).map((track, index) => serializeTrack(track, index));
+}
+
+function createQueueUndoSnapshot(guildId, player) {
+  const queue = Array.from(player?.queue || []).map(cloneTrack).filter(Boolean);
+  if (!queue.length) return null;
+
+  const token = randomUUID();
+  queueUndoSnapshots.set(token, { guildId, queue, expiresAt: Date.now() + QUEUE_UNDO_TTL_MS });
+  for (const [key, snapshot] of queueUndoSnapshots) {
+    if (snapshot.expiresAt <= Date.now()) queueUndoSnapshots.delete(key);
+  }
+  return token;
+}
+
+async function restoreQueueUndoSnapshot(guildId, token) {
+  const key = String(token || "");
+  const snapshot = queueUndoSnapshots.get(key);
+  if (!snapshot || snapshot.guildId !== guildId || snapshot.expiresAt <= Date.now()) {
+    queueUndoSnapshots.delete(key);
+    return { success: false, error: "That queue change can no longer be undone." };
+  }
+
+  const player = getPlayer(guildId);
+  if (!player?.queue) return { success: false, error: "The player is no longer connected." };
+  player.queue.clear();
+  for (const track of snapshot.queue) await player.queue.add(cloneTrack(track));
+  queueUndoSnapshots.delete(key);
+  return { success: true, restored: snapshot.queue.length };
 }
 
 function getSerializedPlaylists(userId, guildId) {
@@ -478,10 +515,28 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       return lavalinkToggleLoop(guildId, payload.mode);
     case "shuffle":
       return lavalinkShuffle(guildId);
-    case "clear_queue":
-      return lavalinkClearQueue(guildId);
-    case "remove_queue":
-      return lavalinkRemoveFromQueue(guildId, { position: Number(payload.position) + 1 });
+    case "clear_queue": {
+      const undoToken = createQueueUndoSnapshot(guildId, player);
+      const cleared = await lavalinkClearQueue(guildId);
+      return { success: Boolean(cleared), undoToken };
+    }
+    case "remove_queue": {
+      const undoToken = createQueueUndoSnapshot(guildId, player);
+      const removed = await lavalinkRemoveFromQueue(guildId, { position: Number(payload.position) + 1 });
+      return { success: removed?.status === "removed", undoToken: removed?.status === "removed" ? undoToken : null, ...removed };
+    }
+    case "play_next": {
+      if (!player?.queue) return { success: false, error: "The queue is unavailable." };
+      const position = Number(payload.position);
+      if (!Number.isInteger(position) || position < 0 || position >= player.queue.length) {
+        throw Object.assign(new Error("That queue position is no longer available."), { statusCode: 409 });
+      }
+      const [track] = player.queue.splice(position, 1);
+      player.queue.unshift(track);
+      return { success: true };
+    }
+    case "undo_queue":
+      return restoreQueueUndoSnapshot(guildId, payload.token);
     case "move_queue": {
       if (!player?.queue) return false;
       const from = Number(payload.from);
@@ -644,9 +699,12 @@ function sendSocket(socket, payload) {
 }
 
 function broadcastGuildState(client, guildId) {
+  const statesByIdentity = new Map();
   for (const socket of sockets) {
     if (socket.readyState !== 1 || !socket.authorized || socket.guildId !== guildId) continue;
-    sendSocket(socket, { type: "state", state: buildActivityState(client, guildId, socket.identity.id) });
+    const identityId = socket.identity.id;
+    if (!statesByIdentity.has(identityId)) statesByIdentity.set(identityId, buildActivityState(client, guildId, identityId));
+    sendSocket(socket, { type: "state", state: statesByIdentity.get(identityId) });
   }
 }
 
@@ -802,7 +860,7 @@ function createActivityServer(client) {
       interval = setInterval(() => {
         const guilds = new Set([...sockets].filter((socket) => socket.authorized).map((socket) => socket.guildId));
         for (const guildId of guilds) broadcastGuildState(client, guildId);
-      }, 1000);
+      }, ACTIVITY_STATE_HEARTBEAT_MS);
       interval.unref?.();
       return server;
     },

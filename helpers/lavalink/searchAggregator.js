@@ -2,9 +2,11 @@ const { buildSearchQueries } = require("./searchQueryVariants");
 const { getSearchPrefix } = require("./searchSources");
 
 const CACHE_TTL_MS = 15_000;
+const MAX_SEARCH_CACHE_ENTRIES = Math.max(20, Number(process.env.SEARCH_CACHE_MAX_ENTRIES ?? 240));
 const MAX_RESULTS_PER_SOURCE = 50;
 const SOURCE_TIMEOUT_MS = 1_500;
 const searchCache = new Map();
+const inFlightSearches = new Map();
 
 // YouTube Music is usually better for songs, while regular YouTube has a
 // wider catalogue. Query both so a missing/blocked YTM result cannot hide a
@@ -46,6 +48,32 @@ function deduplicateTracks(tracks) {
   });
 }
 
+function getCachedTracks(cacheKey) {
+  const cached = searchCache.get(cacheKey);
+  if (!cached) return null;
+  if (Date.now() - cached.timestamp >= CACHE_TTL_MS) {
+    searchCache.delete(cacheKey);
+    return null;
+  }
+  // LRU refresh: frequently typed queries stay warm without unbounded growth.
+  searchCache.delete(cacheKey);
+  searchCache.set(cacheKey, cached);
+  return cached.tracks;
+}
+
+function setCachedTracks(cacheKey, tracks) {
+  searchCache.set(cacheKey, { timestamp: Date.now(), tracks });
+  while (searchCache.size > MAX_SEARCH_CACHE_ENTRIES) searchCache.delete(searchCache.keys().next().value);
+}
+
+function runDeduplicatedSearch(cacheKey, search) {
+  const existing = inFlightSearches.get(cacheKey);
+  if (existing) return existing;
+  const promise = Promise.resolve().then(search).finally(() => inFlightSearches.delete(cacheKey));
+  inFlightSearches.set(cacheKey, promise);
+  return promise;
+}
+
 async function searchSource(poru, query, source) {
   const prefixes = SEARCH_VARIANTS[source] || [getSearchPrefix(source)];
   const queries = buildSearchQueries(query);
@@ -81,11 +109,11 @@ async function searchSingleSource(poru, query, source) {
 
   const normalizedSource = SEARCH_VARIANTS[source] ? source : "youtube";
   const cacheKey = `single:${normalizedSource}:${normalizedQuery}`;
-  const cached = searchCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) return cached.tracks;
+  const cached = getCachedTracks(cacheKey);
+  if (cached) return cached;
 
-  const tracks = await searchSourceWithTimeout(poru, query, normalizedSource);
-  searchCache.set(cacheKey, { timestamp: Date.now(), tracks });
+  const tracks = await runDeduplicatedSearch(cacheKey, () => searchSourceWithTimeout(poru, query, normalizedSource));
+  setCachedTracks(cacheKey, tracks);
   return tracks;
 }
 
@@ -100,29 +128,33 @@ async function searchAcrossSources(poru, query, { preferredSource = "deezer" } =
   if (!poru || !normalizedQuery) return [];
 
   const cacheKey = `${preferredSource}:${normalizedQuery}`;
-  const cached = searchCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) return cached.tracks;
+  const cached = getCachedTracks(cacheKey);
+  if (cached) return cached;
 
   const allSources = ["deezer", "youtube", "spotify", "soundcloud"];
   const sources = [preferredSource, ...allSources.filter((source) => source !== preferredSource)];
-  const settled = await Promise.allSettled(
-    sources.map((source) => searchSourceWithTimeout(poru, query, source))
-  );
-  const tracks = settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
-
-  searchCache.set(cacheKey, { timestamp: Date.now(), tracks });
+  const tracks = await runDeduplicatedSearch(cacheKey, async () => {
+    const settled = await Promise.allSettled(
+      sources.map((source) => searchSourceWithTimeout(poru, query, source))
+    );
+    return settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+  });
+  setCachedTracks(cacheKey, tracks);
   return tracks;
 }
 
 function clearSearchCache() {
   searchCache.clear();
+  inFlightSearches.clear();
 }
 
 module.exports = {
   CACHE_TTL_MS,
+  MAX_SEARCH_CACHE_ENTRIES,
   MAX_RESULTS_PER_SOURCE,
   SEARCH_VARIANTS,
   clearSearchCache,
+  getSearchCacheSize: () => searchCache.size,
   searchSingleSource,
   searchAcrossSources,
 };

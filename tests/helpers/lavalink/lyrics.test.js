@@ -1,5 +1,5 @@
 const assert = require("node:assert");
-const { describe, it, beforeEach, mock } = require("node:test");
+const { describe, it, beforeEach } = require("node:test");
 
 /**
  * Comprehensive Lyrics System Tests
@@ -24,7 +24,7 @@ describe("Lyrics System", () => {
   describe("Lyrics Formatter", () => {
     let chunkLyrics, buildLyricsResponse, findCurrentLine;
     let getInterpolatedPosition, isPlayerPaused, registerLyricsMessage, stopLyricsSession;
-    let MAX_EMBED_DESCRIPTION, MAX_EMBEDS;
+    let MAX_EMBEDS;
 
     beforeEach(() => {
       delete require.cache[require.resolve("../../../helpers/lavalink/lyricsFormatter")];
@@ -36,7 +36,6 @@ describe("Lyrics System", () => {
       isPlayerPaused = lyricsFormatter.isPlayerPaused;
       registerLyricsMessage = lyricsFormatter.registerLyricsMessage;
       stopLyricsSession = lyricsFormatter.stopLyricsSession;
-      MAX_EMBED_DESCRIPTION = lyricsFormatter.MAX_EMBED_DESCRIPTION;
       MAX_EMBEDS = lyricsFormatter.MAX_EMBEDS;
     });
 

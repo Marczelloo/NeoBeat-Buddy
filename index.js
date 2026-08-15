@@ -222,6 +222,12 @@ client.on("voiceStateUpdate", (oldState, newState) => {
       `guild=${newState.guild.name}`,
       `id=${newState.guild.id}`
     );
+    const { getPoru } = require("./helpers/lavalink/players");
+    const { saveRecoverySnapshot } = require("./helpers/lavalink/recovery");
+    const player = getPoru()?.players?.get(newState.guild.id);
+    if (player) {
+      void saveRecoverySnapshot(player, "discord_disconnect").finally(() => player.destroy().catch(() => null));
+    }
   }
 });
 
@@ -492,6 +498,8 @@ poru.on("nodeConnect", async (node) => {
 poru.on("nodeDisconnect", (node) => {
   Log.error("❌ Lavalink disconnected", `node=${node.name}`);
   health.updateLavalinkStatus(false);
+  const { saveRecoverySnapshot } = require("./helpers/lavalink/recovery");
+  for (const player of poru.players.values()) void saveRecoverySnapshot(player, "lavalink_disconnect");
 });
 
 poru.on("nodeError", (node, error) => {

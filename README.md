@@ -27,6 +27,7 @@ MewBit is a Discord music bot with a shared listening **Discord Activity**. It u
 - A configurable default search source for a server or an individual user.
 - Now-playing embed with buttons, progress, volume, queue, lyrics, and filters.
 - Cross-provider loudness compensation, configurable per source.
+- Recovery snapshots preserve the current track, queue, position, volume, loop mode, and filters through unexpected Discord/Lavalink disconnects. The bot restores them only after a user starts playback again; it never silently rejoins voice after being kicked.
 - Queue history, replay, export, shuffle, loop, previous, seek, and 24/7 mode.
 
 ### Smart autoplay / DJ mode
@@ -39,6 +40,7 @@ MewBit is a Discord music bot with a shared listening **Discord Activity**. It u
 - Avoids loops, over-repetition, and weak fallback results while still allowing a fitting artist to return after a sensible cooldown.
 - Keeps tempo styles such as nightcore, slowed, and sped-up available as valid autoplay lanes, while requiring remix/live/acoustic/cover variants to match the current version lane.
 - Uses direct YouTube Mix candidates only as a constrained, score-gated fallback for tracks with insufficient metadata (for example niche or meme uploads), rather than broad unrelated search.
+- Excludes album skits, interludes, short intros/outros, transitions, and streams from autoplay candidates while still allowing a user to play them manually.
 - Places manually queued tracks ahead of autoplay tracks; a manually added track goes after other manual items and before the autoplay tail.
 - Optional AI DJ mode is the primary music director. It uses fast `gpt-5.6-luna` with the first user-selected track as a durable anchor, a longer memory of user-picked tracks, recurring artists and albums, the current track, the autoplay trail, the pending manual queue, and a compact catalog of already provider-verified candidates. It prefers that playable catalog but may discover two additional recordings. Open proposals resolve through YouTube/YouTube Music, Deezer, SoundCloud, then Spotify; every resolved result is rechecked for mirror, version, skip, album, artist, and repeat safety before it can be queued. V3 remains a constrained fallback only when the AI plan is unavailable, invalid, low confidence, or cannot be resolved.
 
@@ -155,6 +157,8 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `PROGRESS_UPDATE_INTERVAL_MS` | `0` | Player-message update interval; `0` uses the built-in behavior. |
 | `LOUDNESS_NORMALIZATION` | `true` | Enables source-aware playback gain compensation. |
 | `LOUDNESS_<SOURCE>_DB` | provider default | Optional gain offset for a provider, e.g. `LOUDNESS_SOUNDCLOUD_DB=-3`. |
+| `PLAYER_RECOVERY_MAX_AGE_MS` | `7200000` | How long an unexpected-disconnect snapshot is eligible for restoration after a user explicitly resumes playback. |
+| `SEARCH_CACHE_MAX_ENTRIES` | `240` | Maximum cached Activity/autocomplete search entries; old entries are evicted first. |
 | `AUTOPLAY_HISTORY_LIMIT` | `80` | Recent autoplay reservations remembered for hard duplicate prevention. |
 | `AUTOPLAY_V3` | `true` | Uses the simpler trusted-source DJ selector. Set to `false` only to temporarily roll back to the legacy scorer. |
 | `AUTOPLAY_V3_MAX_ALBUM_STREAK` | `2` | Maximum consecutive tracks from one album before V3 requires a different album. |
@@ -236,6 +240,7 @@ The Activity gateway runs in the bot process and is responsible for authorizing 
 | `ACTIVITY_ENABLED` | `true` | Enables the Activity gateway. |
 | `ACTIVITY_HOST` | `127.0.0.1` | Bind host; use `0.0.0.0` behind a production proxy. |
 | `ACTIVITY_PORT` | `8787` | Gateway port. |
+| `ACTIVITY_STATE_HEARTBEAT_MS` | `5000` | Background player-state heartbeat in milliseconds; event updates remain immediate. |
 | `ACTIVITY_CLIENT_SECRET` | falls back to `DISCORD_CLIENT_SECRET` | Discord application client secret used for the OAuth token exchange. |
 | `ACTIVITY_REDIRECT_URI` | `https://127.0.0.1` | Exact OAuth redirect URI registered in the Developer Portal. |
 | `ACTIVITY_ALLOWED_ORIGINS` | `*` | Comma-separated allowed browser origins. Restrict this in production. |

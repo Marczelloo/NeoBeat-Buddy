@@ -15,11 +15,38 @@ const EFFECT_FILTER_KEYS = [
   "lowPass",
 ];
 
+// Lavalink accepts gains up to 1.0, but its own documentation notes that 0.25
+// already doubles a band. Keep normal EQ deliberately conservative and reserve
+// the more extreme sound for the explicitly labelled fun effects.
+const SAFE_EQ_MIN_GAIN = -0.25;
+const SAFE_EQ_MAX_GAIN = 0.2;
+const EQ_HEADROOM_FLOOR = 0.55;
+
 function toLavalinkFilters(filters) {
   const payload = { ...(filters || {}) };
   delete payload.preset;
   delete payload.filterPreset;
+  delete payload.eqPreamp;
   return payload;
+}
+
+function normalizeEqualizerBands(bands = []) {
+  return bands
+    .filter(Boolean)
+    .map(({ band, gain }) => ({
+      band: Number(band),
+      gain: Math.max(SAFE_EQ_MIN_GAIN, Math.min(SAFE_EQ_MAX_GAIN, Number(gain))),
+    }))
+    .filter((entry) => Number.isInteger(entry.band) && entry.band >= 0 && entry.band <= 14);
+}
+
+function getEqualizerPreamp(bands = []) {
+  const peakGain = Math.max(0, ...bands.map((band) => Number(band.gain) || 0));
+  if (peakGain <= 0) return null;
+
+  // One Lavalink gain unit is approximately 24 dB. Preserve enough headroom
+  // for boosted bands, but never make a regular preset unusably quiet.
+  return Math.max(EQ_HEADROOM_FLOOR, Number(Math.pow(10, -(peakGain * 24) / 20).toFixed(3)));
 }
 
 function getStoredFilters(guildId, player) {
@@ -46,28 +73,29 @@ async function lavalinkSetEqualizer(guildId, presetOrBands) {
 
   if (!player) return { status: "no_player" };
 
-  const normalize = (bands = []) =>
-    bands
-      .filter(Boolean)
-      .map(({ band, gain }) => ({
-        band: Number(band),
-        gain: Math.max(-0.25, Math.min(1, Number(gain))),
-      }))
-      .filter((b) => Number.isInteger(b.band) && b.band >= 0 && b.band <= 14);
+  const isBandArray = Array.isArray(presetOrBands);
+  const presetName = isBandArray ? "custom" : String(presetOrBands || "flat").trim().toLowerCase();
+  const bands = isBandArray
+    ? normalizeEqualizerBands(presetOrBands)
+    : normalizeEqualizerBands(EQUALIZER_PRESETS[presetName] ?? []);
 
-  const bands = Array.isArray(presetOrBands)
-    ? normalize(presetOrBands)
-    : normalize(EQUALIZER_PRESETS[presetOrBands?.toLowerCase()] ?? []);
-
-  if (!bands.length && presetOrBands && !EQUALIZER_PRESETS[presetOrBands?.toLowerCase()])
+  if (!bands.length && !isBandArray && presetName !== "flat" && !EQUALIZER_PRESETS[presetName])
     return { status: "invalid_preset" };
 
   const current = getStoredFilters(guildId, player);
   const nextFilters = {
     ...current,
     equalizer: bands,
-    preset: Array.isArray(presetOrBands) ? "custom" : String(presetOrBands || "flat").toLowerCase(),
+    preset: isBandArray && bands.length ? "custom" : presetName,
   };
+  const preamp = getEqualizerPreamp(bands);
+  if (preamp) {
+    nextFilters.volume = preamp;
+    nextFilters.eqPreamp = true;
+  } else if (nextFilters.eqPreamp) {
+    delete nextFilters.volume;
+    delete nextFilters.eqPreamp;
+  }
 
   return applyFilters(guildId, player, nextFilters, "setEqualizer");
 }
@@ -81,6 +109,10 @@ async function lavalinkResetFilters(guildId) {
   delete baseline.equalizer;
 
   const resetFilters = { ...baseline, equalizer: [] };
+  if (resetFilters.eqPreamp) {
+    delete resetFilters.volume;
+    delete resetFilters.eqPreamp;
+  }
   resetFilters.preset = "flat";
   return applyFilters(guildId, player, resetFilters, "resetFilters");
 }
@@ -118,6 +150,10 @@ function getCurrentFilterName(guildId) {
 
 module.exports = {
   EFFECT_FILTER_KEYS,
+  SAFE_EQ_MIN_GAIN,
+  SAFE_EQ_MAX_GAIN,
+  normalizeEqualizerBands,
+  getEqualizerPreamp,
   getCurrentFilterName,
   lavalinkSetEqualizer,
   lavalinkSetFilterPreset,

@@ -16,6 +16,7 @@ const {
 } = require("./lyricsFormatter");
 const { getPlayer, getPoru } = require("./players");
 const { addManualTracksToQueue, markManualTrack } = require("./queueOrdering");
+const { clearRecoverySnapshot, getRecoverySnapshot } = require("./recovery");
 const { searchAcrossSources } = require("./searchAggregator");
 const { parseSearchIdentifier } = require("./searchIdentifier");
 const { buildSearchQueries } = require("./searchQueryVariants");
@@ -61,6 +62,33 @@ async function ensurePlayer(guildId, voiceId, textId) {
       player.filters = savedEq;
     } catch (err) {
       Log.error("Failed to restore EQ settings", err, `guild=${guildId}`);
+    }
+  }
+
+  // If Discord/Lavalink dropped the live player, restore its queue only when
+  // someone explicitly starts playback again. This avoids joining a voice
+  // channel on its own after the bot has been kicked or disconnected.
+  const snapshot = await getRecoverySnapshot(guildId);
+  if (snapshot) {
+    try {
+      player.userVolume = snapshot.userVolume;
+      player.loop = snapshot.loop || "NONE";
+      if (snapshot.filters && typeof snapshot.filters === "object") {
+        await player.node.rest.updatePlayer({ guildId, data: { filters: toLavalinkFilters(snapshot.filters) } });
+        player.filters = snapshot.filters;
+      }
+      for (const queuedTrack of snapshot.queue || []) await player.queue.add(cloneTrack(queuedTrack));
+      if (snapshot.currentTrack) {
+        await player.queue.unshift(cloneTrack(snapshot.currentTrack));
+        await player.play();
+        if (snapshot.position > 1_000 && !snapshot.paused) await player.seekTo(snapshot.position);
+        if (snapshot.paused) await player.pause(true);
+      }
+      await applyNormalizedVolume(player, snapshot.currentTrack || player.currentTrack);
+      await clearRecoverySnapshot(guildId);
+      Log.success("Recovered player session", `guild=${guildId}`, `queue=${player.queue.length}`, `reason=${snapshot.reason}`);
+    } catch (error) {
+      Log.error("Failed to restore player recovery snapshot", error, `guild=${guildId}`);
     }
   }
   return player;
@@ -365,6 +393,7 @@ async function lavalinkStop(guildId) {
   djProposals.clearGuild(guildId);
   deletePanelState(guildId);
   clearPendingUpdates(guildId);
+  await clearRecoverySnapshot(guildId);
 
   return true;
 }

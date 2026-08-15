@@ -13,6 +13,7 @@ const { formatDuration } = require("../utils");
 const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
 const { applyNormalizedVolume } = require("./loudness");
 const { fetchLyrics } = require("./lyricsClient");
+const { clearRecoverySnapshot } = require("./recovery");
 const {
   ensurePlaybackState,
   cloneTrack,
@@ -224,6 +225,7 @@ function createPoru(client) {
 
     if (!player.currentTrack && player.queue.length === 0) {
       scheduleInactivityDisconnect(player, "trackEnd");
+      void clearRecoverySnapshot(player.guildId);
     }
 
     const state = ensurePlaybackState(player.guildId);

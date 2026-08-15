@@ -228,7 +228,7 @@ class Log {
         caller: Log.getCallerFile(),
       };
       health.recordError(arg instanceof Error ? arg : new Error(message), simpleContext);
-    } catch (err) {
+    } catch {
       // Health monitoring not available or failed - don't log to prevent infinite loop
     }
   }
@@ -322,7 +322,7 @@ class Log {
 
   static saveLogsToFile(log) {
     if (process.env.LOG_TO_FILE === "0") return;
-    const logWithoutFormatting = log.replace(/\x1b\[\d+m/g, "");
+    const logWithoutFormatting = log.replace(new RegExp(`${String.fromCharCode(27)}\\[\\d+m`, "g"), "");
     const logsPath = path.resolve(__dirname, "../../logs/logs.txt");
     const logsFolder = path.dirname(logsPath);
     (async () => {
@@ -335,7 +335,7 @@ class Log {
           if (stats.size >= MAX_LOG_SIZE) {
             await Log.rotateLogs(logsPath);
           }
-        } catch (err) {
+        } catch {
           // File doesn't exist yet, no need to rotate
         }
 
@@ -355,7 +355,7 @@ class Log {
       const oldestLog = path.join(logsFolder, `${baseName}.${MAX_LOG_FILES}.txt`);
       try {
         await fsp.unlink(oldestLog);
-      } catch (err) {
+      } catch {
         // File doesn't exist, that's fine
       }
 
@@ -366,7 +366,7 @@ class Log {
 
         try {
           await fsp.rename(oldPath, newPath);
-        } catch (err) {
+        } catch {
           // File doesn't exist, continue
         }
       }
@@ -405,7 +405,7 @@ class Log {
           if (stats.size >= MAX_LOG_SIZE) {
             await Log.rotateLogs(logsPath.replace(".json", ".txt"));
           }
-        } catch (err) {
+      } catch {
           // File doesn't exist yet
         }
 
