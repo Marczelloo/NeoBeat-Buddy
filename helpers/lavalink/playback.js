@@ -16,6 +16,7 @@ const {
 } = require("./lyricsFormatter");
 const { getPlayer, getPoru } = require("./players");
 const { addManualTracksToQueue, markManualTrack } = require("./queueOrdering");
+const { searchAcrossSources } = require("./searchAggregator");
 const { parseSearchIdentifier } = require("./searchIdentifier");
 const { buildSearchQueries } = require("./searchQueryVariants");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
@@ -104,9 +105,21 @@ async function lavalinkResolveTracks(query, source = "deezer") {
       searchQuery = q.slice("ytsearch:".length).trim();
     }
 
-    // Try specified source first
+    // Auto mode searches every provider in parallel and ranks the unified
+    // pool. This makes Enter behave like the Activity results instead of
+    // accepting the first (often clean/alternate) YouTube hit.
+    if (source === "auto") {
+      const aggregate = await searchAcrossSources(poru, searchQuery, { preferredSource: "youtube" });
+      const relevant = filterPlayableSearchResults(aggregate, searchQuery);
+      if (relevant.length) {
+        res = { loadType: "search", tracks: rankSearchResults(relevant, searchQuery) };
+      }
+    }
+
+    // Try the requested source first, then its verified fallback lane.
+    if (!res) {
     try {
-      const primarySource = source === "auto" ? "deezer" : source;
+      const primarySource = source === "auto" ? "youtube" : source;
       const sourcePrefix = getSearchPrefix(primarySource);
       const sourceName =
         primarySource === "youtube"
@@ -166,6 +179,7 @@ async function lavalinkResolveTracks(query, source = "deezer") {
       }
     } catch (err) {
       Log.warn(`${source} search failed, trying alternate sources`, err, `query=${searchQuery}`);
+    }
     }
   }
 

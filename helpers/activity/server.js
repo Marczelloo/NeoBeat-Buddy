@@ -31,7 +31,7 @@ const { getUserVolume } = require("../lavalink/loudness");
 const { fetchLyrics } = require("../lavalink/lyricsClient");
 const { getInterpolatedPosition, stopLyricsSession } = require("../lavalink/lyricsFormatter");
 const { getPoru } = require("../lavalink/players");
-const { searchSingleSource } = require("../lavalink/searchAggregator");
+const { searchAcrossSources, searchSingleSource } = require("../lavalink/searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
 const { skipWithLearning } = require("../lavalink/skipLearning");
 const { getLyricsState, playbackState, setLyricsState } = require("../lavalink/state");
@@ -625,23 +625,18 @@ async function searchActivityTracks(query, preferredSource) {
   if (!poru) throw Object.assign(new Error("Lavalink is still connecting."), { statusCode: 503 });
 
   const selectedSource = toSource(preferredSource);
-  const sources = selectedSource === "auto"
-    ? ["youtube", "soundcloud", "deezer", "spotify"]
-    : [selectedSource];
-  let firstNonEmpty = [];
+  const normalizedQuery = limitText(query, 200);
 
-  for (const source of sources) {
-    const tracks = await searchSingleSource(poru, limitText(query, 200), source);
-    if (!firstNonEmpty.length && tracks.length) firstNonEmpty = tracks;
-
-    const relevant = filterPlayableSearchResults(tracks, query);
-    if (relevant.length) return serializeActivitySearchResults(relevant, query);
+  if (selectedSource === "auto") {
+    // Keep YouTube as the first source, but rank the complete provider pool.
+    // Stopping at the first loose YouTube result hid verified Spotify/Deezer
+    // recordings and made a short typing result disappear for a full query.
+    const tracks = await searchAcrossSources(poru, normalizedQuery, { preferredSource: "youtube" });
+    return serializeActivitySearchResults(filterPlayableSearchResults(tracks, query), query);
   }
 
-  // An explicitly selected provider should still be allowed to show its best
-  // available matches. Auto mode reaches this only after every fallback has
-  // failed to produce a real match.
-  return serializeActivitySearchResults(filterPlayableSearchResults(firstNonEmpty, query), query);
+  const tracks = await searchSingleSource(poru, normalizedQuery, selectedSource);
+  return serializeActivitySearchResults(filterPlayableSearchResults(tracks, query), query);
 }
 
 function sendSocket(socket, payload) {

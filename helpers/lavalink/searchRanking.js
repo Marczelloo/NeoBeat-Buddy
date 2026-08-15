@@ -18,6 +18,7 @@ const {
   getBaseTitle,
   getVariantKinds,
   isUnrequestedAlternateVersion,
+  cleanArtistName,
   normalizeComparableText,
   queryRequestsVariant,
 } = require("./trackNormalization");
@@ -34,11 +35,11 @@ const VERSION_PENALTIES = Object.freeze({
   acoustic: 55,
   mix: 50,
   edit: 35,
+  clean: 65,
   single: 0,
   version: 0,
   original: 0,
   radio: 0,
-  clean: 0,
   explicit: 0,
   remaster: 20,
 });
@@ -187,10 +188,19 @@ function getProviderIdentity(track) {
 }
 
 function getConsensusKey(track) {
-  const title = normalizeText(track?.info?.title || "");
-  const author = normalizeText(track?.info?.author || "");
+  const title = getCanonicalTitle(track?.info?.title || "");
+  const author = normalizeText(cleanArtistName(track?.info?.author || ""));
   if (!title || !author) return null;
   return `${author}|||${title}`;
+}
+
+function getCatalogSourceBonus(track, consensusSources) {
+  if (consensusSources < 2) return 0;
+  const source = getProviderIdentity(track);
+  if (source === "spotify") return 8;
+  if (source === "deezer") return 6;
+  if (source === "soundcloud") return 2;
+  return 0;
 }
 
 function getProviderConsensus(track, consensusMap) {
@@ -318,6 +328,12 @@ function scoreSearchResult(track, query, index = 0, { consensusMap } = {}) {
     reasons.push(`provider consensus:${consensusSources}`);
   }
 
+  const catalogSourceBonus = getCatalogSourceBonus(track, consensusSources);
+  if (catalogSourceBonus) {
+    score += catalogSourceBonus;
+    reasons.push("catalog recording");
+  }
+
   // Lavalink does not expose popularity consistently across all sources. When it does,
   // use it as a small tie-breaker; otherwise the provider's result order remains useful.
   score += popularity * 0.12;
@@ -395,6 +411,7 @@ function rankSearchResults(tracks, query, { limit, withScores = false } = {}) {
 
 module.exports = {
   getCanonicalTitle,
+  getCatalogSourceBonus,
   getConsensusKey,
   filterRelevantSearchResults,
   filterPlayableSearchResults,

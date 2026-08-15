@@ -27,10 +27,10 @@ export function fetchActivityState({ guildId, accessToken }) {
   return request(`/api/activity/state?guildId=${encodeURIComponent(guildId)}`, {}, accessToken);
 }
 
-export function searchActivity({ guildId, accessToken, query, source }) {
+export function searchActivity({ guildId, accessToken, query, source, signal }) {
   return request(
     "/api/activity/search",
-    { method: "POST", body: JSON.stringify({ guildId, query, source }) },
+    { method: "POST", body: JSON.stringify({ guildId, query, source }), signal },
     accessToken
   );
 }

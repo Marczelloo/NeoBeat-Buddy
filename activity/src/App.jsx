@@ -507,7 +507,7 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
         </select>
         <button className="primary-button" type="button" onClick={onSearch}><MagnifyingGlass size={17} weight="bold" aria-hidden="true" /> Search</button>
       </div> : null}
-      <div className="search-caption"><span>{directLink ? "Direct link detected — the source picker is ignored" : status === "searching" ? "Searching the selected source" : status === "error" ? "Search needs attention" : "One source at a time — YouTube first in automatic mode"}</span><span className="source-coverage"><Cloud size={15} aria-hidden="true" /> YouTube → SoundCloud → Deezer → Spotify</span></div>
+      <div className="search-caption"><span>{directLink ? "Direct link detected — the source picker is ignored" : status === "searching" ? "Searching the selected source" : status === "error" ? "Search needs attention" : "YouTube-led search — verified matches from all providers"}</span><span className="source-coverage"><Cloud size={15} aria-hidden="true" /> YouTube → SoundCloud → Deezer → Spotify</span></div>
       {status === "searching" ? <div className="skeleton-list" aria-label="Loading search results"><span /><span /><span /></div> : null}
       {status === "error" ? <div className="inline-error"><WarningCircle size={18} aria-hidden="true" /> Search is temporarily unavailable. Check the Lavalink connection.</div> : null}
       {directLink ? <section className="direct-link-card" aria-label="Direct music link ready">
@@ -956,6 +956,7 @@ function App() {
   const hydrationStartedAt = useRef(Date.now());
   const hydrationTimer = useRef(null);
   const appliedSnapshot = useRef({ revision: -1, generatedAt: -1 });
+  const searchRequest = useRef({ id: 0, controller: null });
   const isCompact = useCompactViewport();
 
   const goToView = useCallback((view) => {
@@ -1158,6 +1159,10 @@ function App() {
 
   const runSearch = useCallback(async () => {
     const query = searchQuery.trim();
+    searchRequest.current.controller?.abort();
+    const requestId = searchRequest.current.id + 1;
+    searchRequest.current = { id: requestId, controller: null };
+
     if (query.length < 2) { setSearchResults([]); setSearchStatus("idle"); return; }
     if (parseMusicLink(query)) {
       setSearchResults([]);
@@ -1172,12 +1177,16 @@ function App() {
         setSearchResults(localResults);
         setSearchStatus(localResults.length ? "idle" : "empty");
       } else {
-        const response = await searchActivity({ ...context, query, source: searchSource });
+        const controller = new AbortController();
+        searchRequest.current = { id: requestId, controller };
+        const response = await searchActivity({ ...context, query, source: searchSource, signal: controller.signal });
+        if (searchRequest.current.id !== requestId) return;
         const nextResults = response.tracks || [];
         setSearchResults(nextResults);
         setSearchStatus(nextResults.length ? "idle" : "empty");
       }
     } catch (error) {
+      if (error?.name === "AbortError" || searchRequest.current.id !== requestId) return;
       setSearchResults([]);
       setSearchStatus("error");
       showToast(error.message, "error");
@@ -1185,10 +1194,24 @@ function App() {
   }, [context, searchQuery, searchSource, showToast]);
 
   useEffect(() => {
-    if (activeTab !== "search" || searchQuery.trim().length < 2) return undefined;
-    const timer = window.setTimeout(runSearch, 380);
-    return () => window.clearTimeout(timer);
-  }, [activeTab, runSearch, searchQuery]);
+    if (activeTab !== "search" || searchQuery.trim().length < 2) {
+      searchRequest.current.id += 1;
+      searchRequest.current.controller?.abort();
+      searchRequest.current.controller = null;
+      if (activeTab === "search") {
+        setSearchResults([]);
+        setSearchStatus("idle");
+      }
+      return undefined;
+    }
+    const timer = window.setTimeout(runSearch, 560);
+    return () => {
+      window.clearTimeout(timer);
+      searchRequest.current.id += 1;
+      searchRequest.current.controller?.abort();
+      searchRequest.current.controller = null;
+    };
+  }, [activeTab, runSearch, searchQuery, searchSource]);
 
   const searchProps = {
     query: searchQuery,

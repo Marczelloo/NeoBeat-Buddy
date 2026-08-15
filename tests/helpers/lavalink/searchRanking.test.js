@@ -170,6 +170,24 @@ describe("Search result ranking", () => {
     assert.strictEqual(ranked[0].info.author, "TACONAFIDE");
   });
 
+  it("filters a clean recording unless the user explicitly asks for it", () => {
+    const clean = createTrack("Hit 'Em Up (Clean)", "2Pac", 99);
+    const explicit = createTrack("Hit 'Em Up", "2Pac", 55);
+
+    assert.deepStrictEqual(filterPlayableSearchResults([clean, explicit], "2pac hit em up"), [explicit]);
+    assert.deepStrictEqual(filterPlayableSearchResults([clean, explicit], "2pac hit em up clean"), [clean]);
+  });
+
+  it("prefers a matching catalog recording over the same YouTube upload metadata", () => {
+    const youtube = createTrack("Hit 'Em Up (Official Audio)", "2Pac - Topic", 95);
+    youtube.info.sourceName = "youtube";
+    const spotify = createTrack("Hit 'Em Up", "2Pac", 50);
+    spotify.info.sourceName = "spotify";
+
+    const ranked = rankSearchResults([youtube, spotify], "2pac hit em up");
+    assert.strictEqual(ranked[0].info.sourceName, "spotify");
+  });
+
   it("excludes alternate-only results at the playback boundary", () => {
     const acoustic = createTrack("Pink Pony Club (Acoustic)", "Chappell Roan");
     assert.deepStrictEqual(filterPlayableSearchResults([acoustic], "Pink Pony Club"), []);
