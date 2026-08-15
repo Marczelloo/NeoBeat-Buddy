@@ -15,12 +15,13 @@ const EFFECT_FILTER_KEYS = [
   "lowPass",
 ];
 
-// Lavalink accepts gains up to 1.0, but its own documentation notes that 0.25
-// already doubles a band. Keep normal EQ deliberately conservative and reserve
-// the more extreme sound for the explicitly labelled fun effects.
-const SAFE_EQ_MIN_GAIN = -0.25;
-const SAFE_EQ_MAX_GAIN = 0.2;
-const EQ_HEADROOM_FLOOR = 0.55;
+// Lavalink accepts gains up to 1.0, but 0.25 is already roughly +6 dB. The
+// old +0.20 cap required a 45% preamp cut, which made every EQ preset sound
+// muffled. These limits preserve an audible tonal change while keeping enough
+// headroom for normal Discord playback.
+const SAFE_EQ_MIN_GAIN = -0.2;
+const SAFE_EQ_MAX_GAIN = 0.14;
+const EQ_HEADROOM_FLOOR = 0.82;
 
 function toLavalinkFilters(filters) {
   const payload = { ...(filters || {}) };
@@ -44,9 +45,11 @@ function getEqualizerPreamp(bands = []) {
   const peakGain = Math.max(0, ...bands.map((band) => Number(band.gain) || 0));
   if (peakGain <= 0) return null;
 
-  // One Lavalink gain unit is approximately 24 dB. Preserve enough headroom
-  // for boosted bands, but never make a regular preset unusably quiet.
-  return Math.max(EQ_HEADROOM_FLOOR, Number(Math.pow(10, -(peakGain * 24) / 20).toFixed(3)));
+  // Avoid a whole-track "muffle" for modest tonal shaping. The strongest
+  // supported boost gets a restrained ~1 dB safety reduction, rather than
+  // the previous -5 dB cut. Lavalink's player volume remains the user's
+  // primary loudness control.
+  return Math.max(EQ_HEADROOM_FLOOR, Number((1 - peakGain * 0.85).toFixed(3)));
 }
 
 function getStoredFilters(guildId, player) {

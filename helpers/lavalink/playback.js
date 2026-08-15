@@ -15,7 +15,7 @@ const {
   stopLyricsSession,
 } = require("./lyricsFormatter");
 const { getPlayer, getPoru } = require("./players");
-const { addManualTracksToQueue, markManualTrack } = require("./queueOrdering");
+const { addManualTracksToQueue, markManualTrack, partitionQueueTracks } = require("./queueOrdering");
 const { clearRecoverySnapshot, getRecoverySnapshot } = require("./recovery");
 const { searchAcrossSources } = require("./searchAggregator");
 const { parseSearchIdentifier } = require("./searchIdentifier");
@@ -612,7 +612,18 @@ async function lavalinkShuffle(guildId) {
 
   if (!player || player.queue.length === 0) return false;
 
-  player.queue.shuffle();
+  // Keep manual requests ahead of the autoplay buffer. A full queue shuffle
+  // used to erase that boundary and made an autoplay item look user-added.
+  const { manual, autoplay } = partitionQueueTracks(Array.from(player.queue));
+  const shuffle = (tracks) => {
+    for (let index = tracks.length - 1; index > 0; index -= 1) {
+      const target = Math.floor(Math.random() * (index + 1));
+      [tracks[index], tracks[target]] = [tracks[target], tracks[index]];
+    }
+  };
+  shuffle(manual);
+  shuffle(autoplay);
+  player.queue.splice(0, player.queue.length, ...manual, ...autoplay);
   player.shuffleActive = true;
   clearInactivityTimer(guildId, "shuffle");
   return true;

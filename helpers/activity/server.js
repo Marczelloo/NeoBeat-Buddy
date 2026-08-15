@@ -32,6 +32,7 @@ const { getUserVolume } = require("../lavalink/loudness");
 const { fetchLyrics } = require("../lavalink/lyricsClient");
 const { getInterpolatedPosition, stopLyricsSession } = require("../lavalink/lyricsFormatter");
 const { getPoru } = require("../lavalink/players");
+const { markManualTrack, moveQueueTrackWithinOrigin, normalizeQueueAutoplayPartition } = require("../lavalink/queueOrdering");
 const { searchAcrossSources, searchSingleSource } = require("../lavalink/searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
 const { skipWithLearning } = require("../lavalink/skipLearning");
@@ -336,6 +337,7 @@ async function restoreQueueUndoSnapshot(guildId, token) {
   if (!player?.queue) return { success: false, error: "The player is no longer connected." };
   player.queue.clear();
   for (const track of snapshot.queue) await player.queue.add(cloneTrack(track));
+  normalizeQueueAutoplayPartition(player.queue);
   queueUndoSnapshots.delete(key);
   return { success: true, restored: snapshot.queue.length };
 }
@@ -523,6 +525,7 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
     case "remove_queue": {
       const undoToken = createQueueUndoSnapshot(guildId, player);
       const removed = await lavalinkRemoveFromQueue(guildId, { position: Number(payload.position) + 1 });
+      normalizeQueueAutoplayPartition(player?.queue);
       return { success: removed?.status === "removed", undoToken: removed?.status === "removed" ? undoToken : null, ...removed };
     }
     case "play_next": {
@@ -532,7 +535,9 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
         throw Object.assign(new Error("That queue position is no longer available."), { statusCode: 409 });
       }
       const [track] = player.queue.splice(position, 1);
+      markManualTrack(track);
       player.queue.unshift(track);
+      normalizeQueueAutoplayPartition(player.queue);
       return { success: true };
     }
     case "undo_queue":
@@ -544,9 +549,7 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= player.queue.length || to >= player.queue.length) {
         throw Object.assign(new Error("That queue position is no longer available."), { statusCode: 409 });
       }
-      const [track] = player.queue.splice(from, 1);
-      player.queue.splice(to, 0, track);
-      return true;
+      return moveQueueTrackWithinOrigin(player.queue, from, to);
     }
     case "filter":
       if (String(payload.preset || "").toLowerCase() === "off") return lavalinkResetEffects(guildId);

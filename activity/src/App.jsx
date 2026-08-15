@@ -172,6 +172,35 @@ function getTrackLikeKey(track) {
   return `${normalize(track?.title)}::${normalize(track?.author)}`;
 }
 
+function isAutoplayQueueTrack(track) {
+  return Boolean(track?.autoplay);
+}
+
+function partitionQueueForDisplay(queue = []) {
+  const manual = [];
+  const autoplay = [];
+  for (const track of queue) (isAutoplayQueueTrack(track) ? autoplay : manual).push(track);
+  return [...manual, ...autoplay];
+}
+
+function moveQueueTrackForDisplay(queue = [], from, to) {
+  const tracks = partitionQueueForDisplay(queue);
+  const moving = tracks[from];
+  const target = tracks[to];
+  if (!moving || !target) return tracks;
+
+  const autoplay = isAutoplayQueueTrack(moving);
+  const segment = tracks.filter((track) => isAutoplayQueueTrack(track) === autoplay);
+  const sourceIndex = segment.indexOf(moving);
+  const crossesDivider = isAutoplayQueueTrack(target) !== autoplay;
+  let targetIndex = crossesDivider ? (autoplay ? 0 : segment.length) : segment.indexOf(target);
+  segment.splice(sourceIndex, 1);
+  if (!crossesDivider && sourceIndex < targetIndex) targetIndex -= 1;
+  segment.splice(Math.max(0, Math.min(segment.length, targetIndex)), 0, moving);
+  const partition = partitionQueueForDisplay(tracks);
+  return autoplay ? [...partition.filter((track) => !isAutoplayQueueTrack(track)), ...segment] : [...segment, ...partition.filter(isAutoplayQueueTrack)];
+}
+
 function getActionPendingKey(action, payload = {}) {
   if (action === "remove_queue" || action === "play_next") return `${action}:${Number(payload.position)}`;
   return action;
@@ -1213,15 +1242,20 @@ function App() {
         }
       }
       if (action === "previous") next.player.positionMs = 0;
-      if (action === "shuffle") { next.player.queue.sort(() => Math.random() - 0.5); next.player.shuffleActive = true; }
-      if (action === "remove_queue") next.player.queue.splice(payload.position, 1);
+      if (action === "shuffle") {
+        const manual = next.player.queue.filter((track) => !isAutoplayQueueTrack(track)).sort(() => Math.random() - 0.5);
+        const autoplay = next.player.queue.filter(isAutoplayQueueTrack).sort(() => Math.random() - 0.5);
+        next.player.queue = [...manual, ...autoplay];
+        next.player.shuffleActive = true;
+      }
+      if (action === "remove_queue") { next.player.queue.splice(payload.position, 1); next.player.queue = partitionQueueForDisplay(next.player.queue); }
       if (action === "clear_queue") next.player.queue = [];
-      if (action === "play_next") { const [track] = next.player.queue.splice(payload.position, 1); if (track) next.player.queue.unshift(track); }
-      if (action === "move_queue") { const [track] = next.player.queue.splice(payload.from, 1); next.player.queue.splice(payload.to, 0, track); }
+      if (action === "play_next") { const [track] = next.player.queue.splice(payload.position, 1); if (track) { track.autoplay = false; next.player.queue.unshift(track); } next.player.queue = partitionQueueForDisplay(next.player.queue); }
+      if (action === "move_queue") next.player.queue = moveQueueTrackForDisplay(next.player.queue, payload.from, payload.to);
       if (action === "undo_queue") {
         const snapshot = localUndoSnapshots.current.get(payload.token);
         if (snapshot) {
-          next.player.queue = structuredClone(snapshot);
+          next.player.queue = partitionQueueForDisplay(structuredClone(snapshot));
           localUndoSnapshots.current.delete(payload.token);
         }
       }

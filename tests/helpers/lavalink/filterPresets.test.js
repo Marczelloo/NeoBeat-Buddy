@@ -41,5 +41,6 @@ describe("Audio filter presets", () => {
     assert.strictEqual(getEqualizerPreamp([]), null);
     assert.strictEqual(getEqualizerPreamp([{ band: 0, gain: -0.25 }]), null);
     assert.ok(getEqualizerPreamp([{ band: 0, gain: SAFE_EQ_MAX_GAIN }]) < 1);
+    assert.ok(getEqualizerPreamp([{ band: 0, gain: SAFE_EQ_MAX_GAIN }]) >= 0.85);
   });
 });
