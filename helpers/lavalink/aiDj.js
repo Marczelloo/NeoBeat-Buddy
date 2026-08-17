@@ -10,6 +10,7 @@ const DEFAULT_TIMEOUT_MS = 12000;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_PROPOSALS = 8;
 const DEFAULT_MIN_CONFIDENCE = 0.55;
+const DEFAULT_MIN_TOP_FIT = 68;
 const CACHE_LIMIT = 300;
 const REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 
@@ -19,7 +20,9 @@ Choose the next songs yourself. The current song decides the immediate transitio
 
 Return 4 to 8 specific, real recordings in deliberate priority order. Give every candidate a transition fit score from 0 to 100, where 100 means an exceptionally natural next song for this exact room at this exact moment. Return candidates in descending fit order. The bot treats both this score and your order as authoritative DJ intent, so use the scale honestly: do not give a weak bridge a score close to a direct continuation merely for variety.
 
-Prefer the supplied verified catalog whenever it contains a good fit: those recordings are already playable through MewBit's providers. You may include up to two open-catalog discoveries if the verified pool misses the best musical continuation. Prefer, in order: a natural continuation from the same album or artist when it still fits; a return to a compatible artist or album from manual memory; a close collaborator, scene, or sonic peer; then a measured bridge. Treat artist and album changes as creative options, never quotas: do not lower a strong continuation just because the artist or album has appeared several times. Only place an exit above it when it is genuinely comparable in energy, mood, scene, and listening flow. When the supplied soft-exit thresholds have been reached, include one or more equally credible exits near the top so the player can rotate them in naturally; a clearly stronger continuation must remain first. Leaving an album does not ban returning to it later if the transition remains natural. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
+Prefer the supplied verified catalog whenever it contains a good fit: those recordings are already playable through MewBit's providers. You may include up to two open-catalog discoveries if the verified pool misses the best musical continuation. Prefer, in order: a natural continuation from the same album or artist when it still fits; a return to a compatible artist or album from manual memory; a close collaborator, scene, or sonic peer; then a measured bridge. Treat artist and album changes as creative options, never quotas: do not lower a strong continuation just because the artist or album has appeared several times.
+
+Actively program variety once a run develops. Before a run is established, direct continuations are welcome. Once sameArtistStreak or sameAlbumStreak reaches the supplied soft-exit threshold, include at least two genuine same-vibe exits from a different artist or album whenever credible recordings exist, with the best one in the top four. Score a direct continuation above those exits only when it is materially more natural; if an exit would make an equally good next track, score it within 10 fit points so MewBit can rotate it in. Never fabricate or force a bad exit just to satisfy variety. Leaving an album does not ban returning to it later if the transition remains natural. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
 
 When web search is available, use it to verify exact artist/title pairs when your knowledge is uncertain, especially for niche, regional, or non-English music. Never output a vague genre, playlist, album-only recommendation, invented track, or a different version of an existing song. Avoid every supplied recent/blocked recording. A recording may only repeat after the supplied repeat cooldown has elapsed; within that cooldown, choose another fitting cut. If a credible direction cannot be formed, return "no_match" instead of guessing.
 
@@ -85,6 +88,7 @@ function getConfig() {
     maxProposals: Math.floor(readPositiveNumber(process.env.AI_DJ_MAX_PROPOSALS, DEFAULT_MAX_PROPOSALS, { min: 2, max: 12 })),
     useWebSearch: process.env.AI_DJ_WEB_SEARCH === "true",
     minConfidence: readPositiveNumber(process.env.AI_DJ_MIN_CONFIDENCE, DEFAULT_MIN_CONFIDENCE, { min: 0, max: 1 }),
+    minTopFit: readPositiveNumber(process.env.AI_DJ_MIN_TOP_FIT, DEFAULT_MIN_TOP_FIT, { min: 0, max: 100 }),
   };
 }
 
@@ -312,6 +316,8 @@ async function planNextTrackWithAIDJ(input) {
 
   if (plan.decision !== "propose" || !plan.candidates.length) return { status: "no-match", plan, cached, model: config.model };
   if (plan.confidence < config.minConfidence) return { status: "low-confidence", plan, cached, model: config.model };
+  const topFit = Math.max(...plan.candidates.map((candidate) => Number(candidate.fit) || 0));
+  if (topFit < config.minTopFit) return { status: "low-fit", plan, cached, model: config.model };
   return { status: "planned", plan, cached, model: config.model };
 }
 

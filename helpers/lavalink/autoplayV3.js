@@ -28,10 +28,10 @@ const SOFT_ALBUM_EXIT_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBU
 const SOFT_ARTIST_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ARTIST_EXIT_PENALTY ?? 3), 0);
 const SOFT_ALBUM_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBUM_EXIT_PENALTY ?? 4), 0);
 const AI_DJ_PRIORITY_WEIGHT = Math.min(Math.max(Number(process.env.AI_DJ_PRIORITY_WEIGHT ?? 12), 1), 40);
-const AI_DJ_DIVERSITY_ARTIST_STREAK = Math.max(Number(process.env.AI_DJ_DIVERSITY_ARTIST_STREAK ?? 4), 1);
+const AI_DJ_DIVERSITY_ARTIST_STREAK = Math.max(Number(process.env.AI_DJ_DIVERSITY_ARTIST_STREAK ?? 3), 1);
 const AI_DJ_DIVERSITY_ALBUM_STREAK = Math.max(Number(process.env.AI_DJ_DIVERSITY_ALBUM_STREAK ?? 3), 1);
-const AI_DJ_DIVERSITY_FIT_BAND = Math.min(Math.max(Number(process.env.AI_DJ_DIVERSITY_FIT_BAND ?? 4), 0), 25);
-const AI_DJ_DIVERSITY_QUALITY_BAND = Math.min(Math.max(Number(process.env.AI_DJ_DIVERSITY_QUALITY_BAND ?? 5), 0), 40);
+const AI_DJ_DIVERSITY_FIT_BAND = Math.min(Math.max(Number(process.env.AI_DJ_DIVERSITY_FIT_BAND ?? 10), 0), 25);
+const AI_DJ_DIVERSITY_QUALITY_BAND = Math.min(Math.max(Number(process.env.AI_DJ_DIVERSITY_QUALITY_BAND ?? 10), 0), 40);
 
 function sourceSet(candidate) {
   return new Set([candidate?.source, ...(candidate?.providerSources || [])].filter(Boolean));

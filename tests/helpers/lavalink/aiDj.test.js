@@ -15,6 +15,7 @@ const envKeys = [
   "AI_DJ_MODEL",
   "AI_DJ_REASONING_EFFORT",
   "AI_DJ_MIN_CONFIDENCE",
+  "AI_DJ_MIN_TOP_FIT",
   "AI_DJ_CACHE_TTL_MS",
   "AI_DJ_WEB_SEARCH",
   "AI_DJ_MAX_PROPOSALS",
@@ -59,6 +60,7 @@ describe("AI DJ director", () => {
     process.env.AI_DJ_MODEL = "gpt-5.6-luna";
     process.env.AI_DJ_REASONING_EFFORT = "low";
     process.env.AI_DJ_MIN_CONFIDENCE = "0.55";
+    process.env.AI_DJ_MIN_TOP_FIT = "68";
     process.env.AI_DJ_CACHE_TTL_MS = "300000";
     process.env.AI_DJ_WEB_SEARCH = "true";
     process.env.AI_DJ_MAX_PROPOSALS = "8";
@@ -173,5 +175,17 @@ describe("AI DJ director", () => {
 
     const result = await planNextTrackWithAIDJ(input());
     assert.strictEqual(result.status, "fallback-error");
+  });
+
+  it("uses V3 when the AI has no genuinely strong next-track proposal", async () => {
+    setAIDJFetchForTests(async () => ({
+      ok: true,
+      json: async () => ({ output_text: JSON.stringify(plannedResponse([
+        { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", fit: 67, reason: "Too weak for director control." },
+      ])) }),
+    }));
+
+    const result = await planNextTrackWithAIDJ(input());
+    assert.strictEqual(result.status, "low-fit");
   });
 });

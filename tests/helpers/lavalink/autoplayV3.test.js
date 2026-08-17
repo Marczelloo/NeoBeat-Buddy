@@ -146,9 +146,9 @@ describe("Autoplay V3 selection", () => {
     const compatibleExit = candidate("Scene Bridge", "Quebonafide", "ai_dj", { genres: ["hip hop"] });
     sameAlbum.aiDjFit = 94;
     compatibleExit.aiDjRank = 1;
-    compatibleExit.aiDjFit = 92;
+    compatibleExit.aiDjFit = 85;
 
-    const selectionContext = context({ artistStreak: 4, albumStreak: 3 });
+    const selectionContext = context({ artistStreak: 3, albumStreak: 3 });
     const { ranked } = selectV3Candidates([sameAlbum, compatibleExit], selectionContext);
     const ordered = orderAIDirectorCandidates(ranked, selectionContext);
     const continuationOnly = selectV3Candidates([sameAlbum], selectionContext);
@@ -156,6 +156,21 @@ describe("Autoplay V3 selection", () => {
     assert.strictEqual(ordered.ranked[0].candidate.title, "Scene Bridge");
     assert.strictEqual(ordered.deferred.title, "Another Cut");
     assert.strictEqual(continuationOnly.ranked.length, 1);
+  });
+
+  it("does not defer a run when the best available AI bridge is materially weaker", () => {
+    const continuation = candidate("Deep Cut", "Guzior", "ai_dj", { genres: ["hip hop"] });
+    const bridge = candidate("Scene Bridge", "Szpaku", "ai_dj", { genres: ["hip hop"] });
+    continuation.aiDjFit = 94;
+    bridge.aiDjFit = 81;
+    bridge.aiDjRank = 1;
+
+    const selectionContext = context({ referenceArtist: "guzior", artistStreak: 4 });
+    const { ranked } = selectV3Candidates([continuation, bridge], selectionContext);
+    const ordered = orderAIDirectorCandidates(ranked, selectionContext);
+
+    assert.strictEqual(ordered.ranked[0].candidate.title, "Deep Cut");
+    assert.strictEqual(ordered.deferred, null);
   });
 
   it("uses AI fit as the dominant ordering signal while retaining V3 quality inside a tie", () => {
