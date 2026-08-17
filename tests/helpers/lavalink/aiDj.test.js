@@ -42,12 +42,12 @@ function input() {
   };
 }
 
-function plannedResponse(candidates = [{ artist: "Taco Hemingway", title: "Wosk", album: "Frascati", fit: 96, reason: "Direct album continuation." }]) {
+function plannedResponse(candidates = [{ artist: "Taco Hemingway", title: "Wosk", album: "Frascati", lane: "continuation", fit: 96, reason: "Direct album continuation." }]) {
   return {
     decision: "propose",
     confidence: 0.9,
     direction: { summary: "Stay in Frascati's intimate Warsaw rap lane.", energy: "steady-mid", mood: "late-night, reflective" },
-    candidates,
+    candidates: candidates.map((candidate) => ({ lane: "continuation", ...candidate })),
     reasons: ["Manual anchor and current cut both favour reflective Polish rap."],
   };
 }

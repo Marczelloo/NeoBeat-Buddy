@@ -22,7 +22,9 @@ Return 4 to 8 specific, real recordings in deliberate priority order. Give every
 
 Prefer the supplied verified catalog whenever it contains a good fit: those recordings are already playable through MewBit's providers. You may include up to two open-catalog discoveries if the verified pool misses the best musical continuation. Prefer, in order: a natural continuation from the same album or artist when it still fits; a return to a compatible artist or album from manual memory; a close collaborator, scene, or sonic peer; then a measured bridge. Treat artist and album changes as creative options, never quotas: do not lower a strong continuation just because the artist or album has appeared several times.
 
-Actively program variety once a run develops. Before a run is established, direct continuations are welcome. Once sameArtistStreak or sameAlbumStreak reaches the supplied soft-exit threshold, include at least two genuine same-vibe exits from a different artist or album whenever credible recordings exist, with the best one in the top four. Score a direct continuation above those exits only when it is materially more natural; if an exit would make an equally good next track, score it within 10 fit points so MewBit can rotate it in. Never fabricate or force a bad exit just to satisfy variety. Leaving an album does not ban returning to it later if the transition remains natural. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
+Program two parallel routes in every credible plan: include one or more "continuation" choices that naturally stay with the current artist or album, and one or more "bridge" choices from a different artist that preserve the same energy, mood, scene and cultural context. A continuation is not automatically better: some albums reward a run, while others become repetitive or contain non-song transitions. The bot will choose between equally strong routes based on the current streak. Mark every candidate with its route: "continuation", "bridge", or "explore".
+
+Actively program variety once a run develops. Before a run is established, direct continuations are welcome. Once sameArtistStreak or sameAlbumStreak reaches the supplied soft-exit threshold, make the best credible bridge competitive: include it in the top four whenever possible and score it within 12 fit points of a continuation when it would feel comparably natural. Never fabricate or force a bad exit just to satisfy variety. Leaving an album does not ban returning to it later if the transition remains natural. Never propose intros, outros, interludes, skits, spoken transitions, album acts/chapters, or other short narrative breaks. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
 
 When web search is available, use it to verify exact artist/title pairs when your knowledge is uncertain, especially for niche, regional, or non-English music. Never output a vague genre, playlist, album-only recommendation, invented track, or a different version of an existing song. Avoid every supplied recent/blocked recording. A recording may only repeat after the supplied repeat cooldown has elapsed; within that cooldown, choose another fitting cut. If a credible direction cannot be formed, return "no_match" instead of guessing.
 
@@ -50,11 +52,12 @@ const AI_DJ_DIRECTOR_RESPONSE_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["artist", "title", "album", "fit", "reason"],
+        required: ["artist", "title", "album", "lane", "fit", "reason"],
         properties: {
           artist: { type: "string" },
           title: { type: "string" },
           album: { type: "string" },
+          lane: { type: "string", enum: ["continuation", "bridge", "explore"] },
           fit: { type: "number", minimum: 0, maximum: 100 },
           reason: { type: "string" },
         },
@@ -206,12 +209,13 @@ function validateDirectorPlan(value, maxProposals) {
     const artist = compactText(candidate?.artist, 120);
     const title = compactText(candidate?.title, 160);
     const album = compactText(candidate?.album, 160);
+    const lane = compactText(candidate?.lane, 32).toLowerCase();
     const reason = compactText(candidate?.reason, 180);
     const fit = Number(candidate?.fit);
     const key = `${artist.toLowerCase()}|${title.toLowerCase()}`;
-    if (!artist || !title || !reason || !Number.isFinite(fit) || fit < 0 || fit > 100 || seen.has(key)) return [];
+    if (!artist || !title || !reason || !["continuation", "bridge", "explore"].includes(lane) || !Number.isFinite(fit) || fit < 0 || fit > 100 || seen.has(key)) return [];
     seen.add(key);
-    return [{ artist, title, album, fit, reason, rank: index }];
+    return [{ artist, title, album, lane, fit, reason, rank: index }];
   }).slice(0, maxProposals) : [];
 
   if (!['propose', 'no_match'].includes(decision) || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) return null;

@@ -36,10 +36,18 @@ function isValidSong(trackInfo, options = {}) {
   const titleLower = (title || "").toLowerCase();
   const interludePattern = /\b(?:interlude|skit|spoken\s+interlude|transition|intermission|voicemail)\b/i;
   const shortAlbumBreakPattern = /\b(?:intro|outro)\b/i;
+  // Album chapters such as Taco Hemingway's "AKT IV" are often spoken
+  // transitions rather than songs. Keep the check intentionally narrow and
+  // duration-bound so short, legitimate songs can still autoplay.
+  const shortNarrativeBreakPattern = /\b(?:akt|act|scene|scena|chapter|rozdzia(?:ł|l)|prologue|epilogue|prelude|postlude)\s*(?:[ivxlcdm]+|\d+)\b/i;
   const duration = Number(length) || 0;
   if (
     excludeInterludes &&
-    (interludePattern.test(titleLower) || (shortAlbumBreakPattern.test(titleLower) && duration > 0 && duration <= 150_000))
+    (
+      interludePattern.test(titleLower)
+      || (shortAlbumBreakPattern.test(titleLower) && duration > 0 && duration <= 150_000)
+      || (shortNarrativeBreakPattern.test(titleLower) && duration > 0 && duration <= 90_000)
+    )
   ) {
     Log.debug("Autoplay candidate rejected: album break", "", `title=${title}`);
     return false;

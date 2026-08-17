@@ -170,13 +170,11 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AI_DJ_TIMEOUT_MS` | `12000` | Maximum AI DJ wait before falling back to V3. Planning runs in parallel with provider fallback collection. |
 | `AI_DJ_CACHE_TTL_MS` | `300000` | Caches an identical sanitized listening context to avoid duplicate API calls. |
 | `AI_DJ_MAX_PROPOSALS` | `8` | Maximum exact artist/title recordings in one AI DJ plan. |
-| `AI_DJ_MAX_ARTIST_STREAK` | `8` | Emergency ceiling for an AI-directed same-artist run; a musically strong run is never pushed out early. |
-| `AI_DJ_MAX_ALBUM_STREAK` | `6` | Emergency ceiling for an AI-directed same-album run; a musically strong run is never pushed out early. |
 | `AI_DJ_PRIORITY_WEIGHT` | `12` | Strength of the AI's per-track 0–100 transition-fit score relative to generic V3 scoring. |
-| `AI_DJ_DIVERSITY_ARTIST_STREAK` | `3` | An equally good AI bridge can be softly preferred only after this many same-artist tracks. |
-| `AI_DJ_DIVERSITY_ALBUM_STREAK` | `3` | An equally good AI bridge can be softly preferred only after this many same-album tracks. |
-| `AI_DJ_DIVERSITY_FIT_BAND` | `10` | Maximum AI fit-score drop accepted when softly rotating to a different artist/album. |
-| `AI_DJ_DIVERSITY_QUALITY_BAND` | `10` | Maximum verified V3-quality drop accepted when softly rotating to a different artist/album. |
+| `AI_DJ_DIVERSITY_ARTIST_STREAK` | `2` | After this many same-artist tracks, a similarly strong AI bridge can be softly preferred. |
+| `AI_DJ_DIVERSITY_ALBUM_STREAK` | `2` | After this many same-album tracks, a similarly strong AI bridge can be softly preferred. |
+| `AI_DJ_DIVERSITY_FIT_BAND` | `12` | Maximum AI fit-score drop accepted when softly rotating from a continuation to a bridge. |
+| `AI_DJ_DIVERSITY_QUALITY_BAND` | `12` | Maximum verified V3-quality drop accepted when softly rotating from a continuation to a bridge. |
 | `AUTOPLAY_V3_SOFT_ARTIST_STREAK` | `4` | Generic V3 fallback only: after this streak, compatible exits gain a gentle preference. |
 | `AUTOPLAY_V3_SOFT_ALBUM_STREAK` | `3` | Generic V3 fallback only: after this streak, compatible exits gain a gentle preference. |
 | `AUTOPLAY_V3_SOFT_ARTIST_EXIT_PENALTY` | `3` | Gentle fallback-only preference for changing artist; it never rejects a strong continuation. |

@@ -23,4 +23,17 @@ describe("Autoplay track validation", () => {
     ];
     assert.deepStrictEqual(filterAutoplaySongs(tracks).map((track) => track.info.title), ["Call Me Back"]);
   });
+
+  it("filters short, numbered album acts from autoplay while retaining normal songs", () => {
+    const tracks = [
+      { info: { title: "AKT IV: Rozmiar Klęski", author: "Taco Hemingway", length: 48_000 } },
+      { info: { title: "Akt I", author: "Artist", length: 186_000 } },
+      { info: { title: "Short But Complete Song", author: "Artist", length: 48_000 } },
+    ];
+
+    assert.deepStrictEqual(
+      filterAutoplaySongs(tracks).map((track) => track.info.title),
+      ["Akt I", "Short But Complete Song"]
+    );
+  });
 });
