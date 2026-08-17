@@ -129,6 +129,28 @@ describe("AI DJ director", () => {
     assert.strictEqual(request.tool_choice, undefined);
   });
 
+  it("passes the AI-specific diversity thresholds to the director", async () => {
+    let request;
+    setAIDJFetchForTests(async (_url, options) => {
+      request = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ output_text: JSON.stringify(plannedResponse()) }) };
+    });
+
+    const directorInput = input();
+    directorInput.context = {
+      ...directorInput.context,
+      softArtistExitStreak: 4,
+      softAlbumExitStreak: 3,
+      aiDiversityArtistStreak: 3,
+      aiDiversityAlbumStreak: 2,
+    };
+    await planNextTrackWithAIDJ(directorInput);
+
+    const prompt = JSON.parse(request.input[1].content[0].text);
+    assert.strictEqual(prompt.constraints.softArtistExitAfter, 3);
+    assert.strictEqual(prompt.constraints.softAlbumExitAfter, 2);
+  });
+
   it("deduplicates proposals and falls back if the plan is unsafe or invalid", async () => {
     setAIDJFetchForTests(async () => ({
       ok: true,

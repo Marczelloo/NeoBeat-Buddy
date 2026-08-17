@@ -427,6 +427,8 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
     repeatCooldownMs: REPEAT_COOLDOWN_MS,
     softArtistExitStreak: SOFT_ARTIST_EXIT_STREAK,
     softAlbumExitStreak: SOFT_ALBUM_EXIT_STREAK,
+    aiDiversityArtistStreak: AI_DJ_DIVERSITY_ARTIST_STREAK,
+    aiDiversityAlbumStreak: AI_DJ_DIVERSITY_ALBUM_STREAK,
     softArtistExitPenalty: SOFT_ARTIST_EXIT_PENALTY,
     softAlbumExitPenalty: SOFT_ALBUM_EXIT_PENALTY,
   };
