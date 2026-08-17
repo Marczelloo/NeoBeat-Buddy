@@ -41,7 +41,7 @@ function input() {
   };
 }
 
-function plannedResponse(candidates = [{ artist: "Taco Hemingway", title: "Wosk", album: "Frascati", reason: "Direct album continuation." }]) {
+function plannedResponse(candidates = [{ artist: "Taco Hemingway", title: "Wosk", album: "Frascati", fit: 96, reason: "Direct album continuation." }]) {
   return {
     decision: "propose",
     confidence: 0.9,
@@ -131,8 +131,8 @@ describe("AI DJ director", () => {
     setAIDJFetchForTests(async () => ({
       ok: true,
       json: async () => ({ output_text: JSON.stringify(plannedResponse([
-        { artist: "Artist", title: "Track", album: "", reason: "Fit" },
-        { artist: "Artist", title: "Track", album: "", reason: "Duplicate" },
+        { artist: "Artist", title: "Track", album: "", fit: 88, reason: "Fit" },
+        { artist: "Artist", title: "Track", album: "", fit: 84, reason: "Duplicate" },
       ])) }),
     }));
     const result = await planNextTrackWithAIDJ(input());
@@ -149,8 +149,8 @@ describe("AI DJ director", () => {
     const repeated = track("Nostalgia", "Taco Hemingway", { albumTitle: "Frascati" });
     repeated.userData.autoplayPlayedAt = Date.now() - 1000;
     const plan = plannedResponse([
-      { artist: "Taco Hemingway", title: "Nostalgia", album: "Frascati", reason: "Repeat." },
-      { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", reason: "Continue." },
+      { artist: "Taco Hemingway", title: "Nostalgia", album: "Frascati", fit: 96, reason: "Repeat." },
+      { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", fit: 94, reason: "Continue." },
     ]);
 
     const filtered = filterPlanRepeats(plan, {
@@ -161,5 +161,17 @@ describe("AI DJ director", () => {
     });
 
     assert.deepStrictEqual(filtered.candidates.map((candidate) => candidate.title), ["Wosk"]);
+  });
+
+  it("requires an explicit bounded transition-fit score from the director", async () => {
+    setAIDJFetchForTests(async () => ({
+      ok: true,
+      json: async () => ({ output_text: JSON.stringify(plannedResponse([
+        { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", fit: 101, reason: "Invalid score." },
+      ])) }),
+    }));
+
+    const result = await planNextTrackWithAIDJ(input());
+    assert.strictEqual(result.status, "fallback-error");
   });
 });

@@ -21,12 +21,17 @@ const MAX_CONSECUTIVE_ARTIST_TRACKS = Math.max(Number(process.env.AUTOPLAY_V3_MA
 const MAX_ALBUM_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK ?? 3), MAX_CONSECUTIVE_ALBUM_TRACKS);
 const MAX_ARTIST_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ARTIST_CONTINUITY_STREAK ?? 6), MAX_CONSECUTIVE_ARTIST_TRACKS);
 const REPEAT_COOLDOWN_MS = Math.max(Number(process.env.AUTOPLAY_REPEAT_COOLDOWN_MS ?? 60 * 60 * 1000), 0);
-const AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS = Math.max(Number(process.env.AI_DJ_MAX_ARTIST_STREAK ?? 5), MAX_CONSECUTIVE_ARTIST_TRACKS);
-const AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS = Math.max(Number(process.env.AI_DJ_MAX_ALBUM_STREAK ?? 3), MAX_CONSECUTIVE_ALBUM_TRACKS);
-const SOFT_ARTIST_EXIT_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ARTIST_STREAK ?? 2), 1);
-const SOFT_ALBUM_EXIT_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBUM_STREAK ?? 2), 1);
-const SOFT_ARTIST_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ARTIST_EXIT_PENALTY ?? 7), 0);
-const SOFT_ALBUM_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBUM_EXIT_PENALTY ?? 9), 0);
+const AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS = Math.max(Number(process.env.AI_DJ_MAX_ARTIST_STREAK ?? 8), MAX_CONSECUTIVE_ARTIST_TRACKS);
+const AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS = Math.max(Number(process.env.AI_DJ_MAX_ALBUM_STREAK ?? 6), MAX_CONSECUTIVE_ALBUM_TRACKS);
+const SOFT_ARTIST_EXIT_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ARTIST_STREAK ?? 4), 1);
+const SOFT_ALBUM_EXIT_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBUM_STREAK ?? 3), 1);
+const SOFT_ARTIST_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ARTIST_EXIT_PENALTY ?? 3), 0);
+const SOFT_ALBUM_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBUM_EXIT_PENALTY ?? 4), 0);
+const AI_DJ_PRIORITY_WEIGHT = Math.min(Math.max(Number(process.env.AI_DJ_PRIORITY_WEIGHT ?? 12), 1), 40);
+const AI_DJ_DIVERSITY_ARTIST_STREAK = Math.max(Number(process.env.AI_DJ_DIVERSITY_ARTIST_STREAK ?? 4), 1);
+const AI_DJ_DIVERSITY_ALBUM_STREAK = Math.max(Number(process.env.AI_DJ_DIVERSITY_ALBUM_STREAK ?? 3), 1);
+const AI_DJ_DIVERSITY_FIT_BAND = Math.min(Math.max(Number(process.env.AI_DJ_DIVERSITY_FIT_BAND ?? 4), 0), 25);
+const AI_DJ_DIVERSITY_QUALITY_BAND = Math.min(Math.max(Number(process.env.AI_DJ_DIVERSITY_QUALITY_BAND ?? 5), 0), 40);
 
 function sourceSet(candidate) {
   return new Set([candidate?.source, ...(candidate?.providerSources || [])].filter(Boolean));
@@ -186,6 +191,7 @@ function scoreCandidateV3(candidate, context) {
   const artistExitSteps = sameArtist ? Math.max(0, context.artistStreak - softArtistExitStreak + 1) : 0;
   const albumExitSteps = sameAlbum ? Math.max(0, context.albumStreak - softAlbumExitStreak + 1) : 0;
   const softExitPenalty = artistExitSteps * softArtistExitPenalty + albumExitSteps * softAlbumExitPenalty;
+  const aiDjFit = Number.isFinite(Number(candidate.aiDjFit)) ? Number(candidate.aiDjFit) : null;
 
   return {
     candidate,
@@ -197,8 +203,60 @@ function scoreCandidateV3(candidate, context) {
       continuationPenalty,
       softExitPenalty,
       diversityScore,
+      aiDjFit,
       sameArtist,
       sameAlbum,
+    },
+  };
+}
+
+function getAIDirectorPriority(entry) {
+  const fit = Number.isFinite(Number(entry?.candidate?.aiDjFit)) ? Number(entry.candidate.aiDjFit) : 0;
+  const rank = Math.max(0, Number(entry?.candidate?.aiDjRank) || 0);
+  // Fit is supplied by the director and is deliberately weighted enough that
+  // generic provider metadata cannot overturn a clear AI ordering.
+  // Keep even a small model fit difference above noisy catalog-score swings.
+  // V3 still breaks truly equal AI fits, and validates every hard safety rule.
+  return fit * AI_DJ_PRIORITY_WEIGHT * 10 + entry.score - rank / 100;
+}
+
+function canSoftlyDeferAIDirectorChoice(primary, alternative, context) {
+  if (!primary || !alternative) return false;
+  const primaryFit = Number(primary.candidate.aiDjFit);
+  const alternativeFit = Number(alternative.candidate.aiDjFit);
+  if (!Number.isFinite(primaryFit) || !Number.isFinite(alternativeFit)) return false;
+  if (alternativeFit < primaryFit - AI_DJ_DIVERSITY_FIT_BAND) return false;
+  if (alternative.score < primary.score - AI_DJ_DIVERSITY_QUALITY_BAND) return false;
+
+  const artistExitWanted = primary.details.sameArtist && context.artistStreak >= AI_DJ_DIVERSITY_ARTIST_STREAK;
+  const albumExitWanted = primary.details.sameAlbum && context.albumStreak >= AI_DJ_DIVERSITY_ALBUM_STREAK;
+  if (!artistExitWanted && !albumExitWanted) return false;
+
+  return (artistExitWanted && !alternative.details.sameArtist)
+    || (albumExitWanted && !alternative.details.sameAlbum);
+}
+
+function orderAIDirectorCandidates(ranked, context) {
+  const ordered = [...ranked].sort((left, right) => {
+    const priorityDelta = getAIDirectorPriority(right) - getAIDirectorPriority(left);
+    if (priorityDelta) return priorityDelta;
+    return (Number(left.candidate.aiDjRank) || 0) - (Number(right.candidate.aiDjRank) || 0);
+  });
+  const primary = ordered[0];
+  const alternativeIndex = ordered.findIndex((entry, index) => index > 0 && canSoftlyDeferAIDirectorChoice(primary, entry, context));
+  if (alternativeIndex === -1) return { ranked: ordered, deferred: null };
+
+  const [alternative] = ordered.splice(alternativeIndex, 1);
+  ordered.unshift(alternative);
+  return {
+    ranked: ordered,
+    deferred: {
+      artist: primary.candidate.artist,
+      title: primary.candidate.title,
+      fit: primary.candidate.aiDjFit,
+      forArtist: alternative.candidate.artist,
+      forTitle: alternative.candidate.title,
+      forFit: alternative.candidate.aiDjFit,
     },
   };
 }
@@ -299,6 +357,7 @@ function buildAIDJCandidates(aiResult, catalogCandidates = []) {
     genres: verified?.genres || [],
     similarity: null,
     aiDjRank: index,
+    aiDjFit: proposal.fit,
     aiDjVerifiedCatalog: Boolean(verified),
     aiDJ: {
       model: aiResult.model || null,
@@ -380,7 +439,8 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
   const aiResult = await planNextTrackWithAIDJ({ guildId, anchorTrack, referenceTrack, profile, context });
 
   const aiCandidates = buildAIDJCandidates(aiResult, candidates);
-  const { ranked: aiRanked, rejected: aiRejected } = selectV3Candidates(aiCandidates, context);
+  const { ranked: aiEligible, rejected: aiRejected } = selectV3Candidates(aiCandidates, context);
+  const { ranked: aiRanked, deferred: aiDeferred } = orderAIDirectorCandidates(aiEligible, context);
   const aiResolved = await resolveV3Candidates(aiRanked, guildId, referenceTrack, anchorTrack, context);
   const { ranked, rejected } = selectV3Candidates(candidates, context);
   const resolved = aiResolved || await resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack, context);
@@ -400,7 +460,9 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
     `albumStreak=${context.albumStreak}`,
     `rejected=${Object.entries({ ...rejected, ...Object.fromEntries(Object.entries(aiRejected).map(([key, value]) => [`ai-${key}`, value])) }).map(([key, value]) => `${key}:${value}`).join(",") || "none"}`,
     `aiDj=${aiResult.status}${aiResult.plan ? `:${aiResult.plan.confidence}/${aiResult.plan.direction.summary}` : ""}`,
-    `aiProposals=${aiCandidates.slice(0, 4).map((candidate) => `${candidate.artist} - ${candidate.title}`).join(" | ") || "none"}`,
+    `aiProposals=${aiCandidates.slice(0, 4).map((candidate) => `${candidate.artist} - ${candidate.title} [${candidate.aiDjFit}]`).join(" | ") || "none"}`,
+    `aiOrder=${aiRanked.slice(0, 4).map((entry) => `${entry.candidate.artist} - ${entry.candidate.title} [fit=${entry.candidate.aiDjFit};priority=${Math.round(getAIDirectorPriority(entry))}]`).join(" | ") || "none"}`,
+    `aiDeferred=${aiDeferred ? `${aiDeferred.artist} - ${aiDeferred.title} [${aiDeferred.fit}]=>${aiDeferred.forArtist} - ${aiDeferred.forTitle} [${aiDeferred.forFit}]` : "none"}`,
     `winner=${resolved ? `${resolved.track.info?.author} - ${resolved.track.info?.title} (${resolved.entry.score})${aiResolved ? ";ai-director" : ";fallback-v3"}` : "none"}`
   );
 
@@ -418,11 +480,18 @@ module.exports = {
   SOFT_ALBUM_EXIT_STREAK,
   SOFT_ARTIST_EXIT_PENALTY,
   SOFT_ALBUM_EXIT_PENALTY,
+  AI_DJ_PRIORITY_WEIGHT,
+  AI_DJ_DIVERSITY_ARTIST_STREAK,
+  AI_DJ_DIVERSITY_ALBUM_STREAK,
+  AI_DJ_DIVERSITY_FIT_BAND,
+  AI_DJ_DIVERSITY_QUALITY_BAND,
   REPEAT_COOLDOWN_MS,
   buildAIDJCandidates,
   fetchAutoplayV3Track,
   getRecentTracks,
   selectV3Candidates,
   scoreCandidateV3,
+  getAIDirectorPriority,
+  orderAIDirectorCandidates,
   hasRecentExposure,
 };

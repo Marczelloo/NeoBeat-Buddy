@@ -9,8 +9,10 @@ const {
   AI_DJ_MAX_CONSECUTIVE_ALBUM_TRACKS,
   AI_DJ_MAX_CONSECUTIVE_ARTIST_TRACKS,
   buildAIDJCandidates,
+  getAIDirectorPriority,
   getRecentTracks,
   hasRecentExposure,
+  orderAIDirectorCandidates,
   selectV3Candidates,
 } = require("../../../helpers/lavalink/autoplayV3");
 
@@ -121,30 +123,53 @@ describe("Autoplay V3 selection", () => {
     assert.strictEqual(blocked.rejected["ai-artist-streak"], 1);
   });
 
-  it("softly prefers an equally credible artist exit after two consecutive tracks", () => {
-    const sameArtist = candidate("Still Here", "Taco Hemingway", "ai_dj", { genres: ["hip hop"] });
-    const compatibleExit = candidate("Natural Bridge", "Quebonafide", "ai_dj", { genres: ["hip hop"] });
+  it("keeps Kizo's top AI continuation ahead of a lower-fit Malik bridge", () => {
+    const sameArtist = candidate("KIEROWNIK", "Kizo", "ai_dj", { genres: ["hip hop"] });
+    const compatibleExit = candidate("Baciata", "Malik Montana", "ai_dj", { genres: ["hip hop"] });
+    sameArtist.aiDjFit = 96;
     compatibleExit.aiDjRank = 1;
+    compatibleExit.aiDjFit = 88;
 
-    const { ranked } = selectV3Candidates([sameArtist, compatibleExit], context({ artistStreak: 2 }));
+    const selectionContext = context({ referenceArtist: "kizo", artistStreak: 2 });
+    const { ranked } = selectV3Candidates([sameArtist, compatibleExit], selectionContext);
 
-    assert.strictEqual(ranked[0].candidate.title, "Natural Bridge");
-    assert.ok(ranked[1].details.softExitPenalty > 0);
+    const ordered = orderAIDirectorCandidates(ranked, selectionContext);
+    assert.strictEqual(ordered.ranked[0].candidate.title, "KIEROWNIK");
+    assert.strictEqual(ordered.deferred, null);
   });
 
-  it("softly prefers another album without rejecting a strong continuation", () => {
+  it("softly defers an AI continuation only for a similarly-fit bridge after a long run", () => {
     const sameAlbum = candidate("Another Cut", "Taco Hemingway", "ai_dj", {
       albumId: "frascati",
       genres: ["hip hop"],
     });
     const compatibleExit = candidate("Scene Bridge", "Quebonafide", "ai_dj", { genres: ["hip hop"] });
+    sameAlbum.aiDjFit = 94;
     compatibleExit.aiDjRank = 1;
+    compatibleExit.aiDjFit = 92;
 
-    const { ranked } = selectV3Candidates([sameAlbum, compatibleExit], context({ artistStreak: 2, albumStreak: 2 }));
-    const continuationOnly = selectV3Candidates([sameAlbum], context({ artistStreak: 2, albumStreak: 2 }));
+    const selectionContext = context({ artistStreak: 4, albumStreak: 3 });
+    const { ranked } = selectV3Candidates([sameAlbum, compatibleExit], selectionContext);
+    const ordered = orderAIDirectorCandidates(ranked, selectionContext);
+    const continuationOnly = selectV3Candidates([sameAlbum], selectionContext);
 
-    assert.strictEqual(ranked[0].candidate.title, "Scene Bridge");
+    assert.strictEqual(ordered.ranked[0].candidate.title, "Scene Bridge");
+    assert.strictEqual(ordered.deferred.title, "Another Cut");
     assert.strictEqual(continuationOnly.ranked.length, 1);
+  });
+
+  it("uses AI fit as the dominant ordering signal while retaining V3 quality inside a tie", () => {
+    const first = candidate("Director First", "Taco Hemingway", "ai_dj", { genres: ["hip hop"] });
+    const second = candidate("Director Second", "Quebonafide", "ai_dj", { genres: ["hip hop"] });
+    first.aiDjFit = 95;
+    second.aiDjFit = 90;
+    second.aiDjRank = 1;
+
+    const { ranked } = selectV3Candidates([first, second], context());
+    const ordered = orderAIDirectorCandidates(ranked, context());
+
+    assert.ok(getAIDirectorPriority(ordered.ranked[0]) > getAIDirectorPriority(ordered.ranked[1]));
+    assert.strictEqual(ordered.ranked[0].candidate.title, "Director First");
   });
 
   it("makes an AI album run bridge outward after its bounded ceiling", () => {
