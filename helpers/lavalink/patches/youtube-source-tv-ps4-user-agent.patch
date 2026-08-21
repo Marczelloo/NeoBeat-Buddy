@@ -1,0 +1,9 @@
+--- a/common/src/main/java/dev/lavalink/youtube/clients/Tv.java
++++ b/common/src/main/java/dev/lavalink/youtube/clients/Tv.java
+@@ -15,7 +15,7 @@
+ public class Tv extends StreamingNonMusicClient {
+     public static ClientConfig BASE_CONFIG = new ClientConfig()
+         .withClientName("TVHTML5")
+-        .withUserAgent("Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version")
++        .withUserAgent("Mozilla/5.0 (PlayStation; PlayStation 4/12.00)")
+         .withClientField("clientVersion", "7.20250319.10.00");

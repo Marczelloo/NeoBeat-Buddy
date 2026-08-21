@@ -39,9 +39,9 @@ lavalink:
     - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
-      repository: "https://maven.lavalink.dev/releases"
-      snapshot: false
+    # The YouTube plugin is supplied as a locally-built patch in
+    # helpers/lavalink/plugins. It retains youtube-source 1.18.2 and only
+    # replaces the rejected TV Cobalt user agent with the accepted PS4 one.
     - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
@@ -69,18 +69,24 @@ plugins:
     allowDirectPlaylistIds: true
     clients:
       - MUSIC
+      - MWEB
       - ANDROID_VR
       - WEB
       - WEBEMBEDDED
       - TV
-    cookies:
-      file: /opt/Lavalink/youtube-cookies.txt
-    pot:
-      token: ${YOUTUBE_PO_TOKEN:}
-      visitorData: ${YOUTUBE_VISITOR_DATA:}
+      - TVHTML5_SIMPLY
+    # OAuth is the active authenticated path. Do not mix it with the old
+    # cookies.file setting: current youtube-source accepts oauth.cookie as a
+    # value, not a Netscape cookie-file mount.
     oauth:
       enabled: true
       refreshToken: ${YOUTUBE_REFRESH_TOKEN:}
+    remoteCipher:
+      # yt-cipher is self-hosted in Compose; it keeps YouTube player-script
+      # signature changes out of the Lavalink process.
+      url: http://yt-cipher:8001
+      password: ${YT_CIPHER_API_TOKEN:}
+      userAgent: MewBit-Lavalink
   lavasrc:
     providers: # Mirrors for Spotify and other metadata-only sources.
       # Spotify itself never provides audio; resolve the recording on YouTube

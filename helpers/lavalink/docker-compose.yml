@@ -1,4 +1,11 @@
 services:
+  yt-cipher:
+    image: ghcr.io/kikkia/yt-cipher:master
+    environment:
+      API_TOKEN: ${YT_CIPHER_API_TOKEN:-}
+      OVERRIDE_PLAYER_VARIANT: IAS
+    restart: unless-stopped
+
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: lavalink
@@ -7,6 +14,7 @@ services:
     environment:
       - SERVER_PORT=2333
       - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
+      - YT_CIPHER_API_TOKEN=${YT_CIPHER_API_TOKEN:-}
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
       - ./plugins:/opt/Lavalink/plugins
@@ -14,3 +22,6 @@ services:
     ports:
       - "2333:2333"
     restart: unless-stopped
+    depends_on:
+      yt-cipher:
+        condition: service_started

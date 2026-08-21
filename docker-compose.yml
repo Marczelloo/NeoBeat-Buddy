@@ -1,4 +1,11 @@
 services:
+  yt-cipher:
+    image: ghcr.io/kikkia/yt-cipher:master
+    environment:
+      API_TOKEN: ${YT_CIPHER_API_TOKEN:-}
+      OVERRIDE_PLAYER_VARIANT: IAS
+    restart: unless-stopped
+
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: mewbit-lavalink
@@ -12,6 +19,7 @@ services:
       YOUTUBE_PO_TOKEN: ${YOUTUBE_PO_TOKEN:-}
       YOUTUBE_VISITOR_DATA: ${YOUTUBE_VISITOR_DATA:-}
       YOUTUBE_REFRESH_TOKEN: ${YOUTUBE_REFRESH_TOKEN:-}
+      YT_CIPHER_API_TOKEN: ${YT_CIPHER_API_TOKEN:-}
       DEEZER_ARL_TOKEN: ${DEEZER_ARL_TOKEN:-}
       DEEZER_MASTER_KEY: ${DEEZER_MASTER_KEY:-}
     volumes:
@@ -21,6 +29,9 @@ services:
     ports:
       - "2333:2333"
     restart: unless-stopped
+    depends_on:
+      yt-cipher:
+        condition: service_started
     healthcheck:
       test:
         - "CMD-SHELL"

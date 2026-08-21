@@ -481,7 +481,13 @@ Built-in effects include nightcore, vaporwave, chipmunk, deepvoice, karaoke, wob
    ACTIVITY_PORT=8787
    ```
 
-3. Put `application.yml` and any required Lavalink plugins in `helpers/lavalink/`. Place optional YouTube cookies at `helpers/lavalink/youtube-cookies.txt`.
+3. Build the pinned YouTube-source patch before the first start or after clearing `helpers/lavalink/plugins/`:
+
+   ```bash
+   pnpm lavalink:youtube:patch
+   ```
+
+   It compiles youtube-source 1.18.2 with the targeted PS4 TV user-agent fix and writes the JAR to `helpers/lavalink/plugins/`. Docker and Git must be available. The Compose stack also starts a private `yt-cipher` service, which handles current YouTube signature scripts.
 4. Start the stack:
 
    ```bash

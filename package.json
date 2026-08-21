@@ -16,6 +16,7 @@
     "deploy:prod": "dotenv -e .env.prod -- node deploy-commands.js",
     "lavalink:dev": "docker compose -f helpers/lavalink/docker-compose.yml --env-file .env.dev up -d",
     "lavalink:dev:down": "docker compose -f helpers/lavalink/docker-compose.yml down",
+    "lavalink:youtube:patch": "node scripts/build-youtube-tvua-plugin.mjs",
     "lint": "eslint . --ext .js,.cjs,.mjs",
     "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix",
     "test": "node --test tests/**/*.test.js",
