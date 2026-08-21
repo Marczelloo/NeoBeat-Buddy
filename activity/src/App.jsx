@@ -35,7 +35,7 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { setupDiscord } from "./discord.js";
+import { setMewbitPresence, setupDiscord } from "./discord.js";
 import { connectActivitySocket, fetchActivityState, searchActivity, sendActivityAction } from "./api.js";
 import { parseMusicLink } from "./musicLink.js";
 import { createMockState, mockSearchResults } from "./mockState.js";
@@ -1142,6 +1142,31 @@ function App() {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // Rich Presence is a per-user Discord Activity feature. Keep the payload
+  // event-driven so the 4 Hz player clock does not spam Discord RPC.
+  useEffect(() => {
+    if (context.mode !== "discord" || !context.sdk) return undefined;
+    setMewbitPresence(context.sdk, state.player).catch(() => {
+      // Presence is an enhancement; a denied scope or an older Discord client
+      // must not make the shared player appear broken.
+    });
+    return undefined;
+  }, [
+    context.mode,
+    context.sdk,
+    state.player.currentTrack?.id,
+    state.player.currentTrack?.title,
+    state.player.currentTrack?.author,
+    state.player.currentTrack?.source,
+    state.player.currentTrack?.artworkUrl,
+    state.player.currentTrack?.artworkFallbackUrl,
+    state.player.playing,
+    state.player.paused,
+    state.player.autoplay,
+    state.player.loop,
+    state.player.shuffleActive,
+  ]);
 
   const finishHydration = useCallback(() => {
     const remaining = Math.max(0, 720 - (Date.now() - hydrationStartedAt.current));
