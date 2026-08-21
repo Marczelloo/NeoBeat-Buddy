@@ -45,7 +45,10 @@ describe("Live autoplay soak acceptance", () => {
         maxConsecutiveArtist: 3,
         artistWindowViolations: 1,
         unresolvedSteps: 1,
-      })
+      }),
+      // Run-length caps are now caller-provided: the AI director owns run
+      // length during normal operation.
+      { maxConsecutiveArtist: 2, maxArtistWindowViolations: 0 }
     );
 
     assert.equal(result.passed, false);
@@ -56,6 +59,22 @@ describe("Live autoplay soak acceptance", () => {
       "artistWindow=1",
       "unresolved=1",
     ]);
+  });
+
+  it("reports long artist runs without failing unless a cap is enforced", () => {
+    const result = evaluateLiveSoak(
+      resultWith({
+        duplicateSelections: 0,
+        genreFamilyJumps: 0,
+        maxConsecutiveArtist: 6,
+        artistWindowViolations: 2,
+        unresolvedSteps: 0,
+      })
+    );
+
+    assert.equal(result.passed, true);
+    assert.deepEqual(result.violations, []);
+    assert.equal(result.metrics.maxConsecutiveArtistOutsideAlbum ?? result.metrics.maxConsecutiveArtist >= 0, true);
   });
 
   it("fails a live run that exceeds verified continuity limits", () => {

@@ -170,18 +170,13 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AI_DJ_TIMEOUT_MS` | `12000` | Maximum AI DJ wait before falling back to V3. Planning runs in parallel with provider fallback collection. |
 | `AI_DJ_CACHE_TTL_MS` | `300000` | Caches an identical sanitized listening context to avoid duplicate API calls. |
 | `AI_DJ_MAX_PROPOSALS` | `8` | Maximum exact artist/title recordings in one AI DJ plan. |
-| `AI_DJ_PRIORITY_WEIGHT` | `12` | Strength of the AI's per-track 0–100 transition-fit score relative to generic V3 scoring. |
-| `AI_DJ_DIVERSITY_ARTIST_STREAK` | `2` | After this many same-artist tracks, a similarly strong AI bridge can be softly preferred. |
-| `AI_DJ_DIVERSITY_ALBUM_STREAK` | `2` | After this many same-album tracks, a similarly strong AI bridge can be softly preferred. |
-| `AI_DJ_DIVERSITY_FIT_BAND` | `12` | Maximum AI fit-score drop accepted when softly rotating from a continuation to a bridge. |
-| `AI_DJ_DIVERSITY_QUALITY_BAND` | `12` | Maximum verified V3-quality drop accepted when softly rotating from a continuation to a bridge. |
+| `AI_DJ_DIVERSITY_FIT_BAND` | `10` | Maximum AI fit-score drop accepted when softly rotating from a continuation to a bridge. |
+| `AI_DJ_SKIP_DEMOTION` | `12` | Soft weight reduction applied to an AI proposal whose artist was recently skipped. |
 | `AUTOPLAY_V3_SOFT_ARTIST_STREAK` | `4` | Generic V3 fallback only: after this streak, compatible exits gain a gentle preference. |
 | `AUTOPLAY_V3_SOFT_ALBUM_STREAK` | `3` | Generic V3 fallback only: after this streak, compatible exits gain a gentle preference. |
-| `AUTOPLAY_V3_SOFT_ARTIST_EXIT_PENALTY` | `3` | Gentle fallback-only preference for changing artist; it never rejects a strong continuation. |
-| `AUTOPLAY_V3_SOFT_ALBUM_EXIT_PENALTY` | `4` | Gentle fallback-only preference for changing album; it never rejects a strong continuation. |
 | `AI_DJ_WEB_SEARCH` | `false` | Optional paid OpenAI web lookup. Provider resolution still verifies every proposal; enable only when you explicitly want external lookup costs. |
 | `AI_DJ_MIN_CONFIDENCE` | `0.55` | AI plans below this confidence leave V3 as the fallback. |
-| `AI_DJ_MIN_TOP_FIT` | `68` | AI plans whose best proposed transition fit is below this threshold leave V3 as the fallback. |
+| `AI_DJ_MIN_FIT` | `55` | Individual AI proposals below this transition-fit threshold are discarded before selection. |
 | `AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK` | `3` | Emergency cap for a direct, genre-compatible album run after its soft cap. |
 | `AUTOPLAY_V3_MAX_ARTIST_CONTINUITY_STREAK` | `6` | Emergency cap for a direct, genre-compatible artist run after its soft cap. |
 | `TRACK_HISTORY_LIMIT` | `80` | Number of tracks retained in the active playback history. |

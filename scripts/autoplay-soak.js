@@ -25,8 +25,10 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`Usage: pnpm test:autoplay:soak [options]
 
+Offline simulation of the AI-first autoplay selection (no Lavalink/OpenAI).
+
 Options:
-  --fixture <path>       Replay a JSON fixture with seedTrack and replaySteps/candidatesByReference
+  --fixture <path>       Replay a JSON fixture with seedTrack and candidatesByReference
   --steps <number>       Number of automatic cycles (default: 100 for the built-in scenario)
   --seed <number>        Deterministic selection seed (default: 42)
   --allow-unresolved <n> Allow at most n cycles without a playable candidate
@@ -47,6 +49,9 @@ function builtInScenario(steps = 100) {
   return {
     seedTrack,
     steps,
+    // No director in the offline built-in scenario: exercise the emergency
+    // ladder exactly like an OpenAI outage would.
+    aiPlanner: null,
     candidateProvider: ({ step }) => {
       const artist = artists[(step - 1) % artists.length];
       return [
@@ -70,16 +75,6 @@ function builtInScenario(steps = 100) {
           similarity: 0.99,
           duration: 180000,
         },
-        {
-          title: `Metal Detour ${step}`,
-          artist: "Wrong Lane",
-          identifier: `metal-${step}`,
-          source: "youtube_mix",
-          genres: ["metal"],
-          features: { tempo: 170, energy: 0.95, valence: 0.1, danceability: 0.25 },
-          similarity: 0.99,
-          duration: 180000,
-        },
       ];
     },
   };
@@ -94,8 +89,8 @@ function loadFixture(fixturePath, overrideSteps) {
 
   return {
     ...fixture,
-    steps: overrideSteps || fixture.steps || fixture.replaySteps?.length || 30,
-    candidateProvider: fixture.replaySteps ? undefined : candidateProvider,
+    steps: overrideSteps || fixture.steps || 30,
+    candidateProvider,
   };
 }
 
@@ -106,15 +101,16 @@ function summarize(result) {
     requestedSteps: result.metrics.requestedSteps,
     completedSteps: result.metrics.completedSteps,
     unresolvedSteps: result.metrics.unresolvedSteps,
-    resolutionFailures: result.metrics.resolutionFailures,
     duplicateSelections: result.metrics.duplicateSelections,
     genreFamilyJumps: result.metrics.genreFamilyJumps,
     maxConsecutiveArtist: result.metrics.maxConsecutiveArtist,
-    artistWindowViolations: result.metrics.artistWindowViolations,
-    fallbackSelections: result.metrics.fallbackSelections,
-    deferredSelections: result.metrics.deferredSelections,
+    aiDirectedSelections: result.metrics.aiDirectedSelections,
+    fallbackLadderSelections: result.metrics.fallbackLadderSelections,
+    lowFitDrops: result.metrics.lowFitDrops,
+    repeatCooldownRejections: result.metrics.repeatCooldownRejections,
     longTermRepeats: result.metrics.longTermRepeats,
     sources: result.metrics.sources,
+    lanes: result.metrics.laneCounts,
     violations: result.violations,
   };
 }
@@ -144,11 +140,13 @@ function main() {
     const summary = summarize(result);
     console.log(`Autoplay soak ${summary.passed ? "PASSED" : "FAILED"}`);
     console.log(`cycles=${summary.completedSteps}/${summary.requestedSteps}`);
-    console.log(`unresolved=${summary.unresolvedSteps} providerFailures=${summary.resolutionFailures}`);
+    console.log(`unresolved=${summary.unresolvedSteps}`);
     console.log(`duplicates=${summary.duplicateSelections} genreJumps=${summary.genreFamilyJumps}`);
     console.log(`repeatsAfterCooldown=${summary.longTermRepeats}`);
-    console.log(`maxArtistStreak=${summary.maxConsecutiveArtist} artistWindowViolations=${summary.artistWindowViolations}`);
+    console.log(`maxArtistStreak=${summary.maxConsecutiveArtist}`);
+    console.log(`aiDirected=${summary.aiDirectedSelections} fallbackLadder=${summary.fallbackLadderSelections} lowFitDrops=${summary.lowFitDrops}`);
     console.log(`sources=${JSON.stringify(summary.sources)}`);
+    console.log(`lanes=${JSON.stringify(summary.lanes)}`);
     if (summary.violations.length) console.log(`violations=${summary.violations.join("; ")}`);
   }
 

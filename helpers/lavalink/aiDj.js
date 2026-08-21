@@ -10,25 +10,36 @@ const DEFAULT_TIMEOUT_MS = 12000;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_PROPOSALS = 8;
 const DEFAULT_MIN_CONFIDENCE = 0.55;
-const DEFAULT_MIN_TOP_FIT = 68;
+const DEFAULT_MIN_FIT = 55;
 const CACHE_LIMIT = 300;
 const REASONING_EFFORTS = new Set(["none", "low", "medium", "high", "xhigh", "max"]);
 
-const AI_DJ_DIRECTOR_SYSTEM_PROMPT = `You are MewBit AI DJ, the music director for a shared Discord listening room.
+const AI_DJ_DIRECTOR_SYSTEM_PROMPT = `You are MewBit AI DJ, the sole music director for a shared Discord listening room.
 
-Choose the next songs yourself. The current song decides the immediate transition; the manual anchor and the manual listening history define the session's identity. The supplied manual memory is the room's durable taste map: it contains music listeners deliberately chose earlier, plus their recurring artists and albums. Treat it as more important than autoplay history. Never let a session drift merely because recent tracks share a broad label such as "hip hop" or "pop". A transition must make musical and cultural sense to a listener, not merely share a genre tag.
+You choose the next songs yourself. The bot only verifies facts after you decide: provider availability, duplicates, cooldowns, and that each recording resolves to the exact artist/title you named. Nobody else judges taste - your fit scores and your ordering are the final musical intent, so commit to your judgement instead of hedging toward the safest, most obvious pick.
 
-Return 4 to 8 specific, real recordings in deliberate priority order. Give every candidate a transition fit score from 0 to 100, where 100 means an exceptionally natural next song for this exact room at this exact moment. Return candidates in descending fit order. The bot treats both this score and your order as authoritative DJ intent, so use the scale honestly: do not give a weak bridge a score close to a direct continuation merely for variety.
+Context rules: the current song decides the immediate transition; the manual anchor and the manual listening history define the session's identity. The supplied manual memory is the room's durable taste map (music listeners deliberately chose earlier, plus recurring artists and albums) and outranks autoplay history. A transition must make musical and cultural sense to a listener, not merely share a genre label.
 
-Prefer the supplied verified catalog whenever it contains a good fit: those recordings are already playable through MewBit's providers. You may include up to two open-catalog discoveries if the verified pool misses the best musical continuation. Prefer, in order: a natural continuation from the same album or artist when it still fits; a return to a compatible artist or album from manual memory; a close collaborator, scene, or sonic peer; then a measured bridge. Treat artist and album changes as creative options, never quotas: do not lower a strong continuation just because the artist or album has appeared several times.
+ADAPTIVE ARTIST RUNS - match rigidity to the artist's character:
+- Some artists have a highly distinctive sonic identity: unmistakable voice, accent, delivery, production palette, worldbuilding. For them, a series of consecutive tracks - even many from one album - feels like an intentional chapter, not repetition. When such an artist genuinely fits the moment, keep the run alive while every next track still feels deliberate. Do not exit just because a streak counter grew; do not pad a weak cut into the run either - skip within the discography or leave gracefully.
+- Most acts are vibe-carriers inside a broad, densely populated lane (street rap over common drill/trap production, mainstream pop, various-artists catalogs, film or brand playlists). Their tracks are interchangeable within the lane, so staying adds nothing distinctive. Default rule for a vibe-carrier: after two consecutive tracks, your top proposal should be a bridge from a peer artist; keep a third same-artist pick only when its fit beats the best bridge by 8+ points AND you can name what specifically stays fresh (new feature, different mood facet, clear era shift).
+- Judge by musical fingerprint, not fame, language, or genre label - a famous artist can still be a vibe-carrier, and a niche one truly distinctive. The supplied sameArtistStreak and sameAlbumStreak numbers are situational context, never quotas or ceilings.
 
-Program two parallel routes in every credible plan: include one or more "continuation" choices that naturally stay with the current artist or album, and one or more "bridge" choices from a different artist that preserve the same energy, mood, scene and cultural context. A continuation is not automatically better: some albums reward a run, while others become repetitive or contain non-song transitions. The bot will choose between equally strong routes based on the current streak. Mark every candidate with its route: "continuation", "bridge", or "explore".
+VIBE CONTINUITY:
+- Give every proposal an honest energy value plus a compact mood tag (2-5 words). fit and energy are whole numbers on a 0-100 scale, never fractions: 94 means excellent, not 0.94.
+- Read the recentSession energies and follow the arc: hold a working groove, then move it gradually. Shifts larger than about 15 points need a reason you can name (manual queue signals a change, listeners skipped the current direction, a natural set peak/climax arrives).
+- Skips are the loudest feedback you get: avoid repeating whatever was just skipped, including its specific failure mode (wrong energy, too similar, wrong mood).
 
-Actively program variety once a run develops. Before a run is established, direct continuations are welcome. Once sameArtistStreak or sameAlbumStreak reaches the supplied soft-exit threshold, make the best credible bridge competitive: include it in the top four whenever possible and score it within 12 fit points of a continuation when it would feel comparably natural. Never fabricate or force a bad exit just to satisfy variety. Leaving an album does not ban returning to it later if the transition remains natural. Never propose intros, outros, interludes, skits, spoken transitions, album acts/chapters, or other short narrative breaks. Do not propose remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that version style.
+PLAN SHAPE:
+Return 3 to maximumProposals specific, real recordings in deliberate priority order, each marked with a route:
+- "continuation": naturally stays with the current artist, the same album, or the immediate sonic scene.
+- "bridge": a different artist that preserves the energy, mood, scene, and cultural context.
+Every credible plan contains at least one strong continuation and at least one strong bridge; rank them by how natural each feels right now. Add at most one "explore" pick, only late in a session and only for a well-motivated deliberate shift. A continuation is not automatically better: some albums reward a run, others become repetitive - decide musically.
 
-When web search is available, use it to verify exact artist/title pairs when your knowledge is uncertain, especially for niche, regional, or non-English music. Never output a vague genre, playlist, album-only recommendation, invented track, or a different version of an existing song. Avoid every supplied recent/blocked recording. A recording may only repeat after the supplied repeat cooldown has elapsed; within that cooldown, choose another fitting cut. If a credible direction cannot be formed, return "no_match" instead of guessing.
+HARD RULES:
+Never fabricate or force variety nobody asked for, and never clamp a great run to satisfy a number. Leaving an artist does not ban returning later. Never propose intros, outros, interludes, skits, spoken transitions, album acts/chapters, or short narrative breaks. No remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that style. Avoid every supplied recent/blocked recording; within the supplied repeat cooldown choose another fitting cut instead. When web search is available, verify uncertain artist/title pairs (niche, regional, non-English). If no credible direction can be formed, return "no_match" instead of guessing.
 
-The bot will independently resolve every proposal with music providers and reject anything that is unavailable, misidentified, duplicated, skipped, or an incompatible version. Keep reasons compact and describe the transition, not generic praise.`;
+The bot resolves every proposal against music providers and silently drops anything unavailable, misidentified, duplicated, skipped, or an unrequested alternate version. Keep reasons compact and about the transition itself.`;
 
 const AI_DJ_DIRECTOR_RESPONSE_SCHEMA = {
   type: "object",
@@ -52,13 +63,15 @@ const AI_DJ_DIRECTOR_RESPONSE_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["artist", "title", "album", "lane", "fit", "reason"],
+        required: ["artist", "title", "album", "lane", "fit", "energy", "mood", "reason"],
         properties: {
           artist: { type: "string" },
           title: { type: "string" },
           album: { type: "string" },
           lane: { type: "string", enum: ["continuation", "bridge", "explore"] },
           fit: { type: "number", minimum: 0, maximum: 100 },
+          energy: { type: "number", minimum: 0, maximum: 100 },
+          mood: { type: "string" },
           reason: { type: "string" },
         },
       },
@@ -91,7 +104,9 @@ function getConfig() {
     maxProposals: Math.floor(readPositiveNumber(process.env.AI_DJ_MAX_PROPOSALS, DEFAULT_MAX_PROPOSALS, { min: 2, max: 12 })),
     useWebSearch: process.env.AI_DJ_WEB_SEARCH === "true",
     minConfidence: readPositiveNumber(process.env.AI_DJ_MIN_CONFIDENCE, DEFAULT_MIN_CONFIDENCE, { min: 0, max: 1 }),
-    minTopFit: readPositiveNumber(process.env.AI_DJ_MIN_TOP_FIT, DEFAULT_MIN_TOP_FIT, { min: 0, max: 100 }),
+    // Applied per candidate during selection, not as a whole-plan gate: one
+    // weak proposal must not throw away an otherwise excellent AI plan.
+    minFit: readPositiveNumber(process.env.AI_DJ_MIN_FIT, DEFAULT_MIN_FIT, { min: 0, max: 100 }),
   };
 }
 
@@ -101,14 +116,18 @@ function compactText(value, limit = 120) {
 
 function describeTrack(track) {
   const metadata = getTrackMetadata(track);
+  const declared = track?.userData?.aiDJ || {};
+  const measuredEnergy = Number.isFinite(metadata.features?.energy) ? Math.round(metadata.features.energy * 100) : null;
   return {
     title: compactText(track?.userData?.autoplayReference?.title || track?.info?.title),
     artist: compactText(track?.userData?.autoplayReference?.artist || track?.info?.author),
     album: compactText(metadata.albumTitle),
     genres: metadata.genres.slice(0, 6),
     tempo: Number.isFinite(metadata.features?.tempo) ? Math.round(metadata.features.tempo) : null,
-    energy: Number.isFinite(metadata.features?.energy) ? Number(metadata.features.energy.toFixed(2)) : null,
-    valence: Number.isFinite(metadata.features?.valence) ? Number(metadata.features.valence.toFixed(2)) : null,
+    // Prefer the director's own previous verdict so the energy arc stays on
+    // one consistent scale across turns; fall back to measured features.
+    energy: Number.isFinite(Number(declared.energy)) ? Number(declared.energy) : measuredEnergy,
+    mood: compactText(declared.mood, 32) || null,
   };
 }
 
@@ -129,9 +148,18 @@ function describeVerifiedCandidate(candidate) {
   };
 }
 
+function describeTimeOfDay(date = new Date()) {
+  const hour = date.getHours();
+  if (hour >= 6 && hour < 12) return { hour, period: "morning" };
+  if (hour >= 12 && hour < 18) return { hour, period: "afternoon" };
+  if (hour >= 18 && hour < 22) return { hour, period: "evening" };
+  return { hour, period: "night" };
+}
+
 function buildDirectorInput({ anchorTrack, referenceTrack, profile, context, maxProposals }) {
   return {
     task: "Program the next track in this shared listening session.",
+    timeOfDay: describeTimeOfDay(),
     manualAnchor: describeTrack(anchorTrack),
     currentTrack: describeTrack(referenceTrack),
     manualTaste: {
@@ -145,17 +173,16 @@ function buildDirectorInput({ anchorTrack, referenceTrack, profile, context, max
       artists: (profile.manualArtistMemory || []).slice(0, 12),
       albums: (profile.manualAlbumMemory || []).slice(0, 12),
     },
-    recentSession: (profile.recentTracks || []).slice(-8).map(describeRecentTrack),
+    recentSession: (profile.recentTracks || []).slice(-10).map(describeRecentTrack),
     upcomingManualTracks: (profile.pendingManualTracks || []).slice(0, 4).map(describeTrack),
+    recentSkips: (context.recentSkips || []).slice(0, 6),
     verifiedCatalog: (profile.verifiedCatalogCandidates || []).slice(0, 20).map(describeVerifiedCandidate),
     constraints: {
       anchorGenreFamilies: context.anchorFamilies || [],
       currentGenreFamilies: context.referenceFamilies || [],
-      blockedArtists: [...(context.skippedArtists || [])].slice(0, 12),
+      skippedArtists: [...(context.skippedArtistCounts || [])].slice(0, 12),
       sameArtistStreak: context.artistStreak || 0,
       sameAlbumStreak: context.albumStreak || 0,
-      softArtistExitAfter: context.aiDiversityArtistStreak ?? context.softArtistExitStreak ?? 0,
-      softAlbumExitAfter: context.aiDiversityAlbumStreak ?? context.softAlbumExitStreak ?? 0,
       repeatCooldownMinutes: Math.round((Number(context.repeatCooldownMs) || 0) / 60_000),
       maximumProposals: maxProposals,
       forbidden: "recent repeats, provider mirrors, unrequested alternate versions, generic algorithmic or playlist suggestions",
@@ -192,10 +219,21 @@ function extractOutputText(payload) {
   return "";
 }
 
+// Some models emit fit/energy as a 0-1 fraction despite the documented
+// 0-100 scale, and OpenAI's strict mode does not enforce numeric bounds.
+// Normalize fractions so an otherwise perfect plan never dies on units.
+function normalizeScore(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return Number.NaN;
+  return parsed > 0 && parsed < 1 ? Math.round(parsed * 100) : parsed;
+}
+
 function validateDirectorPlan(value, maxProposals) {
   if (!value || typeof value !== "object") return null;
   const decision = value.decision;
-  const confidence = Number(value.confidence);
+  // The model flips between 0-1 and 0-100 confidence scales between calls.
+  let confidence = Number(value.confidence);
+  if (Number.isFinite(confidence) && confidence > 1 && confidence <= 100) confidence = confidence / 100;
   const direction = value.direction && typeof value.direction === "object" ? {
     summary: compactText(value.direction.summary, 180),
     energy: compactText(value.direction.energy, 80),
@@ -211,11 +249,15 @@ function validateDirectorPlan(value, maxProposals) {
     const album = compactText(candidate?.album, 160);
     const lane = compactText(candidate?.lane, 32).toLowerCase();
     const reason = compactText(candidate?.reason, 180);
-    const fit = Number(candidate?.fit);
+    const fit = normalizeScore(candidate?.fit);
+    const energy = normalizeScore(candidate?.energy);
+    const mood = compactText(candidate?.mood, 32);
     const key = `${artist.toLowerCase()}|${title.toLowerCase()}`;
-    if (!artist || !title || !reason || !["continuation", "bridge", "explore"].includes(lane) || !Number.isFinite(fit) || fit < 0 || fit > 100 || seen.has(key)) return [];
+    if (!artist || !title || !reason || !["continuation", "bridge", "explore"].includes(lane)) return [];
+    if (!Number.isFinite(fit) || fit < 0 || fit > 100 || !Number.isFinite(energy) || energy < 0 || energy > 100 || !mood) return [];
+    if (seen.has(key)) return [];
     seen.add(key);
-    return [{ artist, title, album, lane, fit, reason, rank: index }];
+    return [{ artist, title, album, lane, fit, energy, mood, reason, rank: index }];
   }).slice(0, maxProposals) : [];
 
   if (!['propose', 'no_match'].includes(decision) || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) return null;
@@ -263,7 +305,7 @@ async function requestDirectorPlan(config, prompt) {
       body: JSON.stringify({
         model: config.model,
         store: false,
-        max_output_tokens: 1100,
+        max_output_tokens: 1200,
         reasoning: { effort: config.reasoningEffort },
         tools: config.useWebSearch ? [{ type: "web_search", search_context_size: "low" }] : undefined,
         tool_choice: config.useWebSearch ? "required" : undefined,
@@ -314,14 +356,12 @@ async function planNextTrackWithAIDJ(input) {
       cacheDecision(cacheKey, plan, config.cacheTtlMs);
     }
   } catch (error) {
-    Log.warning("AI DJ director unavailable; using deterministic V3 fallback", "", `error=${compactText(error.message, 180)}`);
+    Log.warning("AI DJ director unavailable; using deterministic fallback ladder", "", `error=${compactText(error.message, 180)}`);
     return { status: "fallback-error", plan: null };
   }
 
   if (plan.decision !== "propose" || !plan.candidates.length) return { status: "no-match", plan, cached, model: config.model };
   if (plan.confidence < config.minConfidence) return { status: "low-confidence", plan, cached, model: config.model };
-  const topFit = Math.max(...plan.candidates.map((candidate) => Number(candidate.fit) || 0));
-  if (topFit < config.minTopFit) return { status: "low-fit", plan, cached, model: config.model };
   return { status: "planned", plan, cached, model: config.model };
 }
 

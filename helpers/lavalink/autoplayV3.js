@@ -1,22 +1,31 @@
 const { getGuildState } = require("../guildState");
 const Log = require("../logs/log");
 const { planNextTrackWithAIDJ } = require("./aiDj");
-const { getAutoplayExposureSnapshot, getExposureKey } = require("./autoplayExposure");
-const { areGenreFamiliesCompatible, getGenreFamilies } = require("./genreUtils");
-const { getLastFmTagProfile } = require("./lastfmClient");
-const { buildSessionProfile, getTrackMetadata, isAutoplayTrack } = require("./sessionProfile");
-const { getSkipPatterns } = require("./skipLearning");
+const { enrichManualAnchorTracks } = require("./autoplayCandidates");
 const {
   applyCandidateMetadata,
   collectCandidates,
   getAutoplayReference,
   resolveToPlayable,
-} = require("./smartAutoplay");
+} = require("./autoplayCandidates");
+const { getExposureKey, getAutoplayExposureSnapshot } = require("./autoplayExposure");
+const { getGenreFamilies } = require("./genreUtils");
+const { getLastFmTagProfile } = require("./lastfmClient");
+const { buildSessionProfile, getTrackMetadata, isAutoplayTrack } = require("./sessionProfile");
+const { getSkipPatterns } = require("./skipLearning");
 const { cloneTrack, ensurePlaybackState, playbackState } = require("./state");
 const { hasTrackIdentity } = require("./trackIdentity");
 const { cleanArtistName, normalizeComparableText } = require("./trackNormalization");
 const { isValidSong } = require("./trackValidation");
 
+function artistKey(value) {
+  return normalizeComparableText(cleanArtistName(value || ""));
+}
+
+// Emergency caps for the deterministic fallback ladder only. The AI director
+// is trusted to judge artist/album runs adaptively (a distinctive artist may
+// carry a long run; a generic one should rotate quickly), so these caps never
+// apply to ai_dj candidates.
 const MAX_CONSECUTIVE_ALBUM_TRACKS = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ALBUM_STREAK ?? 2), 1);
 const MAX_CONSECUTIVE_ARTIST_TRACKS = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ARTIST_STREAK ?? 3), 1);
 const MAX_ALBUM_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK ?? 3), MAX_CONSECUTIVE_ALBUM_TRACKS);
@@ -24,20 +33,14 @@ const MAX_ARTIST_CONTINUITY_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_MAX
 const REPEAT_COOLDOWN_MS = Math.max(Number(process.env.AUTOPLAY_REPEAT_COOLDOWN_MS ?? 60 * 60 * 1000), 0);
 const SOFT_ARTIST_EXIT_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ARTIST_STREAK ?? 4), 1);
 const SOFT_ALBUM_EXIT_STREAK = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBUM_STREAK ?? 3), 1);
-const SOFT_ARTIST_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ARTIST_EXIT_PENALTY ?? 3), 0);
-const SOFT_ALBUM_EXIT_PENALTY = Math.max(Number(process.env.AUTOPLAY_V3_SOFT_ALBUM_EXIT_PENALTY ?? 4), 0);
-const AI_DJ_PRIORITY_WEIGHT = Math.min(Math.max(Number(process.env.AI_DJ_PRIORITY_WEIGHT ?? 12), 1), 40);
-const AI_DJ_DIVERSITY_ARTIST_STREAK = Math.max(Number(process.env.AI_DJ_DIVERSITY_ARTIST_STREAK ?? 2), 1);
-const AI_DJ_DIVERSITY_ALBUM_STREAK = Math.max(Number(process.env.AI_DJ_DIVERSITY_ALBUM_STREAK ?? 2), 1);
-const AI_DJ_DIVERSITY_FIT_BAND = Math.min(Math.max(Number(process.env.AI_DJ_DIVERSITY_FIT_BAND ?? 10), 0), 25);
-const AI_DJ_DIVERSITY_QUALITY_BAND = Math.min(Math.max(Number(process.env.AI_DJ_DIVERSITY_QUALITY_BAND ?? 10), 0), 40);
+
+// AI selection tuning.
+const AI_DJ_MIN_FIT = Number(process.env.AI_DJ_MIN_FIT ?? 55);
+const AI_DJ_FIT_BAND = Math.min(Math.max(Number(process.env.AI_DJ_DIVERSITY_FIT_BAND ?? 10), 0), 30);
+const AI_DJ_SKIP_DEMOTION = Math.max(Number(process.env.AI_DJ_SKIP_DEMOTION ?? 12), 0);
 
 function sourceSet(candidate) {
   return new Set([candidate?.source, ...(candidate?.providerSources || [])].filter(Boolean));
-}
-
-function artistKey(value) {
-  return normalizeComparableText(cleanArtistName(value || ""));
 }
 
 function albumKey(track) {
@@ -46,13 +49,23 @@ function albumKey(track) {
   if (id) return `id:${id}`;
   const title = metadata.albumTitle || track?.userData?.albumTitle || track?.info?.albumName;
   const artist = artistKey(track?.userData?.autoplayReference?.artist || track?.info?.author);
-  return title ? `text:${artist}|${normalizeComparableText(title)}` : null;
+  return title ? `text:${artist}|${normalizeAlbumTitle(title)}` : null;
+}
+
+function normalizeAlbumTitle(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[’']/g, "")
+    .toLowerCase()
+    .replace(/\b(?:deluxe|expanded|remaster(?:ed)?|edition)\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function candidateAlbumKey(candidate) {
   if (candidate?.albumId) return `id:${candidate.albumId}`;
-  if (!candidate?.albumTitle) return null;
-  return `text:${artistKey(candidate.artist)}|${normalizeComparableText(candidate.albumTitle)}`;
+  if (!candidate?.albumTitle && !candidate?.album) return null;
+  return `text:${artistKey(candidate.artist)}|${normalizeAlbumTitle(candidate.albumTitle || candidate.album)}`;
 }
 
 function consecutiveCount(tracks, predicate) {
@@ -131,7 +144,184 @@ function hasRecentExposure(candidate, profile, exposure, referenceTrack = null, 
 }
 
 function candidateIdentityKey(candidate) {
-  return getExposureKey(candidate) || `${artistKey(candidate?.artist)}|${normalizeComparableText(candidate?.title)}`;
+  return getExposureKey(candidate) || `${artistKey(candidate?.artist)}|${String(candidate?.title || "").toLowerCase()}`;
+}
+
+/**
+ * Builds the shared selection context used by both the AI path and the
+ * deterministic fallback ladder.
+ */
+function buildSelectionContext({ profile, exposure, referenceTrack, recentTracks, skipPatterns, anchorTrack }) {
+
+  const referenceMetadata = getTrackMetadata(referenceTrack);
+  const anchorMetadata = getTrackMetadata(anchorTrack || referenceTrack);
+  const referenceArtist = artistKey(referenceTrack.userData?.autoplayReference?.artist || referenceTrack.info?.author);
+  const referenceAlbum = albumKey(referenceTrack);
+
+  return {
+    profile,
+    exposure: exposure || profile?.autoplayExposure || null,
+    referenceTrack,
+    referenceArtist,
+    referenceAlbum,
+    referenceFamilies: getGenreFamilies(referenceMetadata.genres),
+    // Advisory only: the AI director sees these but nothing is hard-rejected
+    // on their basis anymore. The fallback ladder still weights them softly.
+    anchorFamilies: getGenreFamilies(anchorMetadata.genres),
+    artistStreak: consecutiveCount(recentTracks, (track) => artistKey(track.userData?.autoplayReference?.artist || track.info?.author) === referenceArtist),
+    albumStreak: referenceAlbum ? consecutiveCount(recentTracks, (track) => albumKey(track) === referenceAlbum) : 0,
+    skippedArtists: new Set(Object.keys(skipPatterns?.skippedArtists || {}).map(artistKey)),
+    skippedArtistCounts: Object.entries(skipPatterns?.skippedArtists || {})
+      .map(([artist, skips]) => ({ artist, skips: Number(skips) || 0 }))
+      .sort((left, right) => right.skips - left.skips),
+    recentSkips: (skipPatterns?.recentSkips || [])
+      .slice(-6)
+      .reverse()
+      .map((skip) => ({
+        artist: cleanArtistName(skip.artist),
+        title: skip.title,
+        reason: skip.reason === "manual" ? "listener-skip" : skip.reason,
+      })),
+    repeatCooldownMs: REPEAT_COOLDOWN_MS,
+  };
+}
+
+/**
+ * Filters the director's proposals down to factual violations only:
+ * duplicates, cooldown repeats, and per-candidate minimum fit. Taste-level
+ * guards (genre families, streak caps) deliberately do not apply to AI picks -
+ * the model was explicitly asked to judge runs and bridges adaptively.
+ */
+function filterAICandidates(candidates, context, { minFit = AI_DJ_MIN_FIT, now = Date.now() } = {}) {
+  const rejected = {};
+  const seen = new Set();
+  const accepted = [];
+
+  for (const candidate of candidates) {
+    const identity = candidateIdentityKey(candidate);
+    if (!identity || seen.has(identity)) {
+      rejected["duplicate-candidate"] = (rejected["duplicate-candidate"] || 0) + 1;
+      continue;
+    }
+    seen.add(identity);
+
+    if (hasRecentExposure(candidate, context.profile, context.exposure, context.referenceTrack, now)) {
+      rejected["recent-duplicate"] = (rejected["recent-duplicate"] || 0) + 1;
+      continue;
+    }
+
+    if (Number.isFinite(Number(candidate.aiDjFit)) && Number(candidate.aiDjFit) < minFit) {
+      rejected["low-fit"] = (rejected["low-fit"] || 0) + 1;
+      continue;
+    }
+
+    const sameArtist = Boolean(artistKey(candidate.artist) && artistKey(candidate.artist) === context.referenceArtist);
+    const sameAlbum = Boolean(candidateAlbumKey(candidate) && candidateAlbumKey(candidate) === context.referenceAlbum);
+    accepted.push({
+      candidate,
+      score: Number(candidate.aiDjFit) || 0,
+      details: { sameArtist, sameAlbum },
+    });
+  }
+
+  return { ranked: accepted, rejected };
+}
+
+/**
+ * Orders AI candidates with fit as the dominant signal, plus two soft nudges:
+ * a weighted-random draw inside the top fit band (less deterministic than
+ * always taking #1) and a gentle bridge preference once a run is long enough
+ * that even the model's own continuation should start competing with its
+ * equally-credible exit plan.
+ */
+function orderAIDirectorCandidates(ranked, context, random = Math.random) {
+  if (!ranked.length) return { ranked, deferred: null };
+
+  // Fit-first ordering: the weighted draw happens around the strongest
+  // proposal regardless of the order the model happened to emit them in
+  // (rank breaks ties so the director's own sequence still matters there).
+  const orderedByFit = [...ranked]
+    .map((entry, originalIndex) => ({ entry, originalIndex }))
+    .sort((left, right) => {
+      const fitDelta = (Number(right.entry.candidate.aiDjFit) || 0) - (Number(left.entry.candidate.aiDjFit) || 0);
+      if (fitDelta) return fitDelta;
+      return (Number(left.entry.candidate.aiDjRank) || 0) - (Number(right.entry.candidate.aiDjRank) || 0);
+    })
+    .map(({ entry }) => entry);
+
+  const fits = orderedByFit.map((entry) => Number(entry.candidate.aiDjFit) || 0);
+  const bestIndex = 0;
+  const bestFit = fits[bestIndex];
+  const primaryDetails = orderedByFit[bestIndex].details;
+
+  // The longer a same-artist/same-album run drags past its soft threshold,
+  // the wider the rotation band and the stronger the bridge pull grows. This
+  // stays soft - the director's best pick can still win a fair roll - but an
+  // endless run of interchangeable tracks keeps losing altitude.
+  const artistExitSteps = Math.max(0, context.artistStreak - SOFT_ARTIST_EXIT_STREAK);
+  const albumExitSteps = Math.max(0, context.albumStreak - SOFT_ALBUM_EXIT_STREAK);
+  const exitDepth = Math.max(artistExitSteps, albumExitSteps);
+  const band = AI_DJ_FIT_BAND + Math.min(exitDepth * 4, 12);
+  const exitMultiplier = artistExitSteps + albumExitSteps > 0 ? 1.5 + exitDepth * 0.5 : 0;
+  const artistExitWanted = primaryDetails.sameArtist && artistExitSteps > 0;
+  const albumExitWanted = primaryDetails.sameAlbum && albumExitSteps > 0;
+
+  const skipCounts = new Map(
+    (context.skippedArtistCounts || []).map((entry) => [artistKey(entry.artist), entry.skips])
+  );
+
+  const pool = orderedByFit
+    .map((entry, index) => {
+      const fit = fits[index];
+      if (fit < bestFit - band) return null;
+      const lane = String(entry.candidate.aiDjLane || "").toLowerCase();
+      const sameArtist = entry.details.sameArtist;
+      const sameAlbum = entry.details.sameAlbum;
+      let weight = Math.max(fit - (bestFit - band) + 1, 1);
+
+      if ((artistExitWanted || albumExitWanted) && lane !== "continuation" && !sameArtist && !sameAlbum) {
+        weight *= exitMultiplier;
+      }
+      const skips = skipCounts.get(artistKey(entry.candidate.artist)) || 0;
+      if (skips > 0) weight /= 1 + (AI_DJ_SKIP_DEMOTION / 100) * Math.min(skips, 3);
+
+      return { entry, index, fit, weight };
+    })
+    .filter(Boolean);
+
+  const totalWeight = pool.reduce((sum, item) => sum + item.weight, 0);
+  const roll = Math.min(Math.max(Number(random()) || 0, 0), 0.999999) * totalWeight;
+  let cursor = 0;
+  let chosen = pool[0];
+  for (const item of pool) {
+    cursor += item.weight;
+    if (roll < cursor) {
+      chosen = item;
+      break;
+    }
+  }
+
+  const rest = orderedByFit
+    .filter((_, index) => index !== chosen.index)
+    .sort((left, right) => {
+      const fitDelta = (Number(right.candidate.aiDjFit) || 0) - (Number(left.candidate.aiDjFit) || 0);
+      if (fitDelta) return fitDelta;
+      return (Number(left.candidate.aiDjRank) || 0) - (Number(right.candidate.aiDjRank) || 0);
+    });
+
+  const deferred = chosen.index === bestIndex
+    ? null
+    : {
+        artist: orderedByFit[bestIndex].candidate.artist,
+        title: orderedByFit[bestIndex].candidate.title,
+        fit: orderedByFit[bestIndex].candidate.aiDjFit,
+        forArtist: chosen.entry.candidate.artist,
+        forTitle: chosen.entry.candidate.title,
+        forFit: chosen.entry.candidate.aiDjFit,
+        route: String(chosen.entry.candidate.aiDjLane || "band-roll"),
+      };
+
+  return { ranked: [chosen.entry, ...rest], deferred };
 }
 
 function hasStrongContinuation(candidate, context) {
@@ -141,15 +331,10 @@ function hasStrongContinuation(candidate, context) {
   const sameAlbum = candidateAlbum && candidateAlbum === context.referenceAlbum;
   if (!sameArtist && !sameAlbum) return false;
 
-  const candidateFamilies = getGenreFamilies(candidate.genres || []);
-  const genreCompatible = !context.referenceFamilies.length
-    || !candidateFamilies.length
-    || areGenreFamiliesCompatible(context.referenceFamilies, candidateFamilies);
-  if (!genreCompatible) return false;
-
   const sources = sourceSet(candidate);
   return (sameAlbum && sources.has("same_album"))
-    || (sameArtist && sources.has("lastfm_similar") && Number(candidate.similarity) >= 0.7);
+    || (sameArtist && sources.has("lastfm_similar") && Number(candidate.similarity) >= 0.7)
+    || (sameArtist && sources.has("deezer_recommendations"));
 }
 
 function scoreCandidateV3(candidate, context) {
@@ -159,38 +344,36 @@ function scoreCandidateV3(candidate, context) {
   const candidateAlbum = candidateAlbumKey(candidate);
   const sameArtist = candidateArtist && candidateArtist === context.referenceArtist;
   const sameAlbum = candidateAlbum && candidateAlbum === context.referenceAlbum;
+  const similarity = Number(candidate.similarity) || 0;
   const relation = sources.has("lastfm_similar")
-    ? 40 + Math.round((Number(candidate.similarity) || 0) * 10)
+    ? 40 + Math.round(similarity * 10)
     : sources.has("same_album")
       ? 44
-      : sources.has("ai_dj")
-        ? 62 - Math.min(18, Math.max(0, Number(candidate.aiDjRank) || 0) * 2)
-      : sources.has("youtube_mix")
-        ? 30
-        : 0;
+      : sources.has("deezer_recommendations")
+        ? 34 + Math.round(similarity * 10)
+        : sources.has("youtube_mix")
+          ? 30
+          : 0;
 
+  // The current transition matters more than the session-opening manual
+  // anchor, which may be hours stale by now.
   const anchorMatch = context.anchorFamilies.length && candidateGenres.length
     ? candidateGenres.filter((genre) => context.anchorFamilies.includes(genre)).length / candidateGenres.length
     : 0;
   const referenceMatch = context.referenceFamilies.length && candidateGenres.length
     ? candidateGenres.filter((genre) => context.referenceFamilies.includes(genre)).length / candidateGenres.length
     : 0;
-  const genreScore = Math.round(Math.min(1, anchorMatch * 0.7 + referenceMatch * 0.3) * 30);
+  const genreScore = Math.round(Math.min(1, referenceMatch * 0.7 + anchorMatch * 0.3) * 30);
   const continuationDepth = sameAlbum ? Math.max(context.albumStreak, context.artistStreak) : context.artistStreak;
   const softCap = sameAlbum ? MAX_CONSECUTIVE_ALBUM_TRACKS : MAX_CONSECUTIVE_ARTIST_TRACKS;
   const continuationScore = sameAlbum ? 12 : sameArtist ? 8 : 0;
   const continuationPenalty = Math.max(0, continuationDepth - softCap + 1) * (sameAlbum ? 3 : 4);
   const diversityScore = sameArtist ? 0 : 6;
-  // A soft exit never rejects a natural continuation: it only lets a similarly
-  // credible bridge outrank it after the room has stayed in one lane for a bit.
-  const softArtistExitStreak = Math.max(Number(context.softArtistExitStreak ?? SOFT_ARTIST_EXIT_STREAK), 1);
-  const softAlbumExitStreak = Math.max(Number(context.softAlbumExitStreak ?? SOFT_ALBUM_EXIT_STREAK), 1);
-  const softArtistExitPenalty = Math.max(Number(context.softArtistExitPenalty ?? SOFT_ARTIST_EXIT_PENALTY), 0);
-  const softAlbumExitPenalty = Math.max(Number(context.softAlbumExitPenalty ?? SOFT_ALBUM_EXIT_PENALTY), 0);
-  const artistExitSteps = sameArtist ? Math.max(0, context.artistStreak - softArtistExitStreak + 1) : 0;
-  const albumExitSteps = sameAlbum ? Math.max(0, context.albumStreak - softAlbumExitStreak + 1) : 0;
+  const softArtistExitPenalty = 3;
+  const softAlbumExitPenalty = 4;
+  const artistExitSteps = sameArtist ? Math.max(0, context.artistStreak - SOFT_ARTIST_EXIT_STREAK + 1) : 0;
+  const albumExitSteps = sameAlbum ? Math.max(0, context.albumStreak - SOFT_ALBUM_EXIT_STREAK + 1) : 0;
   const softExitPenalty = artistExitSteps * softArtistExitPenalty + albumExitSteps * softAlbumExitPenalty;
-  const aiDjFit = Number.isFinite(Number(candidate.aiDjFit)) ? Number(candidate.aiDjFit) : null;
 
   return {
     candidate,
@@ -202,82 +385,18 @@ function scoreCandidateV3(candidate, context) {
       continuationPenalty,
       softExitPenalty,
       diversityScore,
-      aiDjFit,
       sameArtist,
       sameAlbum,
     },
   };
 }
 
-function getAIDirectorPriority(entry) {
-  const fit = Number.isFinite(Number(entry?.candidate?.aiDjFit)) ? Number(entry.candidate.aiDjFit) : 0;
-  const rank = Math.max(0, Number(entry?.candidate?.aiDjRank) || 0);
-  // Fit is supplied by the director and is deliberately weighted enough that
-  // generic provider metadata cannot overturn a clear AI ordering.
-  // Keep even a small model fit difference above noisy catalog-score swings.
-  // V3 still breaks truly equal AI fits, and validates every hard safety rule.
-  return fit * AI_DJ_PRIORITY_WEIGHT * 10 + entry.score - rank / 100;
-}
-
-function getAIDirectorLane(entry) {
-  const requestedLane = String(entry?.candidate?.aiDjLane || "").toLowerCase();
-  const { sameArtist, sameAlbum } = entry?.details || {};
-
-  // Treat the model's route as intent, but keep the actual recording identity
-  // authoritative. A same-artist proposal cannot be a true bridge even if the
-  // model labels it one, and a different artist cannot silently be treated as
-  // an album continuation.
-  if (requestedLane === "bridge" && !sameArtist) return "bridge";
-  if (requestedLane === "continuation" && (sameArtist || sameAlbum)) return "continuation";
-  if (!sameArtist && !sameAlbum) return "bridge";
-  if (sameArtist || sameAlbum) return "continuation";
-  return "explore";
-}
-
-function canSoftlyDeferAIDirectorChoice(primary, alternative, context) {
-  if (!primary || !alternative) return false;
-  if (getAIDirectorLane(primary) !== "continuation" || getAIDirectorLane(alternative) !== "bridge") return false;
-  const primaryFit = Number(primary.candidate.aiDjFit);
-  const alternativeFit = Number(alternative.candidate.aiDjFit);
-  if (!Number.isFinite(primaryFit) || !Number.isFinite(alternativeFit)) return false;
-  if (alternativeFit < primaryFit - AI_DJ_DIVERSITY_FIT_BAND) return false;
-  if (alternative.score < primary.score - AI_DJ_DIVERSITY_QUALITY_BAND) return false;
-
-  const artistExitWanted = primary.details.sameArtist && context.artistStreak >= AI_DJ_DIVERSITY_ARTIST_STREAK;
-  const albumExitWanted = primary.details.sameAlbum && context.albumStreak >= AI_DJ_DIVERSITY_ALBUM_STREAK;
-  if (!artistExitWanted && !albumExitWanted) return false;
-
-  return (artistExitWanted && !alternative.details.sameArtist)
-    || (albumExitWanted && !alternative.details.sameAlbum);
-}
-
-function orderAIDirectorCandidates(ranked, context) {
-  const ordered = [...ranked].sort((left, right) => {
-    const priorityDelta = getAIDirectorPriority(right) - getAIDirectorPriority(left);
-    if (priorityDelta) return priorityDelta;
-    return (Number(left.candidate.aiDjRank) || 0) - (Number(right.candidate.aiDjRank) || 0);
-  });
-  const primary = ordered[0];
-  const alternativeIndex = ordered.findIndex((entry, index) => index > 0 && canSoftlyDeferAIDirectorChoice(primary, entry, context));
-  if (alternativeIndex === -1) return { ranked: ordered, deferred: null };
-
-  const [alternative] = ordered.splice(alternativeIndex, 1);
-  ordered.unshift(alternative);
-  return {
-    ranked: ordered,
-    deferred: {
-      artist: primary.candidate.artist,
-      title: primary.candidate.title,
-      fit: primary.candidate.aiDjFit,
-      forArtist: alternative.candidate.artist,
-      forTitle: alternative.candidate.title,
-      forFit: alternative.candidate.aiDjFit,
-      route: "bridge",
-    },
-  };
-}
-
-function selectV3Candidates(candidates, context) {
+/**
+ * Deterministic emergency ladder used only when the AI director is disabled,
+ * times out, or returns no usable plan. Relation-first, fact-gated: dedupe,
+ * cooldown, skipped artists, and simple continuity caps.
+ */
+function selectFallbackCandidates(candidates, context) {
   const accepted = [];
   const rejected = {};
   const seen = new Set();
@@ -292,7 +411,7 @@ function selectV3Candidates(candidates, context) {
     seen.add(identity);
 
     const sources = sourceSet(candidate);
-    if (!sources.has("lastfm_similar") && !sources.has("youtube_mix") && !sources.has("same_album") && !sources.has("ai_dj")) {
+    if (!sources.has("lastfm_similar") && !sources.has("youtube_mix") && !sources.has("same_album") && !sources.has("deezer_recommendations")) {
       bump("unrelated-source");
       continue;
     }
@@ -302,44 +421,28 @@ function selectV3Candidates(candidates, context) {
     }
 
     const candidateArtist = artistKey(candidate.artist);
-    const candidateAlbum = candidateAlbumKey(candidate);
     if (candidateArtist && context.skippedArtists.has(candidateArtist)) {
       bump("skipped-artist");
       continue;
     }
-    const candidateFamilies = getGenreFamilies(candidate.genres || []);
-    if (context.anchorFamilies.length && candidateFamilies.length && !areGenreFamiliesCompatible(context.anchorFamilies, candidateFamilies)) {
-      bump("anchor-genre-drift");
-      continue;
-    }
-    if (context.referenceFamilies.length && candidateFamilies.length && !areGenreFamiliesCompatible(context.referenceFamilies, candidateFamilies)) {
-      bump("transition-genre-drift");
-      continue;
-    }
     const strongContinuation = hasStrongContinuation(candidate, context);
-    const aiDirected = sources.has("ai_dj");
     if (candidateArtist && candidateArtist === context.referenceArtist && context.artistStreak >= MAX_CONSECUTIVE_ARTIST_TRACKS) {
-      // AI plans deliberately contain both a continuation and a bridge lane.
-      // Do not discard a musically excellent continuation through an arbitrary
-      // hard ceiling; orderAIDirectorCandidates rotates to an equally-good
-      // bridge when one exists. Generic V3 fallbacks keep their safety caps.
-      if (aiDirected) {
-        // no-op
-      } else if (!strongContinuation) {
+      if (!strongContinuation) {
         bump("artist-streak");
         continue;
-      } else if (context.artistStreak >= MAX_ARTIST_CONTINUITY_STREAK) {
+      }
+      if (context.artistStreak >= MAX_ARTIST_CONTINUITY_STREAK) {
         bump("artist-continuity-limit");
         continue;
       }
     }
+    const candidateAlbum = candidateAlbumKey(candidate);
     if (candidateAlbum && candidateAlbum === context.referenceAlbum && context.albumStreak >= MAX_CONSECUTIVE_ALBUM_TRACKS) {
-      if (aiDirected) {
-        // See the corresponding artist rule above.
-      } else if (!strongContinuation) {
+      if (!strongContinuation) {
         bump("album-streak");
         continue;
-      } else if (context.albumStreak >= MAX_ALBUM_CONTINUITY_STREAK) {
+      }
+      if (context.albumStreak >= MAX_ALBUM_CONTINUITY_STREAK) {
         bump("album-continuity-limit");
         continue;
       }
@@ -373,6 +476,8 @@ function buildAIDJCandidates(aiResult, catalogCandidates = []) {
     aiDjRank: index,
     aiDjFit: proposal.fit,
     aiDjLane: proposal.lane,
+    aiDjEnergy: proposal.energy,
+    aiDjMood: proposal.mood,
     aiDjVerifiedCatalog: Boolean(verified),
     aiDJ: {
       model: aiResult.model || null,
@@ -380,6 +485,9 @@ function buildAIDJCandidates(aiResult, catalogCandidates = []) {
       direction: aiResult.plan.direction,
       reasons: aiResult.plan.reasons,
       lane: proposal.lane,
+      fit: proposal.fit,
+      energy: proposal.energy,
+      mood: proposal.mood,
       proposalReason: proposal.reason,
       cached: Boolean(aiResult.cached),
     },
@@ -387,24 +495,28 @@ function buildAIDJCandidates(aiResult, catalogCandidates = []) {
   });
 }
 
+function isPlayableFullTrack(track, guildId) {
+  if (!track) return false;
+  if (isValidSong(track.info, { allowStreams: false, strictDuration: true, excludeInterludes: true })) return true;
+  Log.info(
+    "Autoplay resolved track rejected as an album break",
+    "",
+    `guild=${guildId}`,
+    `track=${track.info?.author || "Unknown"} - ${track.info?.title || "Unknown"}`
+  );
+  return false;
+}
+
 async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack, context) {
   for (const entry of ranked) {
     const aiDirected = sourceSet(entry.candidate).has("ai_dj");
-    const track = await resolveToPlayable(entry.candidate, guildId, {
+    const resolved = await resolveToPlayable(entry.candidate, guildId, {
       referenceTitle: referenceTrack.info?.title || "",
       providerSources: aiDirected && !entry.candidate.track ? ["youtube", "deezer", "soundcloud", "spotify"] : null,
       debugLabel: aiDirected ? `ai-dj:${entry.candidate.artist} - ${entry.candidate.title}` : "v3-candidate",
     });
-    if (!track) continue;
-    if (!isValidSong(track.info, { allowStreams: false, strictDuration: true, excludeInterludes: true })) {
-      Log.info(
-        "Autoplay resolved track rejected as an album break",
-        "",
-        `guild=${guildId}`,
-        `track=${track.info?.author || "Unknown"} - ${track.info?.title || "Unknown"}`
-      );
-      continue;
-    }
+    if (!isPlayableFullTrack(resolved, guildId)) continue;
+    const track = resolved;
     applyCandidateMetadata(track, entry.candidate);
     if (hasRecentExposure(track, context.profile, context.exposure, context.referenceTrack)) {
       Log.info("Autoplay resolved track rejected as a cross-provider repeat", "", `guild=${guildId}`, `track=${track.info?.author || "Unknown"} - ${track.info?.title || "Unknown"}`);
@@ -428,49 +540,46 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
   if (!getGuildState(guildId)?.autoplay) return null;
 
   const anchorTrack = await enrichAnchorGenres(getAnchorTrack(guildId, referenceTrack));
+  await enrichManualAnchorTracks(pendingManualTracks, guildId);
+
   const profile = buildSessionProfile(guildId, referenceTrack, { pendingManualTracks });
   profile.autoplayExposure = await getAutoplayExposureSnapshot(guildId);
+  profile.guildId = guildId;
 
   const recentTracks = getRecentTracks(profile, referenceTrack);
-  const referenceMetadata = getTrackMetadata(referenceTrack);
-  const anchorMetadata = getTrackMetadata(anchorTrack);
-  const referenceArtist = artistKey(referenceTrack.userData?.autoplayReference?.artist || referenceTrack.info?.author);
-  const referenceAlbum = albumKey(referenceTrack);
   const skipPatterns = getSkipPatterns(guildId);
-  const skippedArtists = new Set(Object.keys(skipPatterns.skippedArtists || {}).map(artistKey));
-  const context = {
-    profile,
-    exposure: profile.autoplayExposure,
-    referenceArtist,
-    referenceAlbum,
-    referenceFamilies: getGenreFamilies(referenceMetadata.genres),
-    anchorFamilies: getGenreFamilies(anchorMetadata.genres),
-    artistStreak: consecutiveCount(recentTracks, (track) => artistKey(track.userData?.autoplayReference?.artist || track.info?.author) === referenceArtist),
-    albumStreak: referenceAlbum ? consecutiveCount(recentTracks, (track) => albumKey(track) === referenceAlbum) : 0,
-    skippedArtists,
-    referenceTrack,
-    repeatCooldownMs: REPEAT_COOLDOWN_MS,
-    softArtistExitStreak: SOFT_ARTIST_EXIT_STREAK,
-    softAlbumExitStreak: SOFT_ALBUM_EXIT_STREAK,
-    aiDiversityArtistStreak: AI_DJ_DIVERSITY_ARTIST_STREAK,
-    aiDiversityAlbumStreak: AI_DJ_DIVERSITY_ALBUM_STREAK,
-    softArtistExitPenalty: SOFT_ARTIST_EXIT_PENALTY,
-    softAlbumExitPenalty: SOFT_ALBUM_EXIT_PENALTY,
-  };
-
+  const context = buildSelectionContext({ profile, exposure: profile.autoplayExposure, referenceTrack, recentTracks, skipPatterns, anchorTrack });
   const reference = getAutoplayReference(referenceTrack);
   const candidates = await collectCandidates(referenceTrack, guildId, profile, reference, {
-    sources: ["sameAlbum", "lastfm", "youtubeMix"],
+    sources: ["sameAlbum", "deezer", "lastfm", "youtubeMix"],
   });
   profile.verifiedCatalogCandidates = candidates;
-  const aiResult = await planNextTrackWithAIDJ({ guildId, anchorTrack, referenceTrack, profile, context });
 
+  const aiResult = await planNextTrackWithAIDJ({ guildId, anchorTrack, referenceTrack, profile, context });
   const aiCandidates = buildAIDJCandidates(aiResult, candidates);
-  const { ranked: aiEligible, rejected: aiRejected } = selectV3Candidates(aiCandidates, context);
-  const { ranked: aiRanked, deferred: aiDeferred } = orderAIDirectorCandidates(aiEligible, context);
-  const aiResolved = await resolveV3Candidates(aiRanked, guildId, referenceTrack, anchorTrack, context);
-  const { ranked, rejected } = selectV3Candidates(candidates, context);
-  const resolved = aiResolved || await resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack, context);
+
+  let resolved = null;
+  let aiOrdered = [];
+  let aiDeferred = null;
+  let aiRejected = {};
+
+  if (aiCandidates.length) {
+    const filtered = filterAICandidates(aiCandidates, context);
+    aiRejected = filtered.rejected;
+    const ordered = orderAIDirectorCandidates(filtered.ranked, context);
+    aiOrdered = ordered.ranked;
+    aiDeferred = ordered.deferred;
+    resolved = await resolveV3Candidates(aiOrdered, guildId, referenceTrack, anchorTrack, context);
+  }
+
+  let fallbackRejected = {};
+  let fallbackRanked = [];
+  if (!resolved) {
+    const { ranked, rejected } = selectFallbackCandidates(candidates, context);
+    fallbackRanked = ranked;
+    fallbackRejected = rejected;
+    resolved = await resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack, context);
+  }
 
   Log.info(
     "Autoplay V3 selection",
@@ -479,45 +588,42 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
     `anchor=${anchorTrack.info?.author || "Unknown"} - ${anchorTrack.info?.title || "Unknown"}`,
     `reference=${referenceTrack.info?.author || "Unknown"} - ${referenceTrack.info?.title || "Unknown"}`,
     `candidates=${candidates.length}`,
-    `eligible=${ranked.length}`,
-    `verifiedCatalog=${candidates.length}`,
-    `aiCandidates=${aiCandidates.length}`,
-    `aiEligible=${aiRanked.length}`,
     `artistStreak=${context.artistStreak}`,
     `albumStreak=${context.albumStreak}`,
-    `rejected=${Object.entries({ ...rejected, ...Object.fromEntries(Object.entries(aiRejected).map(([key, value]) => [`ai-${key}`, value])) }).map(([key, value]) => `${key}:${value}`).join(",") || "none"}`,
     `aiDj=${aiResult.status}${aiResult.plan ? `:${aiResult.plan.confidence}/${aiResult.plan.direction.summary}` : ""}`,
-    `aiProposals=${aiCandidates.slice(0, 4).map((candidate) => `${candidate.artist} - ${candidate.title} [${candidate.aiDjLane};${candidate.aiDjFit}]`).join(" | ") || "none"}`,
-    `aiOrder=${aiRanked.slice(0, 4).map((entry) => `${entry.candidate.artist} - ${entry.candidate.title} [${getAIDirectorLane(entry)};fit=${entry.candidate.aiDjFit};priority=${Math.round(getAIDirectorPriority(entry))}]`).join(" | ") || "none"}`,
+    `aiProposals=${aiCandidates.slice(0, 4).map((candidate) => `${candidate.artist} - ${candidate.title} [${candidate.aiDjLane};fit=${candidate.aiDjFit};e=${candidate.aiDjEnergy}]`).join(" | ") || "none"}`,
+    `aiOrder=${aiOrdered.slice(0, 4).map((entry) => `${entry.candidate.artist} - ${entry.candidate.title} [${entry.candidate.aiDjLane};fit=${entry.candidate.aiDjFit}]`).join(" | ") || "none"}`,
     `aiDeferred=${aiDeferred ? `${aiDeferred.artist} - ${aiDeferred.title} [${aiDeferred.fit}]=>${aiDeferred.forArtist} - ${aiDeferred.forTitle} [${aiDeferred.forFit}]` : "none"}`,
-    `winner=${resolved ? `${resolved.track.info?.author} - ${resolved.track.info?.title} (${resolved.entry.score})${aiResolved ? ";ai-director" : ";fallback-v3"}` : "none"}`
+    `aiRejected=${Object.entries(aiRejected).map(([key, value]) => `${key}:${value}`).join(",") || "none"}`,
+    `fallbackEligible=${fallbackRanked.length}`,
+    `fallbackRejected=${Object.entries(fallbackRejected).map(([key, value]) => `${key}:${value}`).join(",") || "none"}`,
+    `winner=${resolved ? `${resolved.track.info?.author} - ${resolved.track.info?.title}${sourceSet(resolved.entry.candidate).has("ai_dj") ? ";ai-director" : ";fallback-ladder"}` : "none"}`
   );
 
   return resolved?.track || null;
 }
 
 module.exports = {
+  AI_DJ_FIT_BAND,
+  AI_DJ_MIN_FIT,
   MAX_ALBUM_CONTINUITY_STREAK,
   MAX_CONSECUTIVE_ALBUM_TRACKS,
   MAX_CONSECUTIVE_ARTIST_TRACKS,
   MAX_ARTIST_CONTINUITY_STREAK,
-  SOFT_ARTIST_EXIT_STREAK,
-  SOFT_ALBUM_EXIT_STREAK,
-  SOFT_ARTIST_EXIT_PENALTY,
-  SOFT_ALBUM_EXIT_PENALTY,
-  AI_DJ_PRIORITY_WEIGHT,
-  AI_DJ_DIVERSITY_ARTIST_STREAK,
-  AI_DJ_DIVERSITY_ALBUM_STREAK,
-  AI_DJ_DIVERSITY_FIT_BAND,
-  AI_DJ_DIVERSITY_QUALITY_BAND,
   REPEAT_COOLDOWN_MS,
+  SOFT_ALBUM_EXIT_STREAK,
+  SOFT_ARTIST_EXIT_STREAK,
+  albumKey,
+  artistKey,
   buildAIDJCandidates,
+  buildSelectionContext,
+  candidateIdentityKey,
   fetchAutoplayV3Track,
+  filterAICandidates,
   getRecentTracks,
-  selectV3Candidates,
-  scoreCandidateV3,
-  getAIDirectorPriority,
-  getAIDirectorLane,
-  orderAIDirectorCandidates,
   hasRecentExposure,
+  orderAIDirectorCandidates,
+  resolveV3Candidates,
+  scoreCandidateV3,
+  selectFallbackCandidates,
 };

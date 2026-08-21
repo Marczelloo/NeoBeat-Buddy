@@ -1,14 +1,14 @@
 const { EventEmitter } = require("node:events");
 
 const { getGuildState } = require("../guildState");
+const { getRelevantPlayableTrack } = require("./autoplayCandidates");
 const { clearAutoplayExposureForGuild, recordAutoplayExposure } = require("./autoplayExposure");
 const { getTempoDistance } = require("./autoplayMetadata");
 const { fetchAutoplayV3Track } = require("./autoplayV3");
-const { normalizeArtist } = require("./candidateScoring");
 const { createPoru } = require("./client");
 const { getGenreBridgeStrength, getGenreFamilies, areGenreFamiliesCompatible } = require("./genreUtils");
-const { fetchSmartAutoplayTrack, getRelevantPlayableTrack } = require("./smartAutoplay");
 const { cloneTrack, playbackState, pushTrackHistory, rememberAutoplayTrack } = require("./state");
+const { normalizeArtist } = require("./trackIdentity");
 const { hasTrackIdentity } = require("./trackIdentity");
 
 function createLavalinkTestClient() {
@@ -163,8 +163,10 @@ function updateMetrics(
 function evaluateLiveSoak(result, {
   maxDuplicateSelections = 0,
   maxGenreFamilyJumps = 0,
-  maxConsecutiveArtist = 2,
-  maxArtistWindowViolations = 0,
+  // Run length belongs to the AI director now, so the soak reports streaks
+  // instead of enforcing the old rigid caps unless a caller overrides them.
+  maxConsecutiveArtist = null,
+  maxArtistWindowViolations = null,
   maxUnresolvedSteps = 0,
   maxTempoJump = 48,
   maxEnergyJump = 0.45,
@@ -180,8 +182,8 @@ function evaluateLiveSoak(result, {
   if (result.metrics.genreFamilyJumps > maxGenreFamilyJumps) violations.push(`genreJumps=${result.metrics.genreFamilyJumps}`);
   const diversityStreak = result.metrics.maxConsecutiveArtistOutsideAlbum ?? result.metrics.maxConsecutiveArtist;
   const diversityWindowViolations = result.metrics.artistWindowDiversityViolations ?? result.metrics.artistWindowViolations;
-  if (diversityStreak > maxConsecutiveArtist) violations.push(`maxArtistStreak=${diversityStreak}`);
-  if (diversityWindowViolations > maxArtistWindowViolations) violations.push(`artistWindow=${diversityWindowViolations}`);
+  if (maxConsecutiveArtist !== null && diversityStreak > maxConsecutiveArtist) violations.push(`maxArtistStreak=${diversityStreak}`);
+  if (maxArtistWindowViolations !== null && diversityWindowViolations > maxArtistWindowViolations) violations.push(`artistWindow=${diversityWindowViolations}`);
   if (result.metrics.unresolvedSteps > maxUnresolvedSteps) violations.push(`unresolved=${result.metrics.unresolvedSteps}`);
   if (continuity.tempo.max !== null && continuity.tempo.max > maxTempoJump) {
     violations.push(`tempoJump=${continuity.tempo.max}`);
@@ -224,7 +226,7 @@ async function runLiveAutoplaySoak({
   metrics.currentArtistStreak = 1;
   metrics.maxConsecutiveArtist = 1;
   let reference = cloneTrack(seed);
-  const selectAutoplayTrack = process.env.AUTOPLAY_V3 === "false" ? fetchSmartAutoplayTrack : fetchAutoplayV3Track;
+  const selectAutoplayTrack = fetchAutoplayV3Track;
   pushTrackHistory(guildId, reference);
   fullHistory.push(cloneTrack(reference));
 

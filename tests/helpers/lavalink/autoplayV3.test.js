@@ -2,17 +2,14 @@ const assert = require("node:assert");
 const { describe, it } = require("node:test");
 
 const {
-  MAX_ALBUM_CONTINUITY_STREAK,
   MAX_CONSECUTIVE_ALBUM_TRACKS,
   MAX_CONSECUTIVE_ARTIST_TRACKS,
-  MAX_ARTIST_CONTINUITY_STREAK,
   buildAIDJCandidates,
-  getAIDirectorLane,
-  getAIDirectorPriority,
+  filterAICandidates,
   getRecentTracks,
   hasRecentExposure,
   orderAIDirectorCandidates,
-  selectV3Candidates,
+  selectFallbackCandidates,
 } = require("../../../helpers/lavalink/autoplayV3");
 
 function candidate(title, artist, source, options = {}) {
@@ -21,17 +18,29 @@ function candidate(title, artist, source, options = {}) {
     artist,
     identifier: options.identifier || `${artist}-${title}`,
     source,
-    genres: options.genres || ["synthpop"],
+    genres: options.genres || ["hip hop"],
     similarity: options.similarity || 0,
     albumId: options.albumId || null,
     albumTitle: options.albumTitle || null,
   };
 }
 
+function aiCandidate(title, artist, options = {}) {
+  const base = candidate(title, artist, "ai_dj", options);
+  base.aiDjFit = options.fit ?? 90;
+  base.aiDjLane = options.lane ?? "continuation";
+  base.aiDjRank = options.rank ?? 0;
+  base.aiDjEnergy = options.energy ?? 60;
+  base.aiDjMood = options.mood ?? "late-night reflective";
+  base.aiDJ = { lane: base.aiDjLane, fit: base.aiDjFit, energy: base.aiDjEnergy, mood: base.aiDjMood };
+  return base;
+}
+
 function context(overrides = {}) {
   return {
     profile: { cooldownTracks: [] },
     exposure: { tracks: [] },
+    referenceTrack: { info: { title: "Nostalgia", author: "Taco Hemingway", identifier: "ref" } },
     referenceArtist: "taco hemingway",
     referenceAlbum: "id:frascati",
     referenceFamilies: ["hiphop"],
@@ -39,11 +48,14 @@ function context(overrides = {}) {
     artistStreak: 0,
     albumStreak: 0,
     skippedArtists: new Set(),
+    skippedArtistCounts: [],
+    recentSkips: [],
+    repeatCooldownMs: 60 * 60 * 1000,
     ...overrides,
   };
 }
 
-describe("Autoplay V3 selection", () => {
+describe("Autoplay V3 AI-first selection", () => {
   it("uses durable autoplay history when player history misses provider-shaped tracks", () => {
     const taco = (title, identifier) => ({
       info: { title, author: "Taco Hemingway", identifier },
@@ -60,255 +72,232 @@ describe("Autoplay V3 selection", () => {
 
   it("allows a recording to return after the short-session repeat cooldown", () => {
     const now = Date.now();
-    const candidate = { artist: "Taco Hemingway", title: "Nostalgia" };
-    const track = {
+    const proposal = { artist: "Taco Hemingway", title: "Nostalgia" };
+    const played = {
       info: { identifier: "nostalgia", author: "Taco Hemingway", title: "Nostalgia" },
       userData: { autoplayPlayedAt: now - (61 * 60 * 1000) },
     };
 
-    assert.strictEqual(hasRecentExposure(candidate, { cooldownTracks: [track] }, { tracks: [] }, null, now), false);
-    track.userData.autoplayPlayedAt = now - 1000;
-    assert.strictEqual(hasRecentExposure(candidate, { cooldownTracks: [track] }, { tracks: [] }, null, now), true);
+    assert.strictEqual(hasRecentExposure(proposal, { cooldownTracks: [played] }, { tracks: [] }, null, now), false);
+    played.userData.autoplayPlayedAt = now - 1000;
+    assert.strictEqual(hasRecentExposure(proposal, { cooldownTracks: [played] }, { tracks: [] }, null, now), true);
   });
 
-  it("prioritizes a compatible same-album neighbour over a broad Last.fm relation", () => {
-    const { ranked } = selectV3Candidates(
-      [
-        candidate("Frascati Interlude", "Taco Hemingway", "same_album", {
-          albumId: "frascati",
-          genres: ["hip hop"],
-        }),
-        candidate("Related Track", "Quebonafide", "lastfm_similar", {
-          similarity: 0.93,
-          genres: ["hip hop"],
-        }),
-      ],
-      context()
-    );
-
-    assert.strictEqual(ranked[0].candidate.title, "Frascati Interlude");
-  });
-
-  it("keeps a direct same-album continuation after the soft caps while the vibe is compatible", () => {
-    const { ranked, rejected } = selectV3Candidates(
-      [candidate("Another Album Cut", "Taco Hemingway", "same_album", { albumId: "frascati", genres: ["hip hop"] })],
-      context({ albumStreak: MAX_CONSECUTIVE_ALBUM_TRACKS, artistStreak: MAX_CONSECUTIVE_ARTIST_TRACKS })
-    );
-
-    assert.strictEqual(ranked.length, 1);
-    assert.deepStrictEqual(rejected, {});
-  });
-
-  it("allows a good artist continuation until the explicit artist cap", () => {
-    const followUp = candidate("Second Wind", "Taco Hemingway", "lastfm_similar", {
-      similarity: 0.82,
-      genres: ["hip hop"],
+  it("keeps an AI bridge that crosses the anchor genre family when the director rates it high", () => {
+    // The old hard guard rejected this outright ("anchor-genre-drift"). The
+    // director owns taste now: a well-rated lane change is its decision.
+    const dancehallBridge = aiCandidate("Dancehall Detour", "Other Artist", {
+      genres: ["reggae", "dancehall"],
+      lane: "explore",
+      fit: 88,
     });
-    const allowed = selectV3Candidates([followUp], context({ artistStreak: MAX_CONSECUTIVE_ARTIST_TRACKS - 1 }));
-    const blocked = selectV3Candidates([candidate("Generic Follow-up", "Taco Hemingway", "youtube_mix", { genres: ["hip hop"] })], context({ artistStreak: MAX_CONSECUTIVE_ARTIST_TRACKS }));
 
-    assert.strictEqual(allowed.ranked.length, 1);
-    assert.strictEqual(blocked.ranked.length, 0);
-    assert.strictEqual(blocked.rejected["artist-streak"], 1);
+    const filtered = filterAICandidates([dancehallBridge], context());
+    assert.strictEqual(filtered.ranked.length, 1);
+    assert.deepStrictEqual(filtered.rejected, {});
   });
 
-  it("lets the AI keep a strong same-artist continuation instead of applying a hard ceiling", () => {
-    const aiCandidate = candidate("Fiji", "Taco Hemingway", "ai_dj", { genres: ["hip hop"] });
-    const allowed = selectV3Candidates([aiCandidate], context({ artistStreak: 7 }));
-    const continued = selectV3Candidates([aiCandidate], context({ artistStreak: 8 }));
+  it("drops only the weak proposals from a plan instead of discarding the whole plan", () => {
+    const strong = aiCandidate("Strong Cut", "Taco Hemingway", { fit: 92 });
+    const weak = aiCandidate("Weak Cut", "Quebonafide", { fit: 30, rank: 1, lane: "bridge" });
 
-    assert.strictEqual(allowed.ranked.length, 1);
-    assert.strictEqual(continued.ranked.length, 1);
-    assert.deepStrictEqual(continued.rejected, {});
+    const filtered = filterAICandidates([strong, weak], context());
+    assert.deepStrictEqual(filtered.ranked.map((entry) => entry.candidate.title), ["Strong Cut"]);
+    assert.strictEqual(filtered.rejected["low-fit"], 1);
   });
 
-  it("rotates to a comparably-fit Malik bridge once Kizo has a short run", () => {
-    const sameArtist = candidate("KIEROWNIK", "Kizo", "ai_dj", { genres: ["hip hop"] });
-    const compatibleExit = candidate("Baciata", "Malik Montana", "ai_dj", { genres: ["hip hop"] });
-    sameArtist.aiDjFit = 96;
-    compatibleExit.aiDjRank = 1;
-    compatibleExit.aiDjFit = 88;
-
-    const selectionContext = context({ referenceArtist: "kizo", artistStreak: 2 });
-    const { ranked } = selectV3Candidates([sameArtist, compatibleExit], selectionContext);
-
-    const ordered = orderAIDirectorCandidates(ranked, selectionContext);
-    assert.strictEqual(ordered.ranked[0].candidate.title, "Baciata");
-    assert.strictEqual(ordered.deferred.title, "KIEROWNIK");
-  });
-
-  it("softly defers an AI continuation only for a similarly-fit bridge after a long run", () => {
-    const sameAlbum = candidate("Another Cut", "Taco Hemingway", "ai_dj", {
-      albumId: "frascati",
-      genres: ["hip hop"],
+  it("still rejects an AI proposal that is on cooldown or already queued as reference", () => {
+    const repeated = {
+      info: { identifier: "wosk", author: "Taco Hemingway", title: "Wosk" },
+      userData: { autoplayPlayedAt: Date.now() - 1000 },
+    };
+    const proposal = aiCandidate("Wosk", "Taco Hemingway", { fit: 96, identifier: "wosk" });
+    const selectionContext = context({
+      profile: { cooldownTracks: [repeated] },
     });
-    const compatibleExit = candidate("Scene Bridge", "Quebonafide", "ai_dj", { genres: ["hip hop"] });
-    sameAlbum.aiDjFit = 94;
-    compatibleExit.aiDjRank = 1;
-    compatibleExit.aiDjFit = 85;
 
-    const selectionContext = context({ artistStreak: 3, albumStreak: 3 });
-    const { ranked } = selectV3Candidates([sameAlbum, compatibleExit], selectionContext);
-    const ordered = orderAIDirectorCandidates(ranked, selectionContext);
-    const continuationOnly = selectV3Candidates([sameAlbum], selectionContext);
+    const filtered = filterAICandidates([proposal], selectionContext);
+    assert.deepStrictEqual(filtered.ranked, []);
+    assert.strictEqual(filtered.rejected["recent-duplicate"], 1);
 
-    assert.strictEqual(ordered.ranked[0].candidate.title, "Scene Bridge");
-    assert.strictEqual(ordered.deferred.title, "Another Cut");
-    assert.strictEqual(continuationOnly.ranked.length, 1);
+    const sameAsReference = filterAICandidates(
+      [aiCandidate("Nostalgia", "Taco Hemingway", { fit: 96, identifier: "ref-nostalgia" })],
+      context({ referenceTrack: { info: { title: "Nostalgia", author: "Taco Hemingway", identifier: "nostalgia" } } })
+    );
+    assert.deepStrictEqual(sameAsReference.ranked, []);
+    assert.strictEqual(sameAsReference.rejected["recent-duplicate"], 1);
   });
 
-  it("does not defer a run when the best available AI bridge is materially weaker", () => {
-    const continuation = candidate("Deep Cut", "Guzior", "ai_dj", { genres: ["hip hop"] });
-    const bridge = candidate("Scene Bridge", "Szpaku", "ai_dj", { genres: ["hip hop"] });
-    continuation.aiDjFit = 94;
-    bridge.aiDjFit = 81;
-    bridge.aiDjRank = 1;
+  it("does not ban a recently skipped artist on the AI path (demotion happens at ordering)", () => {
+    const skippedArtistPick = aiCandidate("Comeback Track", "Mata", { fit: 91, lane: "bridge" });
+    const selectionContext = context({
+      skippedArtists: new Set(["mata"]),
+      skippedArtistCounts: [{ artist: "Mata", skips: 2 }],
+    });
 
-    const selectionContext = context({ referenceArtist: "guzior", artistStreak: 4 });
-    const { ranked } = selectV3Candidates([continuation, bridge], selectionContext);
-    const ordered = orderAIDirectorCandidates(ranked, selectionContext);
+    const filtered = filterAICandidates([skippedArtistPick], selectionContext);
+    assert.strictEqual(filtered.ranked.length, 1);
+    assert.deepStrictEqual(filtered.rejected, {});
+  });
 
-    assert.strictEqual(ordered.ranked[0].candidate.title, "Deep Cut");
+  it("lets a distinctive-artist run continue without any streak ceiling", () => {
+    // Taco Hemingway's flow/worldbuilding makes long runs feel like chapters:
+    // no code-level cap may interrupt them; the director decides musically.
+    const runContinuation = aiCandidate("Chapter Five", "Taco Hemingway", { fit: 93, albumId: "frascati" });
+    const selectionContext = context({ artistStreak: 8, albumStreak: 6 });
+
+    const filtered = filterAICandidates([runContinuation], selectionContext);
+    assert.strictEqual(filtered.ranked.length, 1);
+
+    const ordered = orderAIDirectorCandidates(filtered.ranked, selectionContext, () => 0);
+    assert.strictEqual(ordered.ranked[0].candidate.title, "Chapter Five");
     assert.strictEqual(ordered.deferred, null);
   });
 
-  it("uses AI fit as the dominant ordering signal while retaining V3 quality inside a tie", () => {
-    const first = candidate("Director First", "Taco Hemingway", "ai_dj", { genres: ["hip hop"] });
-    const second = candidate("Director Second", "Quebonafide", "ai_dj", { genres: ["hip hop"] });
-    first.aiDjFit = 95;
-    second.aiDjFit = 90;
-    second.aiDjRank = 1;
+  it("rotates inside the top fit band instead of always taking number one", () => {
+    const best = aiCandidate("Best Continuation", "Taco Hemingway", { fit: 94 });
+    const closeAlternative = aiCandidate("Close Bridge", "Quebonafide", { fit: 86, lane: "bridge", rank: 1 });
 
-    const { ranked } = selectV3Candidates([first, second], context());
-    const ordered = orderAIDirectorCandidates(ranked, context());
+    const filtered = filterAICandidates([best, closeAlternative], context());
+    // floor=84: weights are best=11, close=3, total=14. roll=12/14 lands on
+    // the second entry even though it did not have the top fit.
+    const rotated = orderAIDirectorCandidates(filtered.ranked, context(), () => 12 / 14);
+    assert.strictEqual(rotated.ranked[0].candidate.title, "Close Bridge");
+    assert.strictEqual(rotated.deferred.title, "Best Continuation");
 
-    assert.ok(getAIDirectorPriority(ordered.ranked[0]) > getAIDirectorPriority(ordered.ranked[1]));
-    assert.strictEqual(ordered.ranked[0].candidate.title, "Director First");
+    const stable = orderAIDirectorCandidates(filtered.ranked, context(), () => 0);
+    assert.strictEqual(stable.ranked[0].candidate.title, "Best Continuation");
+    assert.strictEqual(stable.deferred, null);
   });
 
-  it("does not reject an AI album continuation solely due to a hard ceiling", () => {
-    const aiCandidate = candidate("Wosk", "Taco Hemingway", "ai_dj", { albumId: "frascati", genres: ["hip hop"] });
-    const { ranked, rejected } = selectV3Candidates([aiCandidate], context({
-      artistStreak: 8,
-      albumStreak: 8,
+  it("prefers the director's bridge after a long run, but never outside the band", () => {
+    const continuation = aiCandidate("Deep Cut", "Guzior", { fit: 94 });
+    const bridge = aiCandidate("Scene Bridge", "Szpaku", { fit: 85, lane: "bridge", rank: 1 });
+
+    const filtered = filterAICandidates([continuation, bridge], context({ referenceArtist: "guzior", artistStreak: 5 }));
+    // streak 5 -> exitDepth 1: band widens to 14 (floor 80) and the bridge
+    // multiplier is x2. Weights: continuation 15, bridge 12, total 27.
+    const exitTaken = orderAIDirectorCandidates(filtered.ranked, context({ referenceArtist: "guzior", artistStreak: 5 }), () => 24 / 27);
+    assert.strictEqual(exitTaken.ranked[0].candidate.title, "Scene Bridge");
+    assert.strictEqual(exitTaken.deferred.title, "Deep Cut");
+
+    const runHeld = orderAIDirectorCandidates(filtered.ranked, context({ referenceArtist: "guzior", artistStreak: 5 }), () => 3 / 27);
+    assert.strictEqual(runHeld.ranked[0].candidate.title, "Deep Cut");
+
+    // A materially weaker bridge passes the factual filter but sits outside
+    // the top-fit band, so no random roll can ever rotate into it.
+    const farBridge = aiCandidate("Far Bridge", "Bialas", { fit: 70, lane: "bridge", rank: 1 });
+    const farFiltered = filterAICandidates([continuation, farBridge], context({ referenceArtist: "guzior", artistStreak: 9 }));
+    assert.strictEqual(farFiltered.ranked.length, 2);
+    const maxRollOrder = orderAIDirectorCandidates(
+      farFiltered.ranked,
+      context({ referenceArtist: "guzior", artistStreak: 9 }),
+      () => 0.999999
+    );
+    assert.strictEqual(maxRollOrder.ranked[0].candidate.title, "Deep Cut");
+    assert.strictEqual(maxRollOrder.deferred, null);
+  });
+
+  it("demotes but keeps candidates by artists listeners just skipped", () => {
+    const fresh = aiCandidate("Fresh Pick", "Quebonafide", { fit: 90, rank: 0 });
+    const skipped = aiCandidate("Skipped Artist Pick", "Mata", { fit: 90, rank: 1, lane: "bridge" });
+
+    const filtered = filterAICandidates([fresh, skipped], context({
+      skippedArtists: new Set(["mata"]),
+      skippedArtistCounts: [{ artist: "Mata", skips: 2 }],
     }));
+    // Equal fits: fresh weight 11 vs skipped ≈8.87 (12% demotion per skip).
+    // A mid roll keeps the clean pick first, while a near-max roll proves
+    // the skip is a demotion, not a ban.
+    const midRoll = orderAIDirectorCandidates(filtered.ranked, context({
+      skippedArtists: new Set(["mata"]),
+      skippedArtistCounts: [{ artist: "Mata", skips: 2 }],
+    }), () => 0.5);
+    assert.strictEqual(midRoll.ranked[0].candidate.title, "Fresh Pick");
 
-    assert.strictEqual(ranked.length, 1);
-    assert.deepStrictEqual(rejected, {});
+    const maxRoll = orderAIDirectorCandidates(filtered.ranked, context({
+      skippedArtists: new Set(["mata"]),
+      skippedArtistCounts: [{ artist: "Mata", skips: 2 }],
+    }), () => 0.97);
+    assert.ok(maxRoll.ranked.some((entry) => entry.candidate.artist === "Mata"));
   });
 
-  it("retains an emergency continuity cap to prevent endless album or artist loops", () => {
-    const { ranked, rejected } = selectV3Candidates(
-      [candidate("One Track Too Far", "Taco Hemingway", "same_album", { albumId: "frascati", genres: ["hip hop"] })],
-      context({ albumStreak: MAX_ALBUM_CONTINUITY_STREAK, artistStreak: MAX_ARTIST_CONTINUITY_STREAK })
-    );
-
-    assert.deepStrictEqual(ranked, []);
-    assert.strictEqual(rejected["artist-continuity-limit"], 1);
-  });
-
-  it("rejects a genre jump even when the candidate comes from a trusted source", () => {
-    const { ranked, rejected } = selectV3Candidates(
-      [candidate("Dancehall Detour", "Other Artist", "lastfm_similar", { similarity: 0.98, genres: ["reggae", "dancehall"] })],
-      context()
-    );
-
-    assert.deepStrictEqual(ranked, []);
-    assert.strictEqual(rejected["anchor-genre-drift"], 1);
-  });
-
-  it("deduplicates the same recording returned by more than one provider", () => {
-    const { ranked, rejected } = selectV3Candidates(
-      [
-        candidate("Mirror Song", "Same Artist", "lastfm_similar", { similarity: 0.7, identifier: "lastfm-id", genres: ["hip hop"] }),
-        candidate("Mirror Song (Official Audio)", "Same Artist", "youtube_mix", { identifier: "youtube-id", genres: ["hip hop"] }),
-      ],
-      context()
-    );
-
-    assert.strictEqual(ranked.length, 1);
-    assert.strictEqual(rejected["duplicate-candidate"], 1);
-  });
-
-  it("keeps YouTube Mix as a constrained fallback when similar tracks are rejected", () => {
-    const { ranked, rejected } = selectV3Candidates(
-      [
-        candidate("Skipped Artist Track", "Skipped Artist", "lastfm_similar", { similarity: 0.95, genres: ["hip hop"] }),
-        candidate("Mix Continuation", "Fresh Artist", "youtube_mix", { genres: ["hip hop"] }),
-      ],
-      context({ skippedArtists: new Set(["skipped artist"]) })
-    );
-
-    assert.strictEqual(rejected["skipped-artist"], 1);
-    assert.strictEqual(ranked.length, 1);
-    assert.strictEqual(ranked[0].candidate.title, "Mix Continuation");
-  });
-
-  it("puts an AI director's exact proposals ahead of generic provider fallback candidates", () => {
-    const aiCandidates = buildAIDJCandidates({
-      status: "planned",
-      model: "gpt-5.6-terra",
-      plan: {
-        confidence: 0.91,
-        direction: { summary: "Reflective Polish rap", energy: "mid", mood: "late-night" },
-        reasons: ["Protect the manual lane."],
-        candidates: [
-          { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", lane: "continuation", fit: 96, reason: "Direct album continuation." },
-        ],
-      },
-    });
-    const { ranked, rejected } = selectV3Candidates([
-      ...aiCandidates,
-      candidate("Broad Mix Result", "Unrelated Artist", "youtube_mix", { genres: ["hip hop"] }),
-    ], context());
-
-    assert.deepStrictEqual(rejected, {});
-    assert.strictEqual(ranked[0].candidate.title, "Wosk");
-    assert.strictEqual(ranked[0].candidate.source, "ai_dj");
-  });
-
-  it("uses a matching verified catalog track directly for an AI proposal", () => {
+  it("merges verified catalog recordings into AI proposals with their vibe verdicts", () => {
     const directTrack = { info: { title: "Wosk", author: "Taco Hemingway", identifier: "wosk-direct" }, userData: { albumTitle: "Frascati" } };
     const aiCandidates = buildAIDJCandidates({
-      status: "planned", model: "gpt-5.6-luna",
-      plan: { confidence: 0.9, direction: { summary: "Polish rap", energy: "mid", mood: "night" }, reasons: ["Fit"], candidates: [
-        { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", lane: "continuation", fit: 96, reason: "Verified continuation." },
-      ] },
+      status: "planned",
+      model: "gpt-5.6-luna",
+      plan: {
+        confidence: 0.9,
+        direction: { summary: "Polish rap", energy: "mid", mood: "night" },
+        reasons: ["Fit"],
+        candidates: [
+          { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", lane: "continuation", fit: 96, energy: 58, mood: "late-night reflective", reason: "Verified continuation." },
+        ],
+      },
     }, [{ artist: "Taco Hemingway", title: "Wosk", albumTitle: "Frascati", source: "youtube_mix", track: directTrack }]);
 
     assert.strictEqual(aiCandidates[0].track, directTrack);
     assert.strictEqual(aiCandidates[0].aiDjVerifiedCatalog, true);
+    assert.strictEqual(aiCandidates[0].aiDjFit, 96);
+    assert.strictEqual(aiCandidates[0].aiDjEnergy, 58);
+    assert.strictEqual(aiCandidates[0].aiDjMood, "late-night reflective");
+    assert.strictEqual(aiCandidates[0].source, "ai_dj");
   });
 
-  it("still rejects an AI proposal that was already played in the session", () => {
-    const aiCandidates = buildAIDJCandidates({
-      status: "planned",
-      model: "gpt-5.6-terra",
-      plan: {
-        confidence: 0.91,
-        direction: { summary: "Reflective Polish rap", energy: "mid", mood: "late-night" },
-        reasons: ["Protect the manual lane."],
-        candidates: [
-          { artist: "Taco Hemingway", title: "Wosk", album: "Frascati", lane: "continuation", fit: 96, reason: "Direct album continuation." },
-        ],
-      },
-    });
-    const { ranked, rejected } = selectV3Candidates(aiCandidates, context({
-      profile: { cooldownTracks: [{ info: { title: "Wosk", author: "Taco Hemingway" } }] },
-    }));
+  it("ranks trusted fallback relations ahead of broad mixes in the emergency ladder", () => {
+    const similar = candidate("Related Track", "Quebonafide", "lastfm_similar", { similarity: 0.93 });
+    const mix = candidate("Mix Result", "Fresh Artist", "youtube_mix");
 
-    assert.deepStrictEqual(ranked, []);
-    assert.strictEqual(rejected["recent-duplicate"], 1);
+    const { ranked } = selectFallbackCandidates([mix, similar], context());
+    assert.strictEqual(ranked[0].candidate.title, "Related Track");
+    assert.ok(ranked[0].score > ranked[1].score);
   });
 
-  it("treats the model lane as intent but protects route semantics with real identities", () => {
-    const sameArtist = candidate("Wosk", "Taco Hemingway", "ai_dj", { genres: ["hip hop"] });
-    sameArtist.aiDjLane = "bridge";
-    const externalArtist = candidate("Tamagotchi", "Quebonafide", "ai_dj", { genres: ["hip hop"] });
-    externalArtist.aiDjLane = "continuation";
-    const { ranked } = selectV3Candidates([sameArtist, externalArtist], context());
+  it("accepts Deezer recommendations as a related fallback source", () => {
+    const deezer = candidate("Deezer Pick", "Malik Montana", "deezer_recommendations");
+    const { ranked, rejected } = selectFallbackCandidates([deezer], context());
+    assert.strictEqual(ranked.length, 1);
+    assert.deepStrictEqual(rejected, {});
+  });
 
-    assert.strictEqual(getAIDirectorLane(ranked.find((entry) => entry.candidate.title === "Wosk")), "continuation");
-    assert.strictEqual(getAIDirectorLane(ranked.find((entry) => entry.candidate.title === "Tamagotchi")), "bridge");
+  it("keeps factual guards on the fallback ladder: skips, duplicates and streak caps", () => {
+    const skipped = candidate("Skipped Artist Track", "Mata", "lastfm_similar", { similarity: 0.95 });
+    const skipContext = context({ skippedArtists: new Set(["mata"]) });
+    const skipResult = selectFallbackCandidates([skipped], skipContext);
+    assert.deepStrictEqual(skipResult.ranked, []);
+    assert.strictEqual(skipResult.rejected["skipped-artist"], 1);
+
+    const mirrorOne = candidate("Mirror Song", "Same Artist", "lastfm_similar", { similarity: 0.7, identifier: "lastfm-id" });
+    const mirrorTwo = candidate("Mirror Song (Official Audio)", "Same Artist", "youtube_mix", { identifier: "youtube-id" });
+    const dedupeResult = selectFallbackCandidates([mirrorOne, mirrorTwo], context());
+    assert.strictEqual(dedupeResult.ranked.length, 1);
+    assert.strictEqual(dedupeResult.rejected["duplicate-candidate"], 1);
+
+    const genericFollowUp = candidate("Generic Follow-up", "Taco Hemingway", "youtube_mix");
+    const capped = selectFallbackCandidates(
+      [genericFollowUp],
+      context({ artistStreak: MAX_CONSECUTIVE_ARTIST_TRACKS })
+    );
+    assert.deepStrictEqual(capped.ranked, []);
+    assert.strictEqual(capped.rejected["artist-streak"], 1);
+  });
+
+  it("lets a strong compatible continuation survive the soft caps on the ladder", () => {
+    const albumCut = candidate("Another Album Cut", "Taco Hemingway", "same_album", { albumId: "frascati" });
+    const kept = selectFallbackCandidates(
+      [albumCut],
+      context({ albumStreak: MAX_CONSECUTIVE_ALBUM_TRACKS, artistStreak: MAX_CONSECUTIVE_ARTIST_TRACKS })
+    );
+    assert.strictEqual(kept.ranked.length, 1);
+
+    const tooFar = selectFallbackCandidates(
+      [albumCut],
+      context({
+        albumStreak: Number(process.env.AUTOPLAY_V3_MAX_ALBUM_CONTINUITY_STREAK ?? 3),
+        artistStreak: Number(process.env.AUTOPLAY_V3_MAX_ARTIST_CONTINUITY_STREAK ?? 6),
+      })
+    );
+    assert.deepStrictEqual(tooFar.ranked, []);
   });
 });

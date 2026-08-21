@@ -23,7 +23,7 @@
     "test:autoplay:soak": "node scripts/autoplay-soak.js",
     "test:autoplay:live": "node scripts/autoplay-live-soak.js",
     "test:watch": "node --test --watch tests/**/*.test.js",
-    "test:autoplay": "node --test tests/helpers/lavalink/smartAutoplay.test.js",
+    "test:autoplay": "node --test tests/helpers/lavalink/autoplayV3.test.js",
     "activity:dev": "pnpm --dir activity dev",
     "activity:build": "pnpm --dir activity build"
   },

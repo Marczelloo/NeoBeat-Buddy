@@ -1,21 +1,21 @@
-const { normalizeArtist, scoreCandidates } = require("./candidateScoring");
-const { areGenreFamiliesCompatible, getGenreFamilies } = require("./genreUtils");
-const { buildSessionProfile } = require("./sessionProfile");
 const {
-  applyTransitionQualityGuard,
-  getDiversifiedResolutionOrder,
-  getTransitionQuality,
-  partitionRankedCandidates,
-} = require("./smartAutoplay");
+  buildAIDJCandidates,
+  buildSelectionContext,
+  fetchAutoplayV3Track,
+  filterAICandidates,
+  getRecentTracks,
+  orderAIDirectorCandidates,
+  selectFallbackCandidates,
+} = require("./autoplayV3");
+const { getGenreFamilies } = require("./genreUtils");
+const { buildSessionProfile } = require("./sessionProfile");
+const { getSkipPatterns } = require("./skipLearning");
 const { cloneTrack, playbackState, pushTrackHistory, rememberAutoplayTrack } = require("./state");
+const { normalizeArtist } = require("./trackIdentity");
 const { hasTrackIdentity } = require("./trackIdentity");
 
 const DEFAULT_LIMITS = {
   maxDuplicateSelections: 0,
-  maxGenreFamilyJumps: 0,
-  maxConsecutiveArtist: 2,
-  artistWindowSize: 5,
-  maxArtistAppearancesInWindow: 2,
   maxUnresolvedSteps: 0,
 };
 
@@ -54,6 +54,7 @@ function cloneCandidate(candidate) {
     features: candidate.features ? { ...candidate.features } : candidate.features,
     derivedFeatures: candidate.derivedFeatures ? { ...candidate.derivedFeatures } : candidate.derivedFeatures,
     track: candidate.track ? cloneTrack(candidate.track) : candidate.track,
+    aiDJ: candidate.aiDJ ? { ...candidate.aiDJ } : candidate.aiDJ,
   };
 }
 
@@ -74,116 +75,26 @@ function candidateToTrack(candidate) {
   );
 }
 
-function choosePlayableCandidate(rankedCandidates, profile, random, { allowDeferredEmergency = false } = {}) {
-  const { safe, fallback, deferred } = partitionRankedCandidates(rankedCandidates);
-  const order = getDiversifiedResolutionOrder(rankedCandidates, random);
-  const safeSet = new Set(safe);
-  const fallbackSet = new Set(fallback);
-  const deferredSet = new Set(deferred);
-
-  const selected = order.find((candidate) => safeSet.has(candidate) && candidate.playable !== false);
-  if (selected) return { candidate: selected, mode: "safe" };
-
-  const fallbackCandidate = order.find(
-    (candidate) => fallbackSet.has(candidate) && candidate.playable !== false
-  );
-  if (fallbackCandidate) return { candidate: fallbackCandidate, mode: "metadata-free-fallback" };
-
-  if (allowDeferredEmergency) {
-    const emergency = order.find(
-      (candidate) =>
-        deferredSet.has(candidate) &&
-        candidate.playable !== false &&
-        candidate.emergencyEligible !== false &&
-        candidate.manualAnchorEvidence
-    );
-    if (emergency) return { candidate: emergency, mode: "deferred-emergency" };
-  }
-
-  return { candidate: null, mode: "unresolved" };
-}
-
-function getStepCandidates({ replaySteps, candidateProvider, reference, profile, step, history }) {
-  if (typeof candidateProvider === "function") {
-    return candidateProvider({ reference, profile, step, history: [...history] }) || [];
-  }
-
-  const replayStep = replaySteps?.[step - 1] || replaySteps?.[step];
-  return replayStep?.candidates || [];
-}
-
-function updateArtistMetrics(metrics, selectedTrack, limits) {
-  const artist = normalizeArtist(selectedTrack.info?.author);
-  const previousArtist = metrics.artists.at(-1);
-  if (artist && artist === previousArtist) {
-    metrics.currentArtistStreak += 1;
-  } else {
-    metrics.currentArtistStreak = 1;
-  }
-  metrics.artists.push(artist);
-  metrics.maxConsecutiveArtist = Math.max(metrics.maxConsecutiveArtist, metrics.currentArtistStreak);
-
-  const window = metrics.artists.slice(-limits.artistWindowSize);
-  const appearances = window.filter((entry) => entry === artist).length;
-  if (appearances > limits.maxArtistAppearancesInWindow) metrics.artistWindowViolations += 1;
-}
-
-function evaluateAutoplaySimulation(result, limits = {}) {
-  const resolvedLimits = { ...DEFAULT_LIMITS, ...limits };
-  const violations = [];
-  if (result.metrics.duplicateSelections > resolvedLimits.maxDuplicateSelections) {
-    violations.push(`duplicate selections=${result.metrics.duplicateSelections}`);
-  }
-  if (result.metrics.genreFamilyJumps > resolvedLimits.maxGenreFamilyJumps) {
-    violations.push(`genre-family jumps=${result.metrics.genreFamilyJumps}`);
-  }
-  if (result.metrics.maxConsecutiveArtist > resolvedLimits.maxConsecutiveArtist) {
-    violations.push(`max consecutive artist=${result.metrics.maxConsecutiveArtist}`);
-  }
-  if (result.metrics.artistWindowViolations > 0) {
-    violations.push(`artist rolling-window violations=${result.metrics.artistWindowViolations}`);
-  }
-  if (result.metrics.unresolvedSteps > resolvedLimits.maxUnresolvedSteps) {
-    violations.push(`unresolved steps=${result.metrics.unresolvedSteps}`);
-  }
-
-  return {
-    ...result,
-    limits: resolvedLimits,
-    passed: violations.length === 0,
-    violations,
-  };
-}
-
-function assertAutoplaySimulation(result, limits = {}) {
-  const evaluated = evaluateAutoplaySimulation(result, limits);
-  if (!evaluated.passed) {
-    const details = evaluated.steps
-      .filter((step) => step.selected?.mode !== "safe")
-      .slice(-5)
-      .map((step) => `step ${step.step}: ${step.selected?.mode || "unresolved"}`)
-      .join("; ");
-    throw new Error(`Autoplay simulation failed: ${evaluated.violations.join(", ")}${details ? ` (${details})` : ""}`);
-  }
-  return evaluated;
-}
-
+/**
+ * Runs the real V3 selection helpers (AI path + fallback ladder) against
+ * injected candidates, without touching Lavalink or OpenAI. `aiPlanner` is a
+ * synchronous stand-in for planNextTrackWithAIDJ returning a director-plan
+ * shaped result (or null to force the deterministic ladder).
+ */
 function runAutoplaySimulation({
   seedTrack,
   manualTracks = [],
   manualSchedule = [],
   candidateProvider,
-  replaySteps,
+  aiPlanner = null,
   steps = 30,
   guildId = `autoplay-simulation-${Date.now()}`,
   seed = 1,
-  allowDeferredEmergency = false,
+  minFit = undefined,
   limits,
 } = {}) {
   if (!seedTrack?.info?.identifier) throw new Error("Autoplay simulation requires a seedTrack with info.identifier");
-  if (!candidateProvider && !Array.isArray(replaySteps)) {
-    throw new Error("Autoplay simulation requires candidateProvider or replaySteps");
-  }
+  if (!candidateProvider) throw new Error("Autoplay simulation requires candidateProvider");
 
   const previousState = playbackState.get(guildId);
   const random = createSeededRandom(seed);
@@ -194,18 +105,19 @@ function runAutoplaySimulation({
     unresolvedSteps: 0,
     duplicateSelections: 0,
     genreFamilyJumps: 0,
-    artistWindowViolations: 0,
+    aiDirectedSelections: 0,
+    fallbackLadderSelections: 0,
+    lowFitDrops: 0,
+    repeatCooldownRejections: 0,
     maxConsecutiveArtist: 0,
     currentArtistStreak: 0,
     resolutionFailures: 0,
-    fallbackSelections: 0,
-    deferredSelections: 0,
     longTermRepeats: 0,
     sources: {},
     artists: [],
+    laneCounts: {},
   };
   const trace = [];
-  const noSkips = { skippedArtists: {}, skippedGenres: {} };
   const sortedManualSchedule = [...manualSchedule].sort((left, right) => Number(left.step) - Number(right.step));
 
   try {
@@ -230,22 +142,18 @@ function runAutoplaySimulation({
       }
 
       const profile = buildSessionProfile(guildId, reference);
-      const candidates = getStepCandidates({
-        replaySteps,
-        candidateProvider,
-        reference,
+      const recentTracks = getRecentTracks(profile, reference);
+      const context = buildSelectionContext({
         profile,
-        step,
-        history,
-      }).map(cloneCandidate);
-      const ranked = scoreCandidates(candidates, profile, noSkips, guildId);
-      ranked.forEach((candidate) => {
-        candidate.transitionQuality = getTransitionQuality(candidate, profile);
+        exposure: null,
+        referenceTrack: reference,
+        recentTracks,
+        skipPatterns: getSkipPatterns(guildId),
+        anchorTrack: reference,
       });
-      applyTransitionQualityGuard(ranked, profile);
+      const candidates = candidateProvider({ reference, profile, step, history: [...history], context }).map(cloneCandidate);
+      profile.verifiedCatalogCandidates = candidates;
 
-      const choice = choosePlayableCandidate(ranked, profile, random, { allowDeferredEmergency });
-      metrics.resolutionFailures += ranked.filter((candidate) => candidate.playable === false).length;
       const stepTrace = {
         step,
         reference: {
@@ -254,38 +162,78 @@ function runAutoplaySimulation({
           identifier: reference.info?.identifier,
         },
         candidateCount: candidates.length,
-        rejected: ranked.filter((candidate) => candidate.hardRejected).length,
-        deferred: ranked.filter((candidate) => candidate.deferred).length,
-        topCandidates: ranked.slice(0, 5).map((candidate) => ({
-          title: candidate.title,
-          artist: candidate.artist,
-          identifier: candidate.identifier,
-          score: candidate.score,
-          source: candidate.source,
-          transitionQuality: candidate.transitionQuality,
-          rejectionReason: candidate.rejectionReason,
-          deferredReason: candidate.deferredReason,
-        })),
-        selected: choice.candidate
-          ? {
-              title: choice.candidate.title,
-              artist: choice.candidate.artist,
-              identifier: choice.candidate.identifier,
-              source: choice.candidate.source,
-              score: choice.candidate.score,
-              mode: choice.mode,
-            }
-          : null,
+        aiCandidates: [],
+        rejectedAi: {},
+        deferred: null,
+        selected: null,
       };
 
-      if (!choice.candidate) {
+      let chosen = null;
+      let mode = "unresolved";
+      if (typeof aiPlanner === "function") {
+        const aiResult = aiPlanner({ reference, profile, context, step, candidates });
+        const aiCandidates = buildAIDJCandidates(aiResult, candidates);
+        stepTrace.aiCandidates = aiCandidates.map((candidate) => ({
+          title: candidate.title,
+          artist: candidate.artist,
+          lane: candidate.aiDjLane,
+          fit: candidate.aiDjFit,
+          energy: candidate.aiDjEnergy,
+        }));
+        if (aiCandidates.length) {
+          const filtered = filterAICandidates(aiCandidates, context, minFit === undefined ? {} : { minFit });
+          stepTrace.rejectedAi = filtered.rejected;
+          metrics.lowFitDrops += filtered.rejected["low-fit"] || 0;
+          metrics.repeatCooldownRejections += filtered.rejected["recent-duplicate"] || 0;
+          const ordered = orderAIDirectorCandidates(filtered.ranked, context, random);
+          stepTrace.deferred = ordered.deferred;
+          const winner = ordered.ranked.find((entry) => entry.candidate.playable !== false);
+          if (winner) {
+            chosen = { candidate: winner.candidate, details: winner.details };
+            mode = "ai-director";
+            const lane = String(winner.candidate.aiDjLane || "unknown");
+            metrics.laneCounts[lane] = (metrics.laneCounts[lane] || 0) + 1;
+          }
+        }
+      }
+
+      if (!chosen) {
+        const { ranked } = selectFallbackCandidates(candidates, context);
+        const winner = ranked.find((entry) => entry.candidate.playable !== false);
+        if (winner) {
+          chosen = winner;
+          mode = "fallback-ladder";
+        }
+      }
+
+      stepTrace.selected = chosen
+        ? {
+            title: chosen.candidate.title,
+            artist: chosen.candidate.artist,
+            identifier: chosen.candidate.identifier,
+            source: chosen.candidate.source,
+            score: chosen.score ?? chosen.candidate.aiDjFit ?? null,
+            mode,
+          }
+        : null;
+
+      if (!chosen) {
         metrics.unresolvedSteps += 1;
         trace.push(stepTrace);
         metrics.completedSteps += 1;
         continue;
       }
 
-      const selectedTrack = candidateToTrack(choice.candidate);
+      if (mode === "ai-director") metrics.aiDirectedSelections += 1;
+      else metrics.fallbackLadderSelections += 1;
+
+      const selectedTrack = candidateToTrack(chosen.candidate);
+      selectedTrack.userData = {
+        ...(selectedTrack.userData || {}),
+        autoplay: true,
+      };
+      selectedTrack.info = { ...(selectedTrack.info || {}), autoplayed: true };
+
       const duplicateInCooldown = hasTrackIdentity(profile.cooldownTracks, selectedTrack, { includeIdentifier: false });
       const duplicateInFullHistory = hasTrackIdentity(history, selectedTrack, { includeIdentifier: false });
       if (duplicateInCooldown) metrics.duplicateSelections += 1;
@@ -294,14 +242,12 @@ function runAutoplaySimulation({
       stepTrace.selected.repeatedAfterCooldown = duplicateInFullHistory && !duplicateInCooldown;
 
       const previousFamilies = getGenreFamilies(reference.userData?.genres || []);
-      const selectedFamilies = getGenreFamilies(selectedTrack.userData?.genres || choice.candidate.genres || []);
-      if (areGenreFamiliesCompatible(previousFamilies, selectedFamilies) === false) metrics.genreFamilyJumps += 1;
+      const selectedFamilies = getGenreFamilies(selectedTrack.userData?.genres || chosen.candidate.genres || []);
+      if (areFamiliesJump(previousFamilies, selectedFamilies)) metrics.genreFamilyJumps += 1;
 
-      updateArtistMetrics(metrics, selectedTrack, { ...DEFAULT_LIMITS, ...limits });
-      const source = choice.candidate.source || selectedTrack.info?.sourceName || "unknown";
+      updateArtistMetrics(metrics, selectedTrack);
+      const source = chosen.candidate.source || selectedTrack.info?.sourceName || "unknown";
       metrics.sources[source] = (metrics.sources[source] || 0) + 1;
-      if (choice.mode === "metadata-free-fallback") metrics.fallbackSelections += 1;
-      if (choice.mode === "deferred-emergency") metrics.deferredSelections += 1;
 
       pushTrackHistory(guildId, selectedTrack);
       rememberAutoplayTrack(guildId, selectedTrack);
@@ -311,19 +257,70 @@ function runAutoplaySimulation({
       metrics.completedSteps += 1;
     }
 
-    const result = evaluateAutoplaySimulation({ guildId, metrics, steps: trace }, limits);
-    return result;
+    return evaluateAutoplaySimulation({ guildId, metrics, steps: trace }, limits);
   } finally {
     if (previousState) playbackState.set(guildId, previousState);
     else playbackState.delete(guildId);
   }
 }
 
+function areFamiliesJump(left, right) {
+  if (!left.length && !right.length) return false;
+  return left.some((family) => right.includes(family)) === false
+    && left.length > 0 && right.length > 0;
+}
+
+function updateArtistMetrics(metrics, selectedTrack) {
+  const artist = normalizeArtist(selectedTrack.info?.author);
+  const previousArtist = metrics.artists.at(-1);
+  if (artist && artist === previousArtist) {
+    metrics.currentArtistStreak += 1;
+  } else {
+    metrics.currentArtistStreak = 1;
+  }
+  metrics.artists.push(artist);
+  metrics.maxConsecutiveArtist = Math.max(metrics.maxConsecutiveArtist, metrics.currentArtistStreak);
+}
+
+function evaluateAutoplaySimulation(result, limits = {}) {
+  const resolvedLimits = { ...DEFAULT_LIMITS, ...limits };
+  const violations = [];
+  if (result.metrics.duplicateSelections > resolvedLimits.maxDuplicateSelections) {
+    violations.push(`duplicate selections=${result.metrics.duplicateSelections}`);
+  }
+  if (Number.isFinite(resolvedLimits.maxGenreFamilyJumps) && result.metrics.genreFamilyJumps > resolvedLimits.maxGenreFamilyJumps) {
+    violations.push(`genre-family jumps=${result.metrics.genreFamilyJumps}`);
+  }
+  if (Number.isFinite(resolvedLimits.maxConsecutiveArtist) && result.metrics.maxConsecutiveArtist > resolvedLimits.maxConsecutiveArtist) {
+    violations.push(`max consecutive artist=${result.metrics.maxConsecutiveArtist}`);
+  }
+  if (
+    Number.isFinite(resolvedLimits.artistWindowSize) &&
+    Number.isFinite(resolvedLimits.maxArtistAppearancesInWindow)
+  ) {
+    const window = result.metrics.artists.slice(-resolvedLimits.artistWindowSize);
+    const offenders = [...new Set(window)].filter((artist) =>
+      window.filter((entry) => entry === artist).length > resolvedLimits.maxArtistAppearancesInWindow
+    );
+    if (offenders.length) violations.push(`artist window over-represented=${offenders.join(",")}`);
+  }
+  if (result.metrics.unresolvedSteps > resolvedLimits.maxUnresolvedSteps) {
+    violations.push(`unresolved steps=${result.metrics.unresolvedSteps}`);
+  }
+
+  return {
+    ...result,
+    limits: resolvedLimits,
+    passed: violations.length === 0,
+    violations,
+  };
+}
+
 module.exports = {
   DEFAULT_LIMITS,
-  assertAutoplaySimulation,
   createSeededRandom,
   evaluateAutoplaySimulation,
+  fetchAutoplayV3Track,
   makeSimulationTrack,
   runAutoplaySimulation,
 };
