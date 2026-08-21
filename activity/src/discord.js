@@ -112,7 +112,7 @@ export async function setMewbitPresence(sdk, player) {
         ? { start, end: durationMs ? start + durationMs : undefined }
         : null,
       assets: artwork && /^https?:\/\//i.test(artwork)
-        ? { large_image: artwork, large_text: cleanPresenceText(track?.title, "MewBit") }
+        ? { large_image: artwork }
         : null,
     },
   });
