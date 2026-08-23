@@ -536,33 +536,32 @@ function PanelTitle({ icon, title, description, action }) {
   );
 }
 
-function PlayerControls({ player, volume, playlists = [], likedTrackIds = [], onAction, isActionPending = () => false }) {
+
+function PlayerControls({ player, playlists = [], onAction, isActionPending = () => false }) {
   const isPlaying = player.playing && !player.paused;
+  const volume = clamp(Number(player.volume || 0), 0, 100);
   const volumeSlider = useBufferedSlider(volume);
   const [volumeOpen, setVolumeOpen] = useState(false);
   const volumeWrapRef = useRef(null);
   useEffect(() => {
     if (!volumeOpen) return undefined;
-    const onPointerDown = (event) => {
-      if (!volumeWrapRef.current?.contains(event.target)) setVolumeOpen(false);
-    };
+    const onPointerDown = (event) => { if (!volumeWrapRef.current?.contains(event.target)) setVolumeOpen(false); };
     const onKeyDown = (event) => { if (event.key === "Escape") setVolumeOpen(false); };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
+    return () => { document.removeEventListener("pointerdown", onPointerDown); document.removeEventListener("keydown", onKeyDown); };
   }, [volumeOpen]);
-  const previewVolume = (nextValue) => {
-    const nextVolume = volumeSlider.update(nextValue);
-    onAction("volume-preview", { volume: nextVolume });
-  };
+  const previewVolume = (nextValue) => { onAction("volume-preview", { volume: volumeSlider.update(nextValue) }); };
   const commitVolume = (nextValue) => onAction("volume", { volume: volumeSlider.commit(nextValue) });
 
   return (
-
-      <div className="player-control-deck">
+    <div className="player-control-deck">
+      <div className="deck-side deck-left">
+        <button className={`autoplay-control ${player.autoplay ? "is-on" : ""}`} type="button" onClick={() => onAction("autoplay", { enabled: !player.autoplay })} disabled={!player.currentTrack || isActionPending("autoplay")} aria-busy={isActionPending("autoplay") || undefined} aria-pressed={player.autoplay}>
+          {isActionPending("autoplay") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : <Sparkle size={15} weight={player.autoplay ? "fill" : "regular"} aria-hidden="true" />}
+          <span>Autoplay</span>
+        </button>
+      </div>
       <div className="transport-controls">
         <IconButton label={`Loop mode ${player.loop}`} className={player.loop !== "NONE" ? "is-active" : ""} loading={isActionPending("loop")} onClick={() => onAction("loop")}>
           <Repeat size={19} weight={player.loop !== "NONE" ? "fill" : "regular"} aria-hidden="true" />
@@ -583,40 +582,23 @@ function PlayerControls({ player, volume, playlists = [], likedTrackIds = [], on
           <Shuffle size={19} weight="regular" aria-hidden="true" />
         </IconButton>
       </div>
-      <div className="volume-popover-wrap" ref={volumeWrapRef}>
-        <IconButton
-          label={volumeSlider.value === 0 ? "Unmute" : "Mute"}
-          className={`volume-toggle ${volumeOpen ? "is-active" : ""}`}
-          loading={isActionPending("volume")}
-          aria-expanded={volumeOpen}
-          aria-haspopup="true"
-          onClick={() => setVolumeOpen((value) => !value)}
-        >
-          {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
-        </IconButton>
-        <div className={`volume-popover ${volumeOpen ? "is-open" : ""}`} role="group" aria-label="Volume control">
-          <input
-            className="range range-volume"
-            type="range"
-            min="0"
-            max="100"
-            value={volumeSlider.value}
-            aria-label="Player volume"
-            style={{ "--range-progress": `${volumeSlider.value}%` }}
-            onPointerDown={(event) => { event.stopPropagation(); volumeSlider.begin(); }}
-            onPointerCancel={(event) => commitVolume(event.currentTarget.value)}
-            onChange={(event) => previewVolume(event.target.value)}
-            onPointerUp={(event) => commitVolume(event.currentTarget.value)}
-            onKeyDown={(event) => event.stopPropagation()}
-          />
-          <span className="volume-number">{Math.round(volumeSlider.value)}</span>
+      <div className="deck-side deck-right">
+        <PlaylistMenu track={player.currentTrack} playlists={playlists} onAction={onAction} />
+        <div className="volume-popover-wrap" ref={volumeWrapRef}>
+          <IconButton label={volumeSlider.value === 0 ? "Unmute" : "Mute"} className={`volume-toggle ${volumeOpen ? "is-active" : ""}`} loading={isActionPending("volume")} aria-expanded={volumeOpen} aria-haspopup="true" onClick={() => setVolumeOpen((value) => !value)}>
+            {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
+          </IconButton>
+          <div className={`volume-popover ${volumeOpen ? "is-open" : ""}`} role="group" aria-label="Volume control">
+            <input className="range range-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={(event) => { event.stopPropagation(); volumeSlider.begin(); }} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => event.stopPropagation()} />
+            <span className="volume-number">{Math.round(volumeSlider.value)}</span>
+          </div>
         </div>
       </div>
-      </div>
+    </div>
   );
 }
 
-function NowPlaying({ state, onAction, onTab, isActionPending, className = "" }) {
+function NowPlaying({ state, onAction, isActionPending, className = "" }) {
   const { player } = state;
   const position = usePlayerPosition(player);
   const track = player.currentTrack;
@@ -624,7 +606,6 @@ function NowPlaying({ state, onAction, onTab, isActionPending, className = "" })
   const progress = clamp(position, 0, duration);
   const seekSlider = useBufferedSlider(progress, { acknowledgementTolerance: 1500, optimisticLockMs: 1800 });
   const commitSeek = (nextValue) => onAction("seek", { positionMs: seekSlider.commit(nextValue) });
-  const volume = clamp(Number(player.volume || 0), 0, 100);
 
   return (
     <section className={`now-playing panel-surface ${className}`}>
@@ -635,21 +616,20 @@ function NowPlaying({ state, onAction, onTab, isActionPending, className = "" })
         </div>
         <div className="track-copy">
           <h1>{track?.title || "Nothing is playing"}</h1>
-          <p>{track?.author || "Pick a track from search to start the room"}</p>
+          <div className="track-title-row">
+            <p>{track?.author || "Pick a track from search to start the room"}</p>
+            <IconButton label={state.likedTrackIds.includes(track?.id) ? "Remove from liked songs" : "Add to liked songs"} className="like-button" onClick={() => onAction("toggle_like", { track })}>
+              <Heart size={16} aria-hidden="true" />
+            </IconButton>
+          </div>
           <div className="track-meta">
             <span>{track?.isStream ? "LIVE" : formatTime(track?.durationMs)}</span>
             {track?.requester ? <span>added by {track.requester}</span> : null}
             <SourceTag source={track?.source} />
-          </div>          <div className="track-actions-row">
-            <TrackSaveActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds} onAction={onAction} isActionPending={isActionPending} className="main-save-actions" />
-            <button className={`autoplay-control ${player.autoplay ? "is-on" : ""}`} type="button" onClick={() => onAction("autoplay", { enabled: !player.autoplay })} disabled={isActionPending("autoplay")} aria-busy={isActionPending("autoplay") || undefined} aria-pressed={player.autoplay}>
-              {isActionPending("autoplay") ? <SpinnerGap className="button-spinner" size={14} aria-hidden="true" /> : <Sparkle size={14} weight={player.autoplay ? "fill" : "regular"} aria-hidden="true" />}
-              <span>Autoplay</span>
-            </button>
           </div>
         </div>
       </div>
-      <PlayerControls player={player} volume={volume} playlists={state.playlists} likedTrackIds={state.likedTrackIds} onAction={onAction} isActionPending={isActionPending} />
+      <PlayerControls player={player} playlists={state.playlists} onAction={onAction} isActionPending={isActionPending} />
       <div className="progress-block">
         <input
           className="range range-progress"
