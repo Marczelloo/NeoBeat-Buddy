@@ -1111,7 +1111,7 @@ function GlobalSearch({ query, setQuery, source, setSource, onSearch, onFocus })
   );
 }
 
-function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, onAction, loading = false }) {
+function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, onAction, onToggle, loading = false }) {
   const [menu, setMenu] = useState(null);
   const menuRef = useRef(null);
   const rowRefs = useRef({});
@@ -1126,7 +1126,7 @@ function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, onAc
 
   return (
     <div className="sidebar-content library-sidebar-content">
-      <div className="sidebar-heading library-heading">
+      <div className="sidebar-heading library-heading"><button className="drawer-close" type="button" aria-label="Close playlists panel" onClick={onToggle}><X size={16} aria-hidden="true" /></button>
         <h2>Library</h2>
         <span className="library-count">{loading ? "…" : (playlists || []).length}</span>
       </div>
@@ -1186,7 +1186,7 @@ function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, onAc
 function QueueSidebar({ queue, playlists = [], likedTrackIds = [], queueOpen, onToggleQueue, onAction, isActionPending, loading = false }) {
   return (
     <div className="sidebar-content queue-sidebar-content">
-      <div className="sidebar-heading">
+      <div className="sidebar-heading"><button className="drawer-close" type="button" aria-label="Close queue panel" onClick={onToggleQueue}><X size={16} aria-hidden="true" /></button>
         <h2>Queue</h2>
         <div className="queue-head-meta">
           <span className="queue-upnext">{loading ? "…" : `${queue.length} up next`}</span>
@@ -1775,6 +1775,7 @@ function App() {
       {showLoader ? <ActivityLoader message={connection.message} leaving={!isHydrating} /> : null}
       {isCompact ? <CompactPlayer state={state} /> : <>
         <div className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
+          {(leftSidebarOpen || rightSidebarOpen) ? <div className="drawer-scrim" onClick={() => { setLeftSidebarOpen(false); setRightSidebarOpen(false); }} aria-hidden="true" /> : null}
           <aside className="sidebar sidebar-left" aria-label="Playlists sidebar">
             <PlaylistSidebar
               playlists={state.playlists}
@@ -1790,7 +1791,7 @@ function App() {
             <div className="stage-toolbar">
               <div className="stage-toolbar-inner">
                 <div className="stage-navigation" aria-label="Activity navigation">
-                  <IconButton label="Toggle playlists" className={leftSidebarOpen ? "is-active" : ""} aria-pressed={leftSidebarOpen} onClick={() => setLeftSidebarOpen((value) => !value)}><VinylRecord size={17} weight={leftSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
+                  <IconButton label="Toggle playlists" className={leftSidebarOpen ? "is-active" : ""} aria-pressed={leftSidebarOpen} onClick={() => { setRightSidebarOpen(false); setLeftSidebarOpen((value) => !value); }}><VinylRecord size={17} weight={leftSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                 </div>
                 <div className="stage-center">
                   <IconButton label="Home" className={activeTab === "home" ? "is-active" : ""} onClick={() => goToView("home")}><House size={17} weight={activeTab === "home" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
@@ -1798,7 +1799,7 @@ function App() {
                   <IconButton label="Sound settings" className={activeTab === "filters" ? "is-active" : ""} onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /></IconButton>
                 </div>
                 <div className="stage-actions" aria-label="Player tools">
-                  <IconButton label="Toggle queue" className={rightSidebarOpen ? "is-active" : ""} aria-pressed={rightSidebarOpen} onClick={() => setRightSidebarOpen((value) => !value)}><Queue size={17} weight={rightSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
+                  <IconButton label="Toggle queue" className={rightSidebarOpen ? "is-active" : ""} aria-pressed={rightSidebarOpen} onClick={() => { setLeftSidebarOpen(false); setRightSidebarOpen((value) => !value); }}><Queue size={17} weight={rightSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                 </div>
               </div>
             </div>
