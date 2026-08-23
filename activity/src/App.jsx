@@ -615,16 +615,18 @@ function NowPlaying({ state, onAction, isActionPending, className = "" }) {
           <div className="cover-signal" aria-hidden="true"><span /><span /><span /><span /></div>
         </div>
         <div className="track-copy">
-          <h1>{track?.title || "Nothing is playing"}</h1>
-          <div className="track-title-row">
-            <p>{track?.author || "Pick a track from search to start the room"}</p>
-            <IconButton label={state.likedTrackIds.includes(track?.id) ? "Remove from liked songs" : "Add to liked songs"} className="like-button" onClick={() => onAction("toggle_like", { track })}>
-              <Heart size={16} aria-hidden="true" />
+          <div className="track-copy-grid">
+            <div className="track-text">
+              <h1>{track?.title || "Nothing is playing"}</h1>
+              <p className="track-author">{track?.author || "Pick a track from search to start the room"}</p>
+              <div className="track-meta">
+                <SourceTag source={track?.source} />
+                {track?.requester ? <span className="meta-requester">added by {track.requester}</span> : null}
+              </div>
+            </div>
+            <IconButton label={state.likedTrackIds.includes(track?.id) ? "Remove from liked songs" : "Add to liked songs"} className={`like-button ${state.likedTrackIds.includes(track?.id) ? "is-liked" : ""}`} onClick={() => onAction("toggle_like", { track })} aria-pressed={state.likedTrackIds.includes(track?.id)}>
+              <Heart size={20} aria-hidden="true" />
             </IconButton>
-          </div>
-          <div className="track-meta">
-            <SourceTag source={track?.source} />
-            {track?.requester ? <span className="meta-requester">added by {track.requester}</span> : null}
           </div>
         </div>
       </div>
