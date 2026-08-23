@@ -623,9 +623,8 @@ function NowPlaying({ state, onAction, isActionPending, className = "" }) {
             </IconButton>
           </div>
           <div className="track-meta">
-            <span>{track?.isStream ? "LIVE" : formatTime(track?.durationMs)}</span>
-            {track?.requester ? <span>added by {track.requester}</span> : null}
             <SourceTag source={track?.source} />
+            {track?.requester ? <span className="meta-requester">added by {track.requester}</span> : null}
           </div>
         </div>
       </div>
