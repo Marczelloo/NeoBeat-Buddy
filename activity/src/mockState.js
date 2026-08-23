@@ -60,4 +60,32 @@ export const mockSearchResults = [
   { ...tracks[1], id: "search-2pac", title: "Hit Em Up", author: "2Pac", source: "youtube", sourceLabel: "YouTube", playQuery: "https://www.youtube.com/watch?v=41qC3w3UUkU" },
   { ...tracks[0], id: "search-taco", title: "Tamagotchi", author: "TACONAFIDE", source: "soundcloud", sourceLabel: "SoundCloud", playQuery: "Tamagotchi TACONAFIDE" },
   { ...tracks[2], id: "search-kuki", title: "Ciepłe Dranie", author: "Kuki", source: "soundcloud", sourceLabel: "SoundCloud", playQuery: "Ciepłe Dranie Kuki" },
-];
+  { ...tracks[3], id: "search-afterglow", title: "Afterglow Circuit (Extended Mix)", author: "MewBit Radio", durationMs: 371000, source: "deezer", sourceLabel: "Deezer", playQuery: "Afterglow Circuit MewBit Radio" },
+  { id: "search-live", title: "NEON NIGHTS - lo-fi radio 24/7", author: "MewBit Radio", durationMs: 0, isStream: true, source: "youtube", sourceLabel: "YouTube", playQuery: "neon nights lofi radio" },
+  { id: "search-noart", title: "Midnight Catwalk", author: "DJ Neko", durationMs: 254000, source: "soundcloud", sourceLabel: "SoundCloud", playQuery: "Midnight Catwalk DJ Neko" },];
+
+export function createEmptyState() {
+  return {
+    guild: { id: null, name: null, iconUrl: null, voiceChannelName: null },
+    botStatus: null,
+    player: {
+      connected: false,
+      paused: true,
+      playing: false,
+      positionMs: 0,
+      durationMs: 0,
+      volume: 100,
+      loop: "NONE",
+      shuffleActive: false,
+      autoplay: false,
+      currentTrack: null,
+      queue: [],
+      filters: { preset: "off", effectPreset: "off", equalizer: [] },
+      lyrics: null,
+    },
+    playlists: [],
+    likedTrackIds: [],
+    equalizerPresets: [],
+    filterPresets: [],
+  };
+}
