@@ -1299,8 +1299,14 @@ function PlayerBar({ state, onAction, onView, isActionPending }) {
   };
   const commitVolume = (nextValue) => onAction("volume", { volume: volumeSlider.commit(nextValue) });
 
+  const openFullPlayerFromBackground = (event) => {
+    if (event.target.closest("button, a, input, .row-context-menu")) return;
+    if (event.target.closest(".player-bar-track")) return;
+    onView("home");
+  };
+
   return (
-    <footer className="player-bar">
+    <footer className="player-bar" onClick={openFullPlayerFromBackground} title="Open full player">
       <div className="player-bar-leading">
         <div className="player-bar-track">
           <Artwork track={track} size="small" />
