@@ -537,7 +537,7 @@ function PanelTitle({ icon, title, description, action }) {
 }
 
 
-function PlayerControls({ player, playlists = [], onAction, isActionPending = () => false }) {
+function PlayerControls({ player, playlists = [], likedTrackIds = [], onAction, isActionPending = () => false }) {
   const isPlaying = player.playing && !player.paused;
   const volume = clamp(Number(player.volume || 0), 0, 100);
   const volumeSlider = useBufferedSlider(volume);
@@ -557,6 +557,7 @@ function PlayerControls({ player, playlists = [], onAction, isActionPending = ()
   return (
     <div className="player-control-deck">
       <div className="deck-side deck-left">
+        <TrackSaveActions track={player.currentTrack} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} isActionPending={isActionPending} className={"main-save-actions"} />
         <button className={`autoplay-control ${player.autoplay ? "is-on" : ""}`} type="button" onClick={() => onAction("autoplay", { enabled: !player.autoplay })} disabled={!player.currentTrack || isActionPending("autoplay")} aria-busy={isActionPending("autoplay") || undefined} aria-pressed={player.autoplay}>
           {isActionPending("autoplay") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : <Sparkle size={15} weight={player.autoplay ? "fill" : "regular"} aria-hidden="true" />}
           <span>Autoplay</span>
@@ -630,7 +631,7 @@ function NowPlaying({ state, onAction, isActionPending, className = "" }) {
           </div>
         </div>
       </div>
-      <PlayerControls player={player} playlists={state.playlists} onAction={onAction} isActionPending={isActionPending} />
+      <PlayerControls player={player} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onAction={onAction} isActionPending={isActionPending} />
       <div className="progress-block">
         <input
           className="range range-progress"
@@ -1794,7 +1795,7 @@ function App() {
             <div className="stage-toolbar">
               <div className="stage-toolbar-inner">
                 <div className="stage-navigation" aria-label="Activity navigation">
-                  <IconButton label="Toggle playlists" className={leftSidebarOpen ? "is-active" : ""} aria-pressed={leftSidebarOpen} onClick={() => { setRightSidebarOpen(false); setLeftSidebarOpen((value) => !value); }}><VinylRecord size={17} weight={leftSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
+                  <IconButton label="Toggle playlists" className={leftSidebarOpen ? "is-active" : ""} aria-pressed={leftSidebarOpen} onClick={() => { if (window.matchMedia("(max-width: 900px)").matches) setRightSidebarOpen(false); setLeftSidebarOpen((value) => !value); }}><VinylRecord size={17} weight={leftSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                 </div>
                 <div className="stage-center">
                   <IconButton label="Home" className={activeTab === "home" ? "is-active" : ""} onClick={() => goToView("home")}><House size={17} weight={activeTab === "home" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
@@ -1802,7 +1803,7 @@ function App() {
                   <IconButton label="Sound settings" className={activeTab === "filters" ? "is-active" : ""} onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /></IconButton>
                 </div>
                 <div className="stage-actions" aria-label="Player tools">
-                  <IconButton label="Toggle queue" className={rightSidebarOpen ? "is-active" : ""} aria-pressed={rightSidebarOpen} onClick={() => { setLeftSidebarOpen(false); setRightSidebarOpen((value) => !value); }}><Queue size={17} weight={rightSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
+                  <IconButton label="Toggle queue" className={rightSidebarOpen ? "is-active" : ""} aria-pressed={rightSidebarOpen} onClick={() => { if (window.matchMedia("(max-width: 900px)").matches) setLeftSidebarOpen(false); setRightSidebarOpen((value) => !value); }}><Queue size={17} weight={rightSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                 </div>
               </div>
             </div>
