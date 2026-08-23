@@ -537,7 +537,7 @@ function PanelTitle({ icon, title, description, action }) {
 }
 
 
-function PlayerControls({ player, playlists = [], likedTrackIds = [], onAction, isActionPending = () => false }) {
+function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onAction, isActionPending = () => false }) {
   const isPlaying = player.playing && !player.paused;
   const volume = clamp(Number(player.volume || 0), 0, 100);
   const volumeSlider = useBufferedSlider(volume);
@@ -584,22 +584,20 @@ function PlayerControls({ player, playlists = [], likedTrackIds = [], onAction, 
         </IconButton>
       </div>
       <div className="deck-side deck-right">
-        <PlaylistMenu track={player.currentTrack} playlists={playlists} onAction={onAction} />
-        <div className="volume-popover-wrap" ref={volumeWrapRef}>
-          <IconButton label={volumeSlider.value === 0 ? "Unmute" : "Mute"} className={`volume-toggle ${volumeOpen ? "is-active" : ""}`} loading={isActionPending("volume")} aria-expanded={volumeOpen} aria-haspopup="true" onClick={() => setVolumeOpen((value) => !value)}>
+        <IconButton label="Open lyrics" onClick={() => onTab("lyrics")} disabled={!player.currentTrack}><MusicNotes size={19} weight="regular" aria-hidden="true" /></IconButton>
+        <div className="deck-volume">
+          <IconButton label={volumeSlider.value === 0 ? "Unmute" : "Mute"} loading={isActionPending("volume")} onClick={() => onAction("volume", { volume: volumeSlider.value === 0 ? 52 : 0 })}>
             {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
           </IconButton>
-          <div className={`volume-popover ${volumeOpen ? "is-open" : ""}`} role="group" aria-label="Volume control">
-            <input className="range range-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={(event) => { event.stopPropagation(); volumeSlider.begin(); }} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => event.stopPropagation()} />
-            <span className="volume-number">{Math.round(volumeSlider.value)}</span>
-          </div>
+          <input className="range range-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
+          <span className="volume-number">{Math.round(volumeSlider.value)}</span>
         </div>
       </div>
     </div>
   );
 }
 
-function NowPlaying({ state, onAction, isActionPending, className = "" }) {
+function NowPlaying({ state, onTab, onAction, isActionPending, className = "" }) {
   const { player } = state;
   const position = usePlayerPosition(player);
   const track = player.currentTrack;
@@ -631,7 +629,7 @@ function NowPlaying({ state, onAction, isActionPending, className = "" }) {
           </div>
         </div>
       </div>
-      <PlayerControls player={player} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onAction={onAction} isActionPending={isActionPending} />
+      <PlayerControls player={player} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onTab={onTab} onAction={onAction} isActionPending={isActionPending} />
       <div className="progress-block">
         <input
           className="range range-progress"
@@ -1808,7 +1806,7 @@ function App() {
               </div>
             </div>
             <div className={`main-content main-view-${activeTab}`}>
-              {activeTab === "home" ? (isHydrating ? <HomePanel loading /> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={state} onAction={onAction} onTab={goToView} isActionPending={isActionPending} /> : <HomePanel onView={goToView} />) : null}
+              {activeTab === "home" ? (isHydrating ? <HomePanel loading /> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={state} onTab={goToView} onAction={onAction} isActionPending={isActionPending} /> : <HomePanel onView={goToView} />) : null}
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
               {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} onAction={onAction} isActionPending={isActionPending} /></section> : null}
               {activeTab === "lyrics" ? <section className="content-panel panel-surface"><LiveLyricsPanel player={state.player} onAction={onAction} /></section> : null}
