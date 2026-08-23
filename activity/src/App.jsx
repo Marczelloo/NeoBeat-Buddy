@@ -351,9 +351,10 @@ function useSmartMenuGuards(open, rootRef, menuRef, onClose) {
     // it alive. Leaving the corridor starts a 200ms close timer; re-entering
     // cancels it. Clicks outside always close immediately.
     openedAtRef.current = performance.now();
+    const rootEl = rootRef && typeof rootRef === "object" ? (rootRef.current ?? rootRef) : rootRef;
     const insideSafeZone = (x, y) => {
       const pad = 24;
-      return [menuRef.current?.getBoundingClientRect(), rootRef.current?.getBoundingClientRect()].some((rect) => {
+      return [menuRef.current?.getBoundingClientRect(), rootEl ? rootEl.getBoundingClientRect() : null].some((rect) => {
         if (!rect) return false;
         return x >= rect.left - pad && x <= rect.right + pad && y >= rect.top - pad && y <= rect.bottom + pad;
       });
@@ -364,7 +365,8 @@ function useSmartMenuGuards(open, rootRef, menuRef, onClose) {
       if (!closeTimerRef.current) scheduleClose();
     };
     const onPointerDown = (event) => {
-      if (!menuRef.current?.contains(event.target) && !rootRef.current?.contains(event.target)) closeMenu();
+      const rootContains = typeof rootEl?.contains === "function" ? rootEl.contains(event.target) : false;
+      if (!menuRef.current?.contains(event.target) && !rootContains) closeMenu();
     };
     const onKeyDown = (event) => { if (event.key === "Escape") { event.stopPropagation(); closeMenu(); } };
     const onScrollOrResize = () => closeMenu();
@@ -710,8 +712,13 @@ function CompactPlayer({ state }) {
   );
 }
 
-function QueuePanel({ queue, onAction, isActionPending = () => false }) {
+function QueuePanel({ queue, playlists = [], likedTrackIds = [], onAction, isActionPending = () => false }) {
   const [draggedIndex, setDraggedIndex] = useState(null);
+  const [menu, setMenu] = useState(null);
+  const menuRef = useRef(null);
+  const guards = useSmartMenuGuards(Boolean(menu), null, menuRef, () => setMenu(null));
+  const closeMenu = () => { guards.clearCloseTimer(); setMenu(null); };
+  const menuTrack = menu ? queue[menu.index] : null;
 
   return (
     <div className="queue-list" onDragOver={(event) => event.preventDefault()}>
@@ -726,6 +733,16 @@ function QueuePanel({ queue, onAction, isActionPending = () => false }) {
             draggable
             onDragStart={() => setDraggedIndex(index)}
             onDragEnd={() => setDraggedIndex(null)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setDraggedIndex(null);
+              setMenu({
+                index,
+                top: Math.max(10, Math.min(event.clientY + 4, window.innerHeight - 300)),
+                left: Math.max(10, Math.min(event.clientX + 4, window.innerWidth - 246)),
+              });
+            }}
             onDrop={() => {
               if (draggedIndex !== null && draggedIndex !== index) onAction("move_queue", { from: draggedIndex, to: index });
               setDraggedIndex(null);
@@ -752,7 +769,45 @@ function QueuePanel({ queue, onAction, isActionPending = () => false }) {
           </div>
         </div>)}
       </>}
+      {(menuTrack ? (<SmartMenu open position={menu} rootRef={null} menuRef={menuRef} label={`Actions for ${menuTrack.title}`}>
+        <>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("play_next", { position: menu.index }); closeMenu(); }}>
+            <Play size={15} weight="fill" aria-hidden="true" /><span>Play next</span>
+          </button>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("move_queue", { from: menu.index, to: 0 }); closeMenu(); }} disabled={menu.index === 0}>
+            <ArrowBendUpRight size={15} aria-hidden="true" /><span>Move to top</span>
+          </button>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("remove_queue", { position: menu.index }); closeMenu(); }}>
+            <Trash size={15} aria-hidden="true" /><span>Remove from queue</span>
+          </button>
+          <span className="row-menu-divider" aria-hidden="true" />
+          <QueueRowLikeMenuItem track={menuTrack} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} onClose={closeMenu} />
+        </>
+      </SmartMenu>) : null)}
     </div>
+  );
+}
+
+function QueueRowLikeMenuItem({ track, playlists = [], likedTrackIds = [], onAction, onClose }) {
+  const isLiked = track ? likedTrackIds.includes(track.id) || likedTrackIds.includes(getTrackLikeKey(track)) : false;
+  if (!track) return null;
+  const linkUrl = [track.uri, track.playQuery].find((value) => typeof value === "string" && /^https?:\/\//i.test(value));
+  return (
+    <>
+      <button type="button" role="menuitem" className={`row-menu-item ${isLiked ? "is-liked" : ""}`} onClick={() => { onAction("toggle_like", { track }); onClose(); }}>
+        <Heart size={15} weight={isLiked ? "fill" : "regular"} aria-hidden="true" /><span>{isLiked ? "Remove from liked songs" : "Add to liked songs"}</span>
+      </button>
+      {(playlists || []).map((playlist) => (
+        <button type="button" role="menuitem" className="row-menu-item" key={playlist.id} onClick={() => { onAction("add_to_playlist", { name: playlist.name, track }); onClose(); }}>
+          <MusicNotes size={15} aria-hidden="true" /><span>Add to {playlist.name}</span>
+        </button>
+      ))}
+      {linkUrl ? (
+        <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(linkUrl).catch(() => {}); onClose(); }}>
+          <CopySimple size={15} aria-hidden="true" /><span>Copy link</span>
+        </button>
+      ) : null}
+    </>
   );
 }
 
@@ -1056,7 +1111,19 @@ function GlobalSearch({ query, setQuery, source, setSource, onSearch, onFocus })
   );
 }
 
-function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, loading = false }) {
+function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, onAction, loading = false }) {
+  const [menu, setMenu] = useState(null);
+  const menuRef = useRef(null);
+  const rowRefs = useRef({});
+  const guards = useSmartMenuGuards(Boolean(menu), null, menuRef, () => setMenu(null));
+  const closeMenu = () => { guards.clearCloseTimer(); setMenu(null); };
+  const openMenuAt = (playlistId, x, y) => setMenu({
+    id: playlistId,
+    top: Math.max(10, Math.min(y + 4, window.innerHeight - 200)),
+    left: Math.max(10, Math.min(x + 4, window.innerWidth - 246)),
+  });
+  const menuPlaylist = menu ? (playlists || []).find((playlist) => playlist.id === menu.id) : null;
+
   return (
     <div className="sidebar-content library-sidebar-content">
       <div className="sidebar-heading library-heading">
@@ -1067,7 +1134,19 @@ function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, load
         <div className="library-stack">
           <div className="playlist-nav-list">
             {(playlists || []).map((playlist) => (
-              <button className={`playlist-nav-row ${selectedPlaylist === playlist.id ? "is-active" : ""}`} type="button" key={playlist.id} onClick={() => onSelect(playlist.id)}>
+              <button
+                ref={(node) => { if (node) rowRefs.current[playlist.id] = node; }}
+                className={`playlist-nav-row ${selectedPlaylist === playlist.id ? "is-active" : ""}`}
+                type="button"
+                key={playlist.id}
+                onClick={() => onSelect(playlist.id)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openMenuAt(playlist.id, event.clientX, event.clientY);
+                }}
+                aria-haspopup="menu"
+              >
                 {/^liked songs$/i.test(playlist.name || "")
                   ? <span className="library-tile liked-tile"><Heart size={18} aria-hidden="true" /></span>
                   : <Artwork track={{ title: playlist.name, artworkUrl: playlist.thumbnail }} size="small" />}
@@ -1081,11 +1160,30 @@ function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, load
           </button>
         </div>
       )}
+      {(menuPlaylist ? (<SmartMenu open position={menu} rootRef={rowRefs.current[menuPlaylist.id]} menuRef={menuRef} label={`Actions for ${menuPlaylist.name}`}>
+        <>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("play_playlist", { name: menuPlaylist.name }); closeMenu(); }}>
+            <Play size={15} weight="fill" aria-hidden="true" /><span>Play playlist</span>
+          </button>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onSelect(menuPlaylist.id); closeMenu(); }}>
+            <MusicNotes size={15} aria-hidden="true" /><span>Open playlist</span>
+          </button>
+          <span className="row-menu-divider" aria-hidden="true" />
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(menuPlaylist.name).catch(() => {}); closeMenu(); }}>
+            <CopySimple size={15} aria-hidden="true" /><span>Copy name</span>
+          </button>
+          {menuPlaylist && !menuPlaylist.isDefault ? (
+            <button type="button" role="menuitem" className="row-menu-item row-menu-danger" onClick={() => { onAction("delete_playlist", { name: menuPlaylist.name }); closeMenu(); }}>
+              <Trash size={15} aria-hidden="true" /><span>Delete playlist</span>
+            </button>
+          ) : null}
+        </>
+      </SmartMenu>) : null)}
     </div>
   );
 }
 
-function QueueSidebar({ queue, queueOpen, onToggleQueue, onAction, isActionPending, loading = false }) {
+function QueueSidebar({ queue, playlists = [], likedTrackIds = [], queueOpen, onToggleQueue, onAction, isActionPending, loading = false }) {
   return (
     <div className="sidebar-content queue-sidebar-content">
       <div className="sidebar-heading">
@@ -1095,7 +1193,7 @@ function QueueSidebar({ queue, queueOpen, onToggleQueue, onAction, isActionPendi
           <IconButton label="Clear queue" loading={isActionPending("clear_queue")} onClick={() => onAction("clear_queue")} disabled={loading || !queue.length}><Trash size={16} aria-hidden="true" /></IconButton>
         </div>
       </div>
-      {loading ? <div className="queue-skeletons" aria-label="Loading queue"><span /><span /><span /></div> : <QueuePanel queue={queue} onAction={onAction} isActionPending={isActionPending} />}
+      {loading ? <div className="queue-skeletons" aria-label="Loading queue"><span /><span /><span /></div> : <QueuePanel queue={queue} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} isActionPending={isActionPending} />}
     </div>
   );
 }
@@ -1292,7 +1390,7 @@ function Workspace({ state, activeTab, setActiveTab, search, onAction }) {
     ["queue", "Queue", <ListDashes size={17} aria-hidden="true" />],
     ["search", "Search", <MagnifyingGlass size={17} aria-hidden="true" />],
     ["filters", "Sound", <SlidersHorizontal size={17} aria-hidden="true" />],
-    ["lyrics", "Lyrics", <MusicNotes size={17} aria-hidden="true" />],
+    ["lyrics", "Lyrics", <Subtitles size={17} aria-hidden="true" />],
     ["playlists", "Playlists", <VinylRecord size={17} aria-hidden="true" />],
   ];
   return (
@@ -1301,7 +1399,7 @@ function Workspace({ state, activeTab, setActiveTab, search, onAction }) {
         {tabs.map(([value, label, icon]) => <button type="button" className={activeTab === value ? "is-active" : ""} key={value} onClick={() => setActiveTab(value)}>{icon}<span>{label}</span>{value === "queue" ? <b>{state.player.queue.length}</b> : null}</button>)}
       </nav>
       <div className="workspace-body">
-        {activeTab === "queue" ? <><PanelTitle icon={<Queue size={18} aria-hidden="true" />} title="Up next" description={`${state.player.queue.length} tracks in the room`} action={<button className="ghost-button" type="button" onClick={() => onAction("clear_queue")} disabled={!state.player.queue.length}><Trash size={15} aria-hidden="true" /> Clear</button>} /><QueuePanel queue={state.player.queue} onAction={onAction} /></> : null}
+        {activeTab === "queue" ? <><PanelTitle icon={<Queue size={18} aria-hidden="true" />} title="Up next" description={`${state.player.queue.length} tracks in the room`} action={<button className="ghost-button" type="button" onClick={() => onAction("clear_queue")} disabled={!state.player.queue.length}><Trash size={15} aria-hidden="true" /> Clear</button>} /><QueuePanel queue={state.player.queue} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onAction={onAction} /></> : null}
         {activeTab === "search" ? <><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...search} onAction={onAction} /></> : null}
         {activeTab === "filters" ? <><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} onAction={onAction} /></> : null}
         {activeTab === "lyrics" ? <LiveLyricsPanel player={state.player} onAction={onAction} /> : null}
@@ -1683,6 +1781,7 @@ function App() {
               selectedPlaylist={selectedPlaylist}
               onSelect={(playlistId) => { setPlaylistComposerOpen(false); setSelectedPlaylist(playlistId); setSelectedPlaylistDetail(null); goToView("playlists"); const playlist = state.playlists.find((item) => item.id === playlistId); if (playlist) onAction("get_playlist", { name: playlist.name }); }}
               onCreate={() => { setPlaylistComposerOpen(true); goToView("playlists"); }}
+              onAction={onAction}
               onToggle={() => setLeftSidebarOpen((value) => !value)}
               loading={isHydrating}
             />
@@ -1712,7 +1811,7 @@ function App() {
             </div>
           </section>
           <aside className="sidebar sidebar-right" aria-label="Queue sidebar">
-            <QueueSidebar queue={state.player.queue} queueOpen={rightSidebarOpen} onToggleQueue={() => setRightSidebarOpen((value) => !value)} onAction={onAction} isActionPending={isActionPending} loading={isHydrating} />
+            <QueueSidebar queue={state.player.queue} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} queueOpen={rightSidebarOpen} onToggleQueue={() => setRightSidebarOpen((value) => !value)} onAction={onAction} isActionPending={isActionPending} loading={isHydrating} />
           </aside>
         </div>
         {activeTab === "home" ? null : <PlayerBar state={state} onAction={onAction} onView={goToView} isActionPending={isActionPending} />}
@@ -1723,6 +1822,7 @@ function App() {
 }
 
 export default App;
+
 
 
 

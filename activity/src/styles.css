@@ -58,7 +58,7 @@
 @keyframes row-menu-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .row-menu-item { width: 100%; min-height: 34px; display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 0; border-radius: 9px; color: var(--muted-strong); background: transparent; font-size: 12.5px; text-align: left; transition-property: color, background-color; transition-duration: 120ms; }
 .row-menu-item:hover { color: var(--text); background: rgb(255 255 255 / 0.06); }
-.row-menu-item.is-liked { color: var(--cyan); }
+.row-menu-item.is-liked { color: var(--cyan); } .row-menu-danger { color: var(--danger); } .row-menu-danger:hover { color: var(--danger); background: rgb(255 128 152 / 0.08); } .queue-row { cursor: context-menu; }
 .row-menu-item svg { flex: none; }
 .row-menu-divider { display: block; height: 1px; margin: 5px 8px; background: var(--line-soft); }
 .result-row.is-menu-open, .result-row.is-menu-open:hover { background: var(--surface-soft); }
