@@ -586,12 +586,15 @@ function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onA
       <div className="deck-side deck-right">
         <IconButton label="Open lyrics" onClick={() => onTab("lyrics")} disabled={!player.currentTrack}><MusicNotes size={19} weight="regular" aria-hidden="true" /></IconButton>
         <div className="deck-volume">
-          <IconButton label={volumeSlider.value === 0 ? "Unmute" : "Mute"} loading={isActionPending("volume")} onClick={() => onAction("volume", { volume: volumeSlider.value === 0 ? 52 : 0 })}>
-            {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
+          <IconButton label={volumeOpen ? "Close volume" : (volumeSlider.value === 0 ? "Unmute" : "Mute")} className={`volume-toggle ${volumeOpen ? "is-active" : ""}`} loading={isActionPending("volume")} aria-expanded={volumeOpen} aria-haspopup="true" onClick={() => setVolumeOpen((value) => !value)}>
+            {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight={volumeOpen ? "fill" : "regular"} aria-hidden="true" />}
           </IconButton>
-          <input className="range range-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
-          <span className="volume-number">{Math.round(volumeSlider.value)}</span>
-        </div>
+          <input className="range range-volume vol-inline" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
+          <div className={`volume-popover vol-pop-mobile ${volumeOpen ? "is-open" : ""}`} role="group" aria-label="Volume control">
+            <input className="range range-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={(event) => { event.stopPropagation(); volumeSlider.begin(); }} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => event.stopPropagation()} />
+            <span className="volume-number">{Math.round(volumeSlider.value)}</span>
+          </div>
+          </div>
       </div>
     </div>
   );
