@@ -1307,7 +1307,6 @@ function HomePanel({ onView, onAction, isActionPending = () => false, loading = 
             {isActionPending("surprise_me") ? <SpinnerGap className="button-spinner" size={17} aria-hidden="true" /> : <Sparkle size={17} weight="fill" aria-hidden="true" />}
             {isActionPending("surprise_me") ? "Choosing..." : "Surprise me"}
           </button>
-          <button className="secondary-button" type="button" onClick={() => onView("playlists")}><VinylRecord size={17} aria-hidden="true" /> Browse playlists</button>
         </div>
       </div>
       <div className="home-signal" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div>

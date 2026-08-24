@@ -453,7 +453,6 @@
 }
 
 @media (max-width: 500px) {
-  .home-actions { display: grid; grid-template-columns: 1fr 1fr; }
-  .home-actions .primary-button { grid-column: 1 / -1; }
+  .home-actions { display: grid; grid-template-columns: 1fr; }
   .home-actions > button { min-width: 0; }
 }
