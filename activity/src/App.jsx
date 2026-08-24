@@ -370,13 +370,13 @@ function useSmartMenuGuards(open, rootRef, menuRef, onClose) {
   useEffect(() => {
     if (!open) return undefined;
     // Forgiving proximity guard: a short grace period after opening absorbs
-    // accidental flicks, then a 24px corridor around the menu/trigger keeps
+    // accidental flicks, then a 36px corridor around the menu/trigger keeps
     // it alive. Leaving the corridor starts a 200ms close timer; re-entering
     // cancels it. Clicks outside always close immediately.
     openedAtRef.current = performance.now();
     const rootEl = rootRef && typeof rootRef === "object" ? (rootRef.current ?? rootRef) : rootRef;
     const insideSafeZone = (x, y, target) => {
-      const pad = 24;
+      const pad = 36;
       if (menuRef.current?.contains(target) || rootEl?.contains?.(target)) return true;
       return [menuRef.current?.getBoundingClientRect(), rootEl ? rootEl.getBoundingClientRect() : null].some((rect) => {
         if (!rect) return false;
