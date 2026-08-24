@@ -2,6 +2,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createPortal } from "react-dom";
 import {
   ArrowBendUpRight,
+  CaretRight,
   Check,
   Cloud,
   DotsSixVertical,
@@ -422,6 +423,66 @@ function SmartMenu({ open, position, rootRef, menuRef, guards, label, children }
   );
 }
 
+function PlaylistSubmenuItem({ track, playlists = [], onAction, onClose }) {
+  const [open, setOpen] = useState(false);
+  const [opensLeft, setOpensLeft] = useState(false);
+  const closeTimerRef = useRef(null);
+  const triggerRef = useRef(null);
+  const clearCloseTimer = () => window.clearTimeout(closeTimerRef.current);
+  const closeSubmenu = () => { clearCloseTimer(); setOpen(false); };
+  const scheduleClose = () => {
+    clearCloseTimer();
+    closeTimerRef.current = window.setTimeout(closeSubmenu, 180);
+  };
+  const openSubmenu = () => {
+    clearCloseTimer();
+    const rect = triggerRef.current?.getBoundingClientRect();
+    setOpensLeft(Boolean(rect && window.innerWidth - rect.right < 250));
+    setOpen(true);
+  };
+
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
+
+  return (
+    <div className={`row-menu-submenu ${open ? "is-open" : ""}`} onMouseEnter={openSubmenu} onMouseLeave={scheduleClose} onFocus={openSubmenu} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) scheduleClose(); }}>
+      <button ref={triggerRef} type="button" role="menuitem" className="row-menu-item" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); openSubmenu(); }} aria-haspopup="menu" aria-expanded={open}>
+        <MusicNotes size={15} aria-hidden="true" /><span>Add to playlist</span><CaretRight className="row-menu-chevron" size={14} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className={`row-menu-submenu-panel ${opensLeft ? "opens-left" : ""}`} role="menu" aria-label="Available playlists" onMouseEnter={openSubmenu} onMouseLeave={scheduleClose}>
+          {playlists.length ? playlists.map((playlist) => (
+            <button type="button" role="menuitem" key={playlist.id} onClick={() => { onAction("add_to_playlist", { name: playlist.name, track }); onClose(); }}>
+              <VinylRecord size={14} aria-hidden="true" /><span>{playlist.name}</span>
+            </button>
+          )) : <span className="row-menu-submenu-empty">Create a playlist first</span>}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TrackMenuActions({ track, playlists = [], likedTrackIds = [], onAction, onClose }) {
+  const isLiked = likedTrackIds.includes(track.id) || likedTrackIds.includes(getTrackLikeKey(track));
+  const linkUrl = [track.uri, track.playQuery].find((value) => typeof value === "string" && /^https?:\/\//i.test(value));
+  return (
+    <>
+      <button type="button" role="menuitem" className={`row-menu-item ${isLiked ? "is-liked" : ""}`} onClick={() => { onAction("toggle_like", { track }); onClose(); }}>
+        <Heart size={15} weight={isLiked ? "fill" : "regular"} aria-hidden="true" /><span>{isLiked ? "Remove from liked songs" : "Add to liked songs"}</span>
+      </button>
+      <PlaylistSubmenuItem track={track} playlists={playlists} onAction={onAction} onClose={onClose} />
+      {linkUrl ? (
+        <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(linkUrl).catch(() => {}); onClose(); }}>
+          <CopySimple size={15} aria-hidden="true" /><span>Copy link</span>
+        </button>
+      ) : (
+        <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(`${track.title || ""} ${track.author || ""}`.trim()).catch(() => {}); onClose(); }}>
+          <CopySimple size={15} aria-hidden="true" /><span>Copy track info</span>
+        </button>
+      )}
+    </>
+  );
+}
+
 function TrackContextMenu({ track, playlists = [], likedTrackIds = [], onAction, isActionPending = () => false, open, position, onOpen, onClose }) {
   const rootRef = useRef(null);
   const menuRef = useRef(null);
@@ -430,7 +491,6 @@ function TrackContextMenu({ track, playlists = [], likedTrackIds = [], onAction,
 
   if (!track) return null;
   const isLiked = likedTrackIds.includes(track.id) || likedTrackIds.includes(getTrackLikeKey(track));
-  const linkUrl = [track.uri, track.playQuery].find((value) => typeof value === "string" && /^https?:\/\//i.test(value));
   const playQuery = track.playQuery || track.uri || `${track.title} ${track.author}`;
 
   return (
@@ -473,16 +533,7 @@ function TrackContextMenu({ track, playlists = [], likedTrackIds = [], onAction,
           <button type="button" role="menuitem" className={`row-menu-item ${isLiked ? "is-liked" : ""}`} onClick={() => { onAction("toggle_like", { track }); closeMenu(); }}>
             <Heart size={15} weight={isLiked ? "fill" : "regular"} aria-hidden="true" /><span>{isLiked ? "Remove from liked songs" : "Add to liked songs"}</span>
           </button>
-          {(playlists || []).map((playlist) => (
-            <button type="button" role="menuitem" className="row-menu-item" key={playlist.id} onClick={() => { onAction("add_to_playlist", { name: playlist.name, track }); closeMenu(); }}>
-              <MusicNotes size={15} aria-hidden="true" /><span>Add to {playlist.name}</span>
-            </button>
-          ))}
-          {linkUrl ? (
-            <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(linkUrl).catch(() => {}); closeMenu(); }}>
-              <CopySimple size={15} aria-hidden="true" /><span>Copy link</span>
-            </button>
-          ) : null}
+          <TrackMenuActions track={track} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} onClose={closeMenu} />
         </>
       </SmartMenu>
     </>
@@ -629,7 +680,17 @@ function NowPlaying({ state, onTab, onAction, isActionPending, className = "" })
   const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
   const progress = clamp(position, 0, duration);
   const seekSlider = useBufferedSlider(progress, { acknowledgementTolerance: 1500, optimisticLockMs: 1800 });
+  const [titleMenu, setTitleMenu] = useState(null);
+  const titleRef = useRef(null);
+  const titleMenuRef = useRef(null);
+  const titleGuards = useSmartMenuGuards(Boolean(titleMenu), titleRef, titleMenuRef, () => setTitleMenu(null));
+  const closeTitleMenu = () => { titleGuards.clearCloseTimer(); setTitleMenu(null); };
+  const trackLinkUrl = [track?.uri, track?.playQuery].find((value) => typeof value === "string" && /^https?:\/\//i.test(value)) || null;
   const commitSeek = (nextValue) => onAction("seek", { positionMs: seekSlider.commit(nextValue) });
+
+  useEffect(() => {
+    setTitleMenu(null);
+  }, [track?.id]);
 
   return (
     <section className={`now-playing panel-surface ${className}`}>
@@ -641,7 +702,28 @@ function NowPlaying({ state, onTab, onAction, isActionPending, className = "" })
         <div className="track-copy">
           <div className="track-copy-grid">
             <div className="track-text">
-              <h1>{track?.title || "Nothing is playing"}</h1>
+              <h1>
+                {track ? (
+                  <a
+                    ref={titleRef}
+                    className="track-title-link"
+                    href={trackLinkUrl || "#"}
+                    target={trackLinkUrl ? "_blank" : undefined}
+                    rel="noopener noreferrer"
+                    onClick={(event) => { if (!trackLinkUrl) event.preventDefault(); }}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setTitleMenu({
+                        top: Math.max(10, Math.min(event.clientY + 6, window.innerHeight - 260)),
+                        left: Math.max(10, Math.min(event.clientX - 10, window.innerWidth - 246)),
+                      });
+                    }}
+                    aria-haspopup="menu"
+                    title={trackLinkUrl || undefined}
+                  >{track.title}</a>
+                ) : "Nothing is playing"}
+              </h1>
               <p className="track-author">{track?.author || "Pick a track from search to start the room"}</p>
             </div>
             <IconButton label={state.likedTrackIds.includes(track?.id) ? "Remove from liked songs" : "Add to liked songs"} className={`like-button ${state.likedTrackIds.includes(track?.id) ? "is-liked" : ""}`} onClick={() => onAction("toggle_like", { track })} aria-pressed={state.likedTrackIds.includes(track?.id)}>
@@ -677,6 +759,9 @@ function NowPlaying({ state, onTab, onAction, isActionPending, className = "" })
         />
         <div className="time-row"><span>{formatTime(seekSlider.value)}</span><span>{formatTime(duration)}</span></div>
       </div>
+      <SmartMenu open={Boolean(titleMenu)} position={titleMenu || { top: 0, left: 0 }} rootRef={titleRef} menuRef={titleMenuRef} label={`Actions for ${track?.title || "track"}`}>
+        {track ? <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onAction={onAction} onClose={closeTitleMenu} /> : null}
+      </SmartMenu>
     </section>
   );
 }
@@ -810,26 +895,8 @@ function QueuePanel({ queue, playlists = [], likedTrackIds = [], onAction, isAct
 }
 
 function QueueRowLikeMenuItem({ track, playlists = [], likedTrackIds = [], onAction, onClose }) {
-  const isLiked = track ? likedTrackIds.includes(track.id) || likedTrackIds.includes(getTrackLikeKey(track)) : false;
   if (!track) return null;
-  const linkUrl = [track.uri, track.playQuery].find((value) => typeof value === "string" && /^https?:\/\//i.test(value));
-  return (
-    <>
-      <button type="button" role="menuitem" className={`row-menu-item ${isLiked ? "is-liked" : ""}`} onClick={() => { onAction("toggle_like", { track }); onClose(); }}>
-        <Heart size={15} weight={isLiked ? "fill" : "regular"} aria-hidden="true" /><span>{isLiked ? "Remove from liked songs" : "Add to liked songs"}</span>
-      </button>
-      {(playlists || []).map((playlist) => (
-        <button type="button" role="menuitem" className="row-menu-item" key={playlist.id} onClick={() => { onAction("add_to_playlist", { name: playlist.name, track }); onClose(); }}>
-          <MusicNotes size={15} aria-hidden="true" /><span>Add to {playlist.name}</span>
-        </button>
-      ))}
-      {linkUrl ? (
-        <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(linkUrl).catch(() => {}); onClose(); }}>
-          <CopySimple size={15} aria-hidden="true" /><span>Copy link</span>
-        </button>
-      ) : null}
-    </>
-  );
+  return <TrackMenuActions track={track} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} onClose={onClose} />;
 }
 
 function SearchPanel({ query, setQuery, source, setSource, results, status, onSearch, onAction, playlists = [], likedTrackIds = [], isActionPending = () => false, showSearchBar = true }) {
@@ -1392,20 +1459,7 @@ function PlayerBar({ state, onAction, onView, isActionPending }) {
           <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("toggle_like", { track }); closeTitleMenu(); }}>
             <Heart size={15} weight={isLiked ? "fill" : "regular"} aria-hidden="true" /><span>{isLiked ? "Remove from liked songs" : "Add to liked songs"}</span>
           </button>
-          {(state.playlists || []).map((playlist) => (
-            <button type="button" role="menuitem" className="row-menu-item" key={playlist.id} onClick={() => { onAction("add_to_playlist", { name: playlist.name, track }); closeTitleMenu(); }}>
-              <MusicNotes size={15} aria-hidden="true" /><span>Add to {playlist.name}</span>
-            </button>
-          ))}
-          {trackLinkUrl ? (
-            <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(trackLinkUrl).catch(() => {}); closeTitleMenu(); }}>
-              <CopySimple size={15} aria-hidden="true" /><span>Copy link</span>
-            </button>
-          ) : (
-            <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(`${track?.title || ""} ${track?.author || ""}`.trim()).catch(() => {}); closeTitleMenu(); }}>
-              <CopySimple size={15} aria-hidden="true" /><span>Copy track info</span>
-            </button>
-          )}
+          <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds} onAction={onAction} onClose={closeTitleMenu} />
         </>
       </SmartMenu>
     </footer>

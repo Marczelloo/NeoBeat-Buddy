@@ -1,7 +1,7 @@
 const artwork = "https://picsum.photos/seed/mewbit-neon-cat/720/720";
 
 const tracks = [
-  { id: "mock-current", title: "Tamagotchi", author: "TACONAFIDE", durationMs: 205000, artworkUrl: artwork, source: "soundcloud", sourceLabel: "SoundCloud", requester: "Local Listener", autoplay: false },
+  { id: "mock-current", title: "Tamagotchi", author: "TACONAFIDE", durationMs: 205000, artworkUrl: artwork, uri: "https://soundcloud.com/taconafide/tamagotchi", source: "soundcloud", sourceLabel: "SoundCloud", requester: "Local Listener", autoplay: false },
   { id: "mock-queue-1", title: "Hit Em Up", author: "2Pac", durationMs: 311000, artworkUrl: artwork, source: "youtube", sourceLabel: "YouTube", requester: "MewBit", autoplay: false },
   { id: "mock-queue-2", title: "Ciepłe Dranie", author: "Kuki", durationMs: 190000, artworkUrl: artwork, source: "soundcloud", sourceLabel: "SoundCloud", requester: "Neko", autoplay: true },
   { id: "mock-queue-3", title: "Afterglow Circuit", author: "MewBit Radio", durationMs: 226000, artworkUrl: artwork, source: "deezer", sourceLabel: "Deezer", requester: "MewBit", autoplay: true },
