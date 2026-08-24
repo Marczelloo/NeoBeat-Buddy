@@ -269,15 +269,21 @@
     font-size: 10px;
   }
   .main-view-filters .filter-grid {
-    gap: 6px;
+    gap: 8px;
   }
   .main-view-filters .filter-tile {
-    min-height: 38px;
-    gap: 7px;
-    padding: 5px 9px;
+    min-height: 64px;
+    gap: 9px;
+    padding: 8px 11px;
+  }
+  .main-view-filters .filter-tile-icon {
+    flex-basis: 19px;
+  }
+  .main-view-filters .filter-tile-copy strong {
+    font-size: 12px;
   }
   .main-view-filters .filter-tile-copy small {
-    font-size: 9px;
+    font-size: 10px;
   }
   .main-view-filters .eq-section {
     padding-top: 0;
