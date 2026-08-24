@@ -375,8 +375,9 @@ function useSmartMenuGuards(open, rootRef, menuRef, onClose) {
     // cancels it. Clicks outside always close immediately.
     openedAtRef.current = performance.now();
     const rootEl = rootRef && typeof rootRef === "object" ? (rootRef.current ?? rootRef) : rootRef;
-    const insideSafeZone = (x, y) => {
+    const insideSafeZone = (x, y, target) => {
       const pad = 24;
+      if (menuRef.current?.contains(target) || rootEl?.contains?.(target)) return true;
       return [menuRef.current?.getBoundingClientRect(), rootEl ? rootEl.getBoundingClientRect() : null].some((rect) => {
         if (!rect) return false;
         return x >= rect.left - pad && x <= rect.right + pad && y >= rect.top - pad && y <= rect.bottom + pad;
@@ -384,7 +385,7 @@ function useSmartMenuGuards(open, rootRef, menuRef, onClose) {
     };
     const onPointerMove = (event) => {
       if (performance.now() - openedAtRef.current < 350) { clearCloseTimer(); return; }
-      if (insideSafeZone(event.clientX, event.clientY)) { clearCloseTimer(); return; }
+      if (insideSafeZone(event.clientX, event.clientY, event.target)) { clearCloseTimer(); return; }
       if (!closeTimerRef.current) scheduleClose();
     };
     const onPointerDown = (event) => {
@@ -426,22 +427,17 @@ function SmartMenu({ open, position, rootRef, menuRef, guards, label, children }
 function PlaylistSubmenuItem({ track, playlists = [], onAction, onClose }) {
   const [open, setOpen] = useState(false);
   const [opensLeft, setOpensLeft] = useState(false);
-  const closeTimerRef = useRef(null);
   const triggerRef = useRef(null);
-  const clearCloseTimer = () => window.clearTimeout(closeTimerRef.current);
-  const closeSubmenu = () => { clearCloseTimer(); setOpen(false); };
-  const scheduleClose = () => {
-    clearCloseTimer();
-    closeTimerRef.current = window.setTimeout(closeSubmenu, 180);
-  };
+  const submenuRef = useRef(null);
+  const submenuGuards = useSmartMenuGuards(open, triggerRef, submenuRef, () => setOpen(false));
+  const closeSubmenu = () => { submenuGuards.clearCloseTimer(); setOpen(false); };
+  const scheduleClose = () => submenuGuards.scheduleClose(280);
   const openSubmenu = () => {
-    clearCloseTimer();
+    submenuGuards.clearCloseTimer();
     const rect = triggerRef.current?.getBoundingClientRect();
     setOpensLeft(Boolean(rect && window.innerWidth - rect.right < 250));
     setOpen(true);
   };
-
-  useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
 
   return (
     <div className={`row-menu-submenu ${open ? "is-open" : ""}`} onMouseEnter={openSubmenu} onMouseLeave={scheduleClose} onFocus={openSubmenu} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) scheduleClose(); }}>
@@ -449,7 +445,7 @@ function PlaylistSubmenuItem({ track, playlists = [], onAction, onClose }) {
         <MusicNotes size={15} aria-hidden="true" /><span>Add to playlist</span><CaretRight className="row-menu-chevron" size={14} aria-hidden="true" />
       </button>
       {open ? (
-        <div className={`row-menu-submenu-panel ${opensLeft ? "opens-left" : ""}`} role="menu" aria-label="Available playlists" onMouseEnter={openSubmenu} onMouseLeave={scheduleClose}>
+        <div ref={submenuRef} className={`row-menu-submenu-panel ${opensLeft ? "opens-left" : ""}`} role="menu" aria-label="Available playlists" onMouseEnter={openSubmenu} onMouseLeave={scheduleClose}>
           {playlists.length ? playlists.map((playlist) => (
             <button type="button" role="menuitem" key={playlist.id} onClick={() => { onAction("add_to_playlist", { name: playlist.name, track }); onClose(); }}>
               <VinylRecord size={14} aria-hidden="true" /><span>{playlist.name}</span>
