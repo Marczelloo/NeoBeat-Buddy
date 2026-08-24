@@ -557,11 +557,11 @@ function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onA
   return (
     <div className="player-control-deck">
       <div className="deck-side deck-left">
-        <TrackSaveActions track={player.currentTrack} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} isActionPending={isActionPending} className={"main-save-actions"} />
         <button className={`autoplay-control ${player.autoplay ? "is-on" : ""}`} type="button" onClick={() => onAction("autoplay", { enabled: !player.autoplay })} disabled={!player.currentTrack || isActionPending("autoplay")} aria-busy={isActionPending("autoplay") || undefined} aria-pressed={player.autoplay}>
           {isActionPending("autoplay") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : <Sparkle size={15} weight={player.autoplay ? "fill" : "regular"} aria-hidden="true" />}
           <span>Autoplay</span>
         </button>
+        <TrackSaveActions track={player.currentTrack} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} isActionPending={isActionPending} className="main-save-actions" />
       </div>
       <div className="transport-controls">
         <IconButton label={`Loop mode ${player.loop}`} className={player.loop !== "NONE" ? "is-active" : ""} loading={isActionPending("loop")} onClick={() => onAction("loop")}>
