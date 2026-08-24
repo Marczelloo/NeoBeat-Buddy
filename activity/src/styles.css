@@ -268,6 +268,9 @@
     margin-top: 2px;
     font-size: 10px;
   }
+  .main-view-filters .filter-section:not(.eq-section) .filter-label-row strong {
+    font-size: 14px;
+  }
   .main-view-filters .filter-grid {
     gap: 8px;
   }
@@ -281,6 +284,9 @@
   }
   .main-view-filters .filter-tile-copy strong {
     font-size: 14px;
+  }
+  .main-view-filters .filter-tile-copy {
+    gap: 5px;
   }
   .main-view-filters .filter-tile-copy small {
     font-size: 11px;
