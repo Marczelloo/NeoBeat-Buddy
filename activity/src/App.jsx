@@ -1780,7 +1780,11 @@ function App() {
       {showLoader ? <ActivityLoader message={connection.message} leaving={!isHydrating} /> : null}
       {isCompact ? <CompactPlayer state={state} /> : <>
         <div className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
-          {(leftSidebarOpen || rightSidebarOpen) ? <div className="drawer-scrim" onClick={() => { setLeftSidebarOpen(false); setRightSidebarOpen(false); }} aria-hidden="true" /> : null}
+          <div
+            className={`drawer-scrim ${leftSidebarOpen || rightSidebarOpen ? "is-open" : ""}`}
+            onClick={() => { setLeftSidebarOpen(false); setRightSidebarOpen(false); }}
+            aria-hidden="true"
+          />
           <aside className="sidebar sidebar-left" aria-label="Playlists sidebar">
             <PlaylistSidebar
               playlists={state.playlists}
