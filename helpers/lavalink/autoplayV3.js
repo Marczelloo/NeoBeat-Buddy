@@ -282,6 +282,13 @@ function orderAIDirectorCandidates(ranked, context, random = Math.random) {
       if ((artistExitWanted || albumExitWanted) && lane !== "continuation" && !sameArtist && !sameAlbum) {
         weight *= exitMultiplier;
       }
+      const preferredLanes = context.selectionIntent?.preferredLanes || [];
+      const preferredIndex = preferredLanes.indexOf(lane);
+      if (preferredIndex === 0) weight *= 1.9;
+      else if (preferredIndex === 1) weight *= 1.3;
+      if (context.selectionIntent?.mode === "popular") {
+        weight *= 1 + Math.min(Math.max(Number(entry.candidate.popularity) || 0, 0), 100) / 125;
+      }
       const skips = skipCounts.get(artistKey(entry.candidate.artist)) || 0;
       if (skips > 0) weight /= 1 + (AI_DJ_SKIP_DEMOTION / 100) * Math.min(skips, 3);
 
@@ -535,9 +542,13 @@ async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack,
   return null;
 }
 
-async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTracks = [] } = {}) {
+async function fetchAutoplayV3Track(referenceTrack, guildId, {
+  pendingManualTracks = [],
+  allowWhenAutoplayDisabled = false,
+  selectionIntent = null,
+} = {}) {
   if (!referenceTrack?.info) return null;
-  if (!getGuildState(guildId)?.autoplay) return null;
+  if (!allowWhenAutoplayDisabled && !getGuildState(guildId)?.autoplay) return null;
 
   const anchorTrack = await enrichAnchorGenres(getAnchorTrack(guildId, referenceTrack));
   await enrichManualAnchorTracks(pendingManualTracks, guildId);
@@ -549,6 +560,7 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, { pendingManualTrac
   const recentTracks = getRecentTracks(profile, referenceTrack);
   const skipPatterns = getSkipPatterns(guildId);
   const context = buildSelectionContext({ profile, exposure: profile.autoplayExposure, referenceTrack, recentTracks, skipPatterns, anchorTrack });
+  context.selectionIntent = selectionIntent;
   const reference = getAutoplayReference(referenceTrack);
   const candidates = await collectCandidates(referenceTrack, guildId, profile, reference, {
     sources: ["sameAlbum", "deezer", "lastfm", "youtubeMix"],

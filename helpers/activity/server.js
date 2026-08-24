@@ -7,6 +7,8 @@ const djStore = require("../dj/store");
 const { getUserPresets } = require("../equalizer/customPresets");
 const EQ_PRESET_NAMES = require("../equalizer/presets");
 const guildState = require("../guildState");
+const { getHistory } = require("../history/searchHistory");
+const { fetchAutoplayV3Track } = require("../lavalink/autoplayV3");
 const { EQUALIZER_PRESETS } = require("../lavalink/constants");
 const { getEqualizerState } = require("../lavalink/equalizerStore");
 const { getFilterPreset, FILTER_PRESET_NAMES } = require("../lavalink/filterPresets");
@@ -37,9 +39,11 @@ const { searchAcrossSources, searchSingleSource } = require("../lavalink/searchA
 const { filterPlayableSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
 const { skipWithLearning } = require("../lavalink/skipLearning");
 const { cloneTrack, getLyricsState, playbackState, setLyricsState } = require("../lavalink/state");
+const { selectSurpriseSeed } = require("../lavalink/surpriseMe");
 const Log = require("../logs/log");
 const { importPlaylistFromUrl } = require("../playlists/import");
 const playlistStore = require("../playlists/store");
+const statsStore = require("../stats/store");
 const { serializeFilters, serializeLyrics, serializePlaylist, serializePlaylistDetails, serializeTrack, normalizeSource } = require("./state");
 const { activityStateEvents, getActivityStateRevision, markActivityStateChanged } = require("./sync");
 
@@ -297,6 +301,7 @@ function assertControlPermission(guildId, identity, action) {
     "loop",
     "autoplay",
     "play",
+    "surprise_me",
   ]);
 
   if (guardedActions.has(action)) {
@@ -455,12 +460,13 @@ function serializeActivitySearchResults(tracks, query) {
 }
 
 function serializeActivityActionResult(action, result) {
-  if (action === "play") {
+  if (action === "play" || action === "surprise_me") {
     return {
       success: true,
       track: result?.track ? serializeTrack(result.track) : null,
       isPlaylist: Boolean(result?.isPlaylist),
       playlistTrackCount: Number(result?.playlistTrackCount) || 0,
+      ...(action === "surprise_me" ? { surpriseIntent: result?.surpriseIntent || null } : {}),
     };
   }
   if (action === "refresh_lyrics") return result ? serializeLyrics(result) : null;
@@ -498,6 +504,54 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
           avatar: identity.avatar,
         },
       });
+    }
+    case "surprise_me": {
+      const settings = guildState.getGuildState(guildId);
+      const memberVoice = identity.member?.voice?.channelId;
+      const voiceId = player?.voiceChannel || memberVoice;
+      const textId = settings?.playerChannel || player?.textChannel || null;
+      if (!voiceId) throw Object.assign(new Error("Join a voice channel before asking MewBit to choose."), { statusCode: 400 });
+      if (!textId) throw Object.assign(new Error("Set the player channel first with /setup player channel."), { statusCode: 400 });
+
+      const liveState = playbackState.get(guildId) || {};
+      const selection = selectSurpriseSeed({
+        currentTrack: liveState.currentTrack || player?.currentTrack || null,
+        roomHistory: liveState.history || [],
+        userHistory: getHistory(identity.id, null, 50),
+        likedTracks: playlistStore.getLikedSongs(identity.id)?.tracks || [],
+        topTracks: statsStore.getTopTracks(identity.id, 25),
+      }, { memoryKey: `${guildId}:${identity.id}` });
+
+      if (!selection) {
+        throw Object.assign(new Error("MewBit needs one taste signal first. Play or like a track, then try Surprise me again."), { statusCode: 400 });
+      }
+
+      const recommendation = await fetchAutoplayV3Track(selection.seed, guildId, {
+        pendingManualTracks: Array.from(player?.queue || []).slice(0, 4),
+        allowWhenAutoplayDisabled: true,
+        selectionIntent: selection.intent,
+      });
+      if (!recommendation) {
+        throw Object.assign(new Error("MewBit could not find a verified surprise right now. Try again in a moment."), { statusCode: 503 });
+      }
+
+      if (player && player.textChannel !== textId) player.textChannel = textId;
+      if (settings?.playerChannel) guildState.updateGuildState(guildId, { nowPlayingChannel: textId });
+      const query = recommendation.info?.uri || `${recommendation.info?.title || ""} ${recommendation.info?.author || ""}`.trim();
+      const result = await lavalinkPlay({
+        guildId,
+        voiceId,
+        textId,
+        query,
+        source: toSource(recommendation.info?.sourceName),
+        playNow: true,
+        requester: {
+          id: identity.id,
+          tag: identity.tag || identity.username,
+          avatar: identity.avatar,
+        },
+      });
+      return { ...result, surpriseIntent: selection.intent.mode };
     }
     case "pause":
       return lavalinkPause(guildId);

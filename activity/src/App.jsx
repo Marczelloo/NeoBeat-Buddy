@@ -1283,7 +1283,7 @@ function QueueSidebar({ queue, playlists = [], likedTrackIds = [], queueOpen, on
   );
 }
 
-function HomePanel({ onView, loading = false }) {
+function HomePanel({ onView, onAction, isActionPending = () => false, loading = false }) {
   if (loading) {
     return (
       <section className="home-panel home-panel-loading panel-surface" aria-busy="true" aria-label="Synchronizing MewBit Activity">
@@ -1303,6 +1303,10 @@ function HomePanel({ onView, loading = false }) {
         <p>Search a track, open a playlist, or tune the signal. MewBit keeps the whole room in sync.</p>
         <div className="home-actions">
           <button className="primary-button" type="button" onClick={() => onView("search")}><MagnifyingGlass size={17} weight="bold" aria-hidden="true" /> Find a track</button>
+          <button className="surprise-button" type="button" onClick={() => onAction("surprise_me")} disabled={isActionPending("surprise_me")} aria-busy={isActionPending("surprise_me") || undefined}>
+            {isActionPending("surprise_me") ? <SpinnerGap className="button-spinner" size={17} aria-hidden="true" /> : <Sparkle size={17} weight="fill" aria-hidden="true" />}
+            {isActionPending("surprise_me") ? "Choosing..." : "Surprise me"}
+          </button>
           <button className="secondary-button" type="button" onClick={() => onView("playlists")}><VinylRecord size={17} aria-hidden="true" /> Browse playlists</button>
         </div>
       </div>
@@ -1692,6 +1696,16 @@ function App() {
         next.player.filters.equalizer = preset?.bands || [];
         next.player.filters.preset = payload.preset;
       }
+      if (action === "surprise_me") {
+        const result = mockSearchResults.find((track) => track.id === "search-afterglow") || mockSearchResults[0];
+        if (result) {
+          next.player.currentTrack = { ...result, requester: "Local Listener", autoplay: false };
+          next.player.durationMs = result.durationMs;
+          next.player.positionMs = 0;
+          next.player.playing = true;
+          next.player.paused = false;
+        }
+      }
       if (action === "play") {
         const result = searchResults.find((track) => track.playQuery === payload.query);
         if (result && next.player.currentTrack) {
@@ -1733,7 +1747,7 @@ function App() {
           if (response.result?.playlist) setSelectedPlaylistDetail(response.result.playlist);
           if (action === "delete_playlist" && response.result?.success) { setSelectedPlaylistDetail(null); setSelectedPlaylist(null); }
           if (action === "get_playlist" && response.result?.playlist) { setSelectedPlaylist(response.result.playlist.id || response.result.playlist.name); setActiveTab("playlists"); }
-          const successMessage = action === "play" ? (nextPayload.playNow ? "Playing now" : "Added to queue") : action === "stop" ? "Playback stopped" : null;
+          const successMessage = action === "play" ? (nextPayload.playNow ? "Playing now" : "Added to queue") : action === "surprise_me" ? "MewBit found your next track" : action === "stop" ? "Playback stopped" : null;
           if (successMessage) showToast(successMessage, "success");
           if ((action === "remove_queue" || action === "clear_queue") && response.result?.undoToken) {
             showToast(action === "clear_queue" ? "Queue cleared" : "Track removed", "info", { label: "Undo", action: "undo_queue", payload: { token: response.result.undoToken } });
@@ -1747,6 +1761,7 @@ function App() {
           }
           localMutation(action, nextPayload);
           if (action === "play") showToast(nextPayload.playNow ? "Playing now" : "Added to queue", "info");
+          if (action === "surprise_me") showToast("MewBit found your next track", "success");
           if (undoToken) showToast(action === "clear_queue" ? "Queue cleared" : "Track removed", "info", { label: "Undo", action: "undo_queue", payload: { token: undoToken } });
           if (action === "undo_queue") showToast("Queue restored", "success");
         }
@@ -1889,7 +1904,7 @@ function App() {
               </div>
             </div>
             <div className={`main-content main-view-${activeTab}`}>
-              {activeTab === "home" ? (isHydrating ? <HomePanel loading /> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={state} onTab={goToView} onAction={onAction} isActionPending={isActionPending} /> : <HomePanel onView={goToView} />) : null}
+              {activeTab === "home" ? (isHydrating ? <HomePanel loading /> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={state} onTab={goToView} onAction={onAction} isActionPending={isActionPending} /> : <HomePanel onView={goToView} onAction={onAction} isActionPending={isActionPending} />) : null}
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
               {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} onAction={onAction} isActionPending={isActionPending} /></section> : null}
               {activeTab === "lyrics" ? <section className="content-panel panel-surface"><LiveLyricsPanel player={state.player} onAction={onAction} /></section> : null}

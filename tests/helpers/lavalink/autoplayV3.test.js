@@ -170,6 +170,19 @@ describe("Autoplay V3 AI-first selection", () => {
     assert.strictEqual(stable.deferred, null);
   });
 
+  it("lets a surprise discovery intent favor a close explore proposal", () => {
+    const continuation = aiCandidate("Safe Continuation", "Taco Hemingway", { fit: 94 });
+    const hiddenGem = aiCandidate("Hidden Gem", "Fresh Artist", { fit: 90, lane: "explore", rank: 1 });
+    const selectionContext = context({
+      selectionIntent: { mode: "discovery", preferredLanes: ["explore", "bridge"] },
+    });
+    const filtered = filterAICandidates([continuation, hiddenGem], selectionContext);
+    const ordered = orderAIDirectorCandidates(filtered.ranked, selectionContext, () => 0.62);
+
+    assert.strictEqual(ordered.ranked[0].candidate.title, "Hidden Gem");
+    assert.strictEqual(ordered.deferred.route, "explore");
+  });
+
   it("prefers the director's bridge after a long run, but never outside the band", () => {
     const continuation = aiCandidate("Deep Cut", "Guzior", { fit: 94 });
     const bridge = aiCandidate("Scene Bridge", "Szpaku", { fit: 85, lane: "bridge", rank: 1 });

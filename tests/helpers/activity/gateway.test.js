@@ -29,6 +29,23 @@ test("Activity responses stay JSON-safe for Lavalink objects", () => {
   });
 });
 
+test("Activity surprise results omit circular player data", () => {
+  const circular = {};
+  circular.self = circular;
+
+  assert.deepEqual(serializeActivityActionResult("surprise_me", {
+    player: circular,
+    track: null,
+    surpriseIntent: "discovery",
+  }), {
+    success: true,
+    track: null,
+    isPlaylist: false,
+    playlistTrackCount: 0,
+    surpriseIntent: "discovery",
+  });
+});
+
 test("Activity artwork proxy only accepts known HTTPS media hosts", () => {
   assert.equal(isAllowedArtworkUrl("https://i.ytimg.com/vi/example/maxresdefault.jpg"), true);
   assert.equal(isAllowedArtworkUrl("https://i1.sndcdn.com/artworks-example-t500x500.jpg"), true);

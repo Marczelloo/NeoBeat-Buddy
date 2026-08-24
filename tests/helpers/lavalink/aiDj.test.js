@@ -133,6 +133,18 @@ describe("AI DJ director", () => {
     );
   });
 
+  it("passes a direct surprise intent to the music director", () => {
+    const nextInput = input();
+    nextInput.context.selectionIntent = {
+      mode: "discovery",
+      goal: "Find a fitting hidden gem.",
+      preferredLanes: ["explore", "bridge"],
+    };
+
+    const prompt = buildDirectorInput({ ...nextInput, maxProposals: 8 });
+    assert.deepStrictEqual(prompt.selectionIntent, nextInput.context.selectionIntent);
+  });
+
   it("feeds skips, streaks and cooldown context to the director", () => {
     const directorInput = buildDirectorInput({ ...input(), maxProposals: 8 });
     assert.deepStrictEqual(directorInput.constraints.skippedArtists, [{ artist: "Mata", skips: 2 }]);
