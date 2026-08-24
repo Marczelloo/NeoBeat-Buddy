@@ -325,6 +325,41 @@ function getPresenceLines(client, offset = 0) {
   return [...BRAND.presence, ...personalized].map(cleanLine).filter(Boolean);
 }
 
+function pickPresenceLine(lines, recentLines = [], random = Math.random) {
+  const pool = [...new Set(
+    (Array.isArray(lines) ? lines : [])
+      .map((line) => String(line || "").trim())
+      .filter(Boolean),
+  )];
+  if (pool.length === 0) return "";
+
+  // Keep enough history to block an A/B cycle, but scale it down for very small
+  // pools so selection remains possible without immediately repeating by force.
+  const guardDepth = Math.min(24, Math.ceil(pool.length / 2));
+  const recent = new Set(
+    (Array.isArray(recentLines) ? recentLines : [])
+      .slice(0, guardDepth)
+      .map((line) => String(line || "").trim())
+      .filter(Boolean),
+  );
+  let choices = pool.filter((line) => !recent.has(line));
+
+  const previous = recent.values().next().value;
+  // Recent statuses usually exclude the last few picks. If that exhausts a tiny
+  // pool, still avoid the immediately previous status whenever an alternative exists.
+  if (previous && choices.length === 0) {
+    choices = pool;
+  }
+
+  if (previous && choices.length > 1) {
+    const nonRepeated = choices.filter((line) => line !== previous);
+    if (nonRepeated.length > 0) choices = nonRepeated;
+  }
+
+  const index = Math.max(0, Math.min(choices.length - 1, Math.floor(random() * choices.length)));
+  return choices[index] || "";
+}
+
 function brandFooter(section) {
   return section ? `${BRAND.name} • ${section}` : BRAND.name;
 }
@@ -335,5 +370,6 @@ module.exports = {
   PRESENCE_LINES,
   brandFooter,
   getPresenceLines,
+  pickPresenceLine,
   sanitizePresenceName,
 };

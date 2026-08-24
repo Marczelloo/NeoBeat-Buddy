@@ -2,7 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const PACKAGE_VERSION = require("../../package.json").version;
-const { BRAND, getPresenceLines } = require("../brand");
+const { BRAND, getPresenceLines, pickPresenceLine } = require("../brand");
 const { getGuildState, updateGuildState } = require("../guildState");
 const Log = require("../logs/log");
 
@@ -12,8 +12,10 @@ const GITHUB_REPO = "https://github.com/Marczelloo/NeoBeat-Buddy";
 let patchNotesCache = null;
 let currentVersion = PACKAGE_VERSION;
 let presenceTimer = null;
-let presenceIndex = 0;
-const PRESENCE_INTERVAL_MS = 60 * 1000;
+let recentPresences = [];
+const PRESENCE_INTERVAL_MIN_MS = 20 * 1000;
+const PRESENCE_INTERVAL_MAX_MS = 30 * 1000;
+const PRESENCE_HISTORY_LIMIT = 12;
 
 /**
  * Initialize announcer system and load patch notes
@@ -383,12 +385,19 @@ async function sendAnnouncement(client, guildId, fallbackChannelId = null) {
  */
 function updateBotStatus(client) {
   try {
-    if (presenceTimer) clearInterval(presenceTimer);
+    if (presenceTimer) clearTimeout(presenceTimer);
 
     const rotatePresence = () => {
-      const presenceLines = getPresenceLines(client, presenceIndex);
-      const tagline = presenceLines[presenceIndex % presenceLines.length];
-      presenceIndex += 1;
+      // A random member seed also randomizes the personalized half of the pool;
+      // without it those templates would otherwise follow the member cache order.
+      const presenceLines = getPresenceLines(client, Math.floor(Math.random() * Number.MAX_SAFE_INTEGER));
+      const tagline = pickPresenceLine(presenceLines, recentPresences);
+      if (!tagline) return;
+
+      recentPresences.unshift(tagline);
+      if (recentPresences.length > PRESENCE_HISTORY_LIMIT) {
+        recentPresences.length = PRESENCE_HISTORY_LIMIT;
+      }
 
       // Keep the Discord presence compact: the rotating line itself carries
       // the branding, while command hints and version text make it noisy.
@@ -398,14 +407,22 @@ function updateBotStatus(client) {
     };
 
     rotatePresence();
-    presenceTimer = setInterval(rotatePresence, PRESENCE_INTERVAL_MS);
-    presenceTimer.unref?.();
+    const scheduleNextPresence = () => {
+      const intervalRange = PRESENCE_INTERVAL_MAX_MS - PRESENCE_INTERVAL_MIN_MS + 1;
+      const delay = PRESENCE_INTERVAL_MIN_MS + Math.floor(Math.random() * intervalRange);
+      presenceTimer = setTimeout(() => {
+        rotatePresence();
+        scheduleNextPresence();
+      }, delay);
+      presenceTimer.unref?.();
+    };
+    scheduleNextPresence();
 
     Log.info(
       "Bot status rotation started",
       "",
       `version=${getCurrentVersion()}`,
-      `interval=${PRESENCE_INTERVAL_MS}ms`,
+      `interval=${PRESENCE_INTERVAL_MIN_MS}-${PRESENCE_INTERVAL_MAX_MS}ms`,
       `variants=${BRAND.presence.length}+personalized`
     );
   } catch (err) {
