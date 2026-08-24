@@ -7,22 +7,23 @@ const tracks = [
   { id: "mock-queue-3", title: "Afterglow Circuit", author: "MewBit Radio", durationMs: 226000, artworkUrl: artwork, source: "deezer", sourceLabel: "Deezer", requester: "MewBit", autoplay: true },
 ];
 
-export function createMockState() {
+export function createMockState({ idle = false } = {}) {
+  const currentTrack = idle ? null : tracks[0];
   return {
     guild: { id: "demo", name: "MewBit test room", iconUrl: null, voiceChannelName: "Neon Listening Room" },
     botStatus: "the bassline has been peer reviewed",
     player: {
       connected: true,
-      paused: false,
-      playing: true,
-      positionMs: 73500,
-      durationMs: tracks[0].durationMs,
+      paused: idle,
+      playing: !idle,
+      positionMs: idle ? 0 : 73500,
+      durationMs: idle ? 0 : tracks[0].durationMs,
       volume: 52,
       loop: "NONE",
       shuffleActive: false,
-      autoplay: true,
-      currentTrack: tracks[0],
-      queue: tracks.slice(1).map((track, index) => ({ ...track, index })),
+      autoplay: !idle,
+      currentTrack,
+      queue: idle ? [] : tracks.slice(1).map((track, index) => ({ ...track, index })),
       filters: {
         preset: "rnb",
         effectPreset: "off",

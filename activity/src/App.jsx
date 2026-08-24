@@ -72,6 +72,7 @@ function getFilterPresetMeta(preset) {
 // Mock preview is a dev-only affordance: production builds never render mock
 // data or search results, even if someone appends ?mock=1 to the URL.
 const MOCK_PREVIEW = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("mock");
+const MOCK_IDLE_PREVIEW = MOCK_PREVIEW && new URLSearchParams(window.location.search).has("idle");
 const COMPACT_STATUS_FALLBACKS = [
   "neon ears engaged",
   "the bassline has been peer reviewed",
@@ -1487,7 +1488,10 @@ function Workspace({ state, activeTab, setActiveTab, search, onAction }) {
 }
 
 function App() {
-  const [state, setState] = useState(() => (import.meta.env.DEV ? createMockState() : createEmptyState()));
+  const [state, setState] = useState(() => {
+    if (!import.meta.env.DEV) return createEmptyState();
+    return createMockState({ idle: MOCK_IDLE_PREVIEW });
+  });
   const [context, setContext] = useState({ mode: "local", guildId: "demo", accessToken: null, user: { username: "Local Listener" } });
   const [connection, setConnection] = useState({ status: "connecting", message: "Starting Activity" });
   const [activeTab, setActiveTab] = useState("home");
