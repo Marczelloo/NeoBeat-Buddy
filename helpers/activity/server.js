@@ -309,8 +309,21 @@ function getVoiceChannelName(client, player) {
   return client.guilds.cache.get(player.guildId)?.channels.cache.get(player.voiceChannel)?.name || null;
 }
 
-function getSerializedQueue(player) {
-  return Array.from(player?.queue || []).map((track, index) => serializeTrack(track, index));
+function withAutoplayRequesterLabel(track, client) {
+  if (!track || !(track.userData?.autoplay || track.info?.autoplayed)) return track;
+
+  const info = track.info || {};
+  const existingTag = String(info.requesterTag || "").trim();
+  if (existingTag && !/^\d{17,20}$/.test(existingTag)) return track;
+
+  const botUsername = client?.user?.username || "MewBit";
+  return { ...track, info: { ...info, requesterTag: botUsername } };
+}
+
+function getSerializedQueue(player, client) {
+  return Array.from(player?.queue || []).map((track, index) => (
+    serializeTrack(withAutoplayRequesterLabel(track, client), index)
+  ));
 }
 
 function createQueueUndoSnapshot(guildId, player) {
@@ -366,7 +379,7 @@ function buildActivityState(client, guildId, userId) {
   const likedSongs = playlistStore.getLikedSongs(userId);
   const livePlaybackState = playbackState.get(guildId);
   const playback = resolveActivityPlayback(livePlaybackState?.currentTrack, player?.currentTrack);
-  const currentTrack = playback.track ? serializeTrack(playback.track) : null;
+  const currentTrack = playback.track ? serializeTrack(withAutoplayRequesterLabel(playback.track, client)) : null;
   const filters = getEqualizerState(guildId) || player?.filters || {};
   const guild = client.guilds.cache.get(guildId);
   const settings = guildState.getGuildState(guildId);
@@ -397,7 +410,7 @@ function buildActivityState(client, guildId, userId) {
       shuffleActive: Boolean(player?.shuffleActive),
       autoplay: Boolean(settings?.autoplay),
       currentTrack,
-      queue: getSerializedQueue(player),
+      queue: getSerializedQueue(player, client),
       filters: serializeFilters(filters),
       lyrics,
       updatedAt: generatedAt,

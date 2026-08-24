@@ -64,10 +64,12 @@ function queueAutoplayTrack(player, lastTrack, textChannelId) {
       }
 
       const cloned = cloneTrack(relatedTrack);
+      const botUser = player.poru?.client?.user;
 
       cloned.info = {
         ...(cloned.info || {}),
-        requester: textChannelId,
+        requester: botUser?.id ?? textChannelId,
+        requesterTag: botUser?.username || "MewBit",
         autoplayed: true,
       };
 
