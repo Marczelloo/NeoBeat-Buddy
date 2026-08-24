@@ -208,3 +208,95 @@
     gap: 10px;
   }
 }
+
+/* Filters keep the effect name and its intent readable at a glance. */
+.filter-tile-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 17px;
+  color: var(--muted);
+}
+.filter-tile.is-selected .filter-tile-icon {
+  color: var(--cyan);
+}
+.filter-tile-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.filter-tile-copy strong,
+.filter-tile-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-tile-copy strong {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.15;
+}
+.filter-tile-copy small {
+  color: var(--faint);
+  font-size: 9px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+@media (min-width: 901px) {
+  .main-view-filters .content-panel {
+    padding: 11px 16px 13px;
+  }
+  .main-view-filters .panel-title {
+    margin-bottom: 8px;
+  }
+  .main-view-filters .filters-panel {
+    gap: 7px;
+  }
+  .main-view-filters .filter-section {
+    gap: 6px;
+    align-content: start;
+    grid-template-rows: auto auto;
+  }
+  .main-view-filters .filter-label-row {
+    gap: 10px;
+  }
+  .main-view-filters .filter-label-row strong {
+    font-size: 12px;
+  }
+  .main-view-filters .filter-label-row span {
+    margin-top: 2px;
+    font-size: 10px;
+  }
+  .main-view-filters .filter-grid {
+    gap: 6px;
+  }
+  .main-view-filters .filter-tile {
+    min-height: 38px;
+    gap: 7px;
+    padding: 5px 9px;
+  }
+  .main-view-filters .filter-tile-copy small {
+    font-size: 9px;
+  }
+  .main-view-filters .eq-section {
+    padding-top: 0;
+  }
+  .main-view-filters .eq-grid {
+    height: clamp(224px, 32vh, 286px);
+    margin-top: 5px;
+    padding: 7px 4px 6px;
+  }
+  .main-view-filters .eq-band {
+    grid-template-rows: 16px minmax(0, 1fr) 16px;
+    gap: 5px;
+  }
+  .main-view-filters .sound-mode-actions {
+    gap: 3px;
+    padding: 2px;
+  }
+  .main-view-filters .sound-mode-actions button {
+    min-height: 29px;
+    padding-inline: 9px;
+  }
+}

@@ -46,6 +46,28 @@ import { createMockState, createEmptyState, mockSearchResults } from "./mockStat
 
 const BAND_LABELS = ["60", "120", "250", "500", "1k", "2k", "4k", "8k", "16k", "31k", "63k", "125k", "250k", "500k", "1m"];
 const SOURCE_NAMES = ["auto", "youtube", "soundcloud", "deezer", "spotify"];
+const FILTER_PRESET_META = Object.freeze({
+  nightcore: { label: "Nightcore", description: "Faster, brighter, and slightly higher pitch" },
+  vaporwave: { label: "Vaporwave", description: "Slow, dreamy, and lower-pitched" },
+  chipmunk: { label: "Chipmunk", description: "High-pitched meme mode" },
+  deepvoice: { label: "Deep Voice", description: "Lower pitch for a darker voice" },
+  eightd: { label: "8D", description: "Slow stereo rotation for an 8D effect" },
+  karaoke: { label: "Karaoke", description: "Reduces center-panned vocals" },
+  wobble: { label: "Wobble", description: "Adds a playful tremolo wobble" },
+  vibrato: { label: "Vibrato", description: "Adds a noticeable vocal vibrato" },
+  robot: { label: "Robot", description: "Crunchy robotic distortion" },
+  telephone: { label: "Telephone", description: "Narrow, filtered telephone sound" },
+  mono: { label: "Mono", description: "Folds stereo into a centered mono mix" },
+  surround: { label: "Surround", description: "Gentle rotating surround feel" },
+  meme: { label: "Meme", description: "Fast pitch plus wobble for cursed moments" },
+});
+
+function getFilterPresetMeta(preset) {
+  const key = String(preset || "").toLowerCase();
+  if (FILTER_PRESET_META[key]) return FILTER_PRESET_META[key];
+  const label = key.replace(/[-_]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+  return { label: label || "Effect", description: "Applies a live sound effect" };
+}
 // Mock preview is a dev-only affordance: production builds never render mock
 // data or search results, even if someone appends ?mock=1 to the URL.
 const MOCK_PREVIEW = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("mock");
@@ -941,7 +963,7 @@ function FiltersPanel({ filters, filterPresets, equalizerPresets = [], onAction,
   };
   return (
     <div className="filters-panel">
-      {activeSection === "effects" ? <div className="filter-section"><div className="filter-label-row"><div><strong>Fun filters</strong><span>One-click Lavalink effects</span></div><button className="ghost-button" type="button" onClick={() => onAction("filter", { preset: "off" })} disabled={isActionPending("filter")}>{isActionPending("filter") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : null}Reset</button></div><div className="filter-grid">{(filterPresets || []).map((preset) => <button type="button" key={preset} className={`filter-tile ${filters.effectPreset === preset ? "is-selected" : ""}`} onClick={() => onAction("filter", { preset })} disabled={isActionPending("filter")}>{isActionPending("filter") && filters.effectPreset === preset ? <SpinnerGap className="button-spinner" size={17} aria-hidden="true" /> : <Faders size={17} aria-hidden="true" />}<span>{preset}</span>{filters.effectPreset === preset ? <Check size={15} weight="bold" aria-hidden="true" /> : null}</button>)}</div></div> : null}
+      {activeSection === "effects" ? <div className="filter-section"><div className="filter-label-row"><div><strong>Fun Filters</strong><span>One-click Lavalink effects</span></div><button className="ghost-button" type="button" onClick={() => onAction("filter", { preset: "off" })} disabled={isActionPending("filter")}>{isActionPending("filter") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : null}Reset</button></div><div className="filter-grid">{(filterPresets || []).map((preset) => { const meta = getFilterPresetMeta(preset); return <button type="button" key={preset} className={`filter-tile ${filters.effectPreset === preset ? "is-selected" : ""}`} onClick={() => onAction("filter", { preset })} disabled={isActionPending("filter")}><span className="filter-tile-icon">{isActionPending("filter") && filters.effectPreset === preset ? <SpinnerGap className="button-spinner" size={17} aria-hidden="true" /> : <Faders size={17} aria-hidden="true" />}</span><span className="filter-tile-copy"><strong>{meta.label}</strong><small>{meta.description}</small></span>{filters.effectPreset === preset ? <Check size={15} weight="bold" aria-hidden="true" /> : null}</button>; })}</div></div> : null}
       {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><div className="eq-actions"><label className="eq-preset-control"><span>Preset</span><select value={filters.preset === "custom" ? "custom" : filters.preset || "flat"} onChange={(event) => { if (event.target.value !== "custom") onAction("equalizer_preset", { preset: event.target.value }); }} disabled={isActionPending("equalizer_preset")} aria-label="Equalizer preset"><option value="custom" disabled>Custom curve</option>{equalizerPresets.map((preset) => <option value={preset.name} key={`${preset.custom ? "custom" : "built-in"}-${preset.name}`}>{preset.name}{preset.custom ? " • custom" : ""}</option>)}</select></label><button className="ghost-button" type="button" onClick={resetBands} disabled={isActionPending("equalizer")}>{isActionPending("equalizer") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : null}Flat</button></div></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><span className="eq-band-label">{BAND_LABELS[index]}</span><span className="eq-slider-control"><input type="range" min="-0.25" max="0.2" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band, ${formatEqGain(gain)} gain`} onPointerDown={() => { isAdjustingRef.current = true; }} onPointerCancel={commitBands} onChange={(event) => updateBand(index, event.target.value)} onPointerUp={commitBands} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") isAdjustingRef.current = true; }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /></span><span className="eq-band-value">{formatEqGain(gain)}</span></label>)}</div></div> : null}
     </div>
   );
