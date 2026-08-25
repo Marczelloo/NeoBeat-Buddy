@@ -546,12 +546,19 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, {
   pendingManualTracks = [],
   allowWhenAutoplayDisabled = false,
   selectionIntent = null,
+  mode = "normal",
 } = {}) {
   if (!referenceTrack?.info) return null;
   if (!allowWhenAutoplayDisabled && !getGuildState(guildId)?.autoplay) return null;
 
-  const anchorTrack = await enrichAnchorGenres(getAnchorTrack(guildId, referenceTrack));
-  await enrichManualAnchorTracks(pendingManualTracks, guildId);
+  const startedAt = Date.now();
+  const surpriseMode = mode === "surprise";
+  // Surprise Me should answer from cached knowledge and a compact live pool,
+  // not wait for the full prefetch enrichment pipeline.
+  const anchorTrack = surpriseMode
+    ? getAnchorTrack(guildId, referenceTrack)
+    : await enrichAnchorGenres(getAnchorTrack(guildId, referenceTrack));
+  if (!surpriseMode) await enrichManualAnchorTracks(pendingManualTracks, guildId);
 
   const profile = buildSessionProfile(guildId, referenceTrack, { pendingManualTracks });
   profile.autoplayExposure = await getAutoplayExposureSnapshot(guildId);
@@ -563,7 +570,11 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, {
   context.selectionIntent = selectionIntent;
   const reference = getAutoplayReference(referenceTrack);
   const candidates = await collectCandidates(referenceTrack, guildId, profile, reference, {
-    sources: ["sameAlbum", "deezer", "lastfm", "youtubeMix"],
+    sources: surpriseMode
+      ? ["deezer", "youtubeMix", "deezerChart"]
+      : ["sameAlbum", "deezer", "lastfm", "youtubeMix"],
+    enrichLastFmTags: !surpriseMode,
+    enrichDeezerMetadata: surpriseMode ? false : undefined,
   });
   profile.verifiedCatalogCandidates = candidates;
 
@@ -597,6 +608,8 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, {
     "Autoplay V3 selection",
     "",
     `guild=${guildId}`,
+    `mode=${mode}`,
+    `elapsedMs=${Date.now() - startedAt}`,
     `anchor=${anchorTrack.info?.author || "Unknown"} - ${anchorTrack.info?.title || "Unknown"}`,
     `reference=${referenceTrack.info?.author || "Unknown"} - ${referenceTrack.info?.title || "Unknown"}`,
     `candidates=${candidates.length}`,

@@ -1,21 +1,21 @@
 const INTENTS = Object.freeze({
   flow: {
-    weight: 34,
+    weight: 20,
     goal: "Continue the room's current musical flow with a fresh, natural next track.",
     preferredLanes: ["continuation", "bridge"],
   },
   familiar: {
-    weight: 28,
+    weight: 16,
     goal: "Use the listener's recurring artists, liked tracks, and recent choices without replaying them directly.",
     preferredLanes: ["continuation", "bridge"],
   },
   popular: {
-    weight: 22,
-    goal: "Choose a strong, broadly proven recording that still fits this listener and room.",
+    weight: 42,
+    goal: "Choose a currently popular recording when it clearly fits this listener and the room's active mood.",
     preferredLanes: ["bridge", "continuation"],
   },
   discovery: {
-    weight: 16,
+    weight: 22,
     goal: "Find a less obvious hidden gem that clearly belongs beside the listener's taste anchor.",
     preferredLanes: ["explore", "bridge"],
   },

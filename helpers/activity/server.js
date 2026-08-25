@@ -323,9 +323,6 @@ function withAutoplayRequesterLabel(track, client) {
   if (!track || !(track.userData?.autoplay || track.info?.autoplayed)) return track;
 
   const info = track.info || {};
-  const existingTag = String(info.requesterTag || "").trim();
-  if (existingTag && !/^\d{17,20}$/.test(existingTag)) return track;
-
   const botUsername = client?.user?.username || "MewBit";
   return { ...track, info: { ...info, requesterTag: botUsername } };
 }
@@ -580,7 +577,7 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       // A single obscure/current recording can legitimately have no usable
       // catalogue. Surprise me should then pivot to another recent, liked, or
       // frequently played taste anchor instead of reporting a false dead end.
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
         const candidateSelection = selectSurpriseSeed(surpriseTaste, { memoryKey: surpriseMemoryKey });
         if (!candidateSelection || attemptedSeeds.has(candidateSelection.seedKey)) break;
         attemptedSeeds.add(candidateSelection.seedKey);
@@ -590,6 +587,7 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
           pendingManualTracks: Array.from(player?.queue || []).slice(0, 4),
           allowWhenAutoplayDisabled: true,
           selectionIntent: selection.intent,
+          mode: "surprise",
         });
         if (recommendation) break;
 
@@ -1043,6 +1041,7 @@ module.exports = {
   buildActivityState,
   getActivityPosition,
   resolveActivityPlayback,
+  withAutoplayRequesterLabel,
   isAllowedArtworkUrl,
   runActivityAction,
   searchActivityTracks,

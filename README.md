@@ -42,6 +42,7 @@ MewBit is a Discord music bot with a shared listening **Discord Activity**. It u
 - Uses direct YouTube Mix candidates only as a constrained, score-gated fallback for tracks with insufficient metadata (for example niche or meme uploads), rather than broad unrelated search.
 - Excludes album skits, interludes, short intros/outros, transitions, and streams from autoplay candidates while still allowing a user to play them manually.
 - Places manually queued tracks ahead of autoplay tracks; a manually added track goes after other manual items and before the autoplay tail.
+- **Surprise Me** is intentionally lighter than a full autoplay prefetch: it uses the listener's room/history/likes, a compact mix and recommendation pool, plus a cached global-trending discovery pool. The AI DJ may choose a current chart track only when it also fits the active mood and energy.
 - Optional AI DJ mode is the primary music director. It uses fast `gpt-5.6-luna` with the first user-selected track as a durable anchor, a longer memory of user-picked tracks, recurring artists and albums, the current track, the autoplay trail, the pending manual queue, and a compact catalog of already provider-verified candidates. It prefers that playable catalog but may discover two additional recordings. Open proposals resolve through YouTube/YouTube Music, Deezer, SoundCloud, then Spotify; every resolved result is rechecked for mirror, version, skip, album, artist, and repeat safety before it can be queued. V3 remains a constrained fallback only when the AI plan is unavailable, invalid, low confidence, or cannot be resolved.
 
 ### Discord Activity
@@ -207,6 +208,7 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_TRANSITION_QUALITY_GUARD_AFTER` | `2` | Autoplay streak after which low-quality transitions are deferred. |
 | `AUTOPLAY_DEEZER_METADATA_LIMIT` | `18` | Maximum candidates enriched with Deezer metadata during one autoplay cycle. |
 | `AUTOPLAY_DEEZER_METADATA_CACHE_TTL_MS` | `604800000` | In-memory cache lifetime for Deezer catalog metadata (7 days). |
+| `SURPRISE_ME_TRENDING_CACHE_TTL_MS` | `900000` | In-memory lifetime for the free Deezer global-chart candidate pool used only by Surprise Me (15 minutes). |
 | `AUTOPLAY_METADATA_TIMEOUT_MS` | `3500` | Timeout for non-critical metadata requests; playback continues if the lookup fails. |
 | `AUTOPLAY_RESOLVE_TIMEOUT_MS` | `12000` | Per-provider timeout while resolving an autoplay or fallback track. |
 | `AUTOPLAY_COMMUNITY_METADATA` | `true` | Uses one bounded metadata aggregator for active/manual autoplay anchors. It prefers Last.fm track tags, verifies sparse recordings with MusicBrainz, then uses TheAudioDB only when genre/mood information is still missing. |

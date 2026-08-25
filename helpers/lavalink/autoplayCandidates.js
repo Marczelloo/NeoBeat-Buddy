@@ -3,6 +3,7 @@ const { getExposureKey, getExposureRecord } = require("./autoplayExposure");
 const {
   enrichCandidateWithAutoplayMetadata,
   enrichCandidatesWithDeezerMetadata,
+  getDeezerChartTracks,
   getDeezerAlbumTracks,
 } = require("./autoplayMetadata");
 const { AUTOPLAY_RESOLVE_TIMEOUT_MS } = require("./constants");
@@ -424,6 +425,23 @@ async function fetchDeezerCandidates(guildId, cleanTitle, searchArtist) {
   return candidates;
 }
 
+async function fetchDeezerChartCandidates(guildId, { limit = 18 } = {}) {
+  const chartTracks = await getDeezerChartTracks(limit);
+  const candidates = chartTracks
+    .filter((track) => Number(track.duration) >= 55_000)
+    .map((track) => ({
+      ...track,
+      source: "deezer_chart",
+      genres: [],
+      releaseYear: null,
+      features: null,
+      metadataConfidence: 0.25,
+      metadataProvider: "deezer-chart",
+    }));
+  Log.info("Deezer trending candidates collected", "", `guild=${guildId}`, `count=${candidates.length}`);
+  return candidates;
+}
+
 async function fetchSameAlbumCandidates(guildId, referenceTrack, reference) {
   const referenceCandidate = {
     artist: reference.searchArtist,
@@ -668,7 +686,11 @@ async function fetchYouTubeMixCandidates(identifier, guildId) {
  * @param {Object} options - Optional source subset selection
  * @returns {Promise<Array>} Array of candidate tracks
  */
-async function collectCandidates(referenceTrack, guildId, profile, reference, { sources = null } = {}) {
+async function collectCandidates(referenceTrack, guildId, profile, reference, {
+  sources = null,
+  enrichLastFmTags = true,
+  enrichDeezerMetadata = USE_DEEZER_METADATA,
+} = {}) {
   const { identifier } = referenceTrack.info;
   const { cleanTitle, searchArtist } = reference;
 
@@ -677,6 +699,7 @@ async function collectCandidates(referenceTrack, guildId, profile, reference, { 
     ["deezer", () => fetchDeezerCandidates(guildId, cleanTitle, searchArtist)],
     ["lastfm", () => fetchLastFmCandidates(reference, guildId, profile.autoplayExposure)],
     ["youtubeMix", () => fetchYouTubeMixCandidates(identifier, guildId)],
+    ["deezerChart", () => fetchDeezerChartCandidates(guildId)],
   ];
 
   const selectedSources = Array.isArray(sources)
@@ -684,8 +707,9 @@ async function collectCandidates(referenceTrack, guildId, profile, reference, { 
     : candidateSources;
   const sourceResults = await Promise.allSettled(selectedSources.map(([, load]) => load()));
   const allCandidates = sourceResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
-  const deduplicatedCandidates = await enrichCandidatesWithLastFmTags(mergeCandidates(allCandidates), guildId);
-  if (USE_DEEZER_METADATA) {
+  const deduplicatedCandidates = mergeCandidates(allCandidates);
+  if (enrichLastFmTags) await enrichCandidatesWithLastFmTags(deduplicatedCandidates, guildId);
+  if (enrichDeezerMetadata) {
     await enrichCandidatesWithDeezerMetadata(deduplicatedCandidates, AUTOPLAY_DEEZER_METADATA_LIMIT);
   }
 
@@ -842,6 +866,7 @@ module.exports = {
   enrichCandidatesWithLastFmTags,
   enrichManualAnchorTracks,
   fetchDeezerCandidates,
+  fetchDeezerChartCandidates,
   fetchLastFmCandidates,
   fetchSameAlbumCandidates,
   fetchYouTubeMixCandidates,

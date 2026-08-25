@@ -1,7 +1,9 @@
 const assert = require("node:assert");
-const { describe, it } = require("node:test");
+const { afterEach, describe, it } = require("node:test");
 
 const {
+  clearAutoplayMetadataCache,
+  getDeezerChartTracks,
   getFeatureCoverage,
   getTempoDistance,
   mergeAudioMetadata,
@@ -9,6 +11,8 @@ const {
   normalizeDeezerMetadata,
 } = require("../../../helpers/lavalink/autoplayMetadata");
 const { normalizeReleaseYear } = require("../../../helpers/lavalink/metadataValidation");
+
+const originalFetch = global.fetch;
 
 function candidate(title, artist, identifier, options = {}) {
   return {
@@ -23,6 +27,11 @@ function candidate(title, artist, identifier, options = {}) {
 }
 
 describe("Autoplay metadata without Spotify audio features", () => {
+  afterEach(() => {
+    global.fetch = originalFetch;
+    clearAutoplayMetadataCache();
+  });
+
   it("derives low-confidence mood hints without pretending they are measured audio features", () => {
     const hints = deriveCatalogFeatureHints(
       candidate("Summer Dance", "Artist", "id", {
@@ -86,5 +95,43 @@ describe("Autoplay metadata without Spotify audio features", () => {
     assert.strictEqual(normalizeReleaseYear("1735-01-01", fixedNow), null);
     assert.strictEqual(normalizeReleaseYear("2024-05-10", fixedNow), 2024);
     assert.strictEqual(normalizeReleaseYear(2028, fixedNow), null);
+  });
+
+  it("normalizes and caches fresh Deezer chart tracks for Surprise Me", async () => {
+    let requests = 0;
+    global.fetch = async () => {
+      requests += 1;
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{
+            id: 42,
+            title: "Fresh Signal",
+            duration: 183,
+            rank: 850000,
+            artist: { id: 9, name: "Neon Artist" },
+            album: { id: 7, title: "Tonight", cover_xl: "https://cdn.example.test/cover.jpg" },
+          }],
+        }),
+      };
+    };
+
+    const first = await getDeezerChartTracks(1);
+    const second = await getDeezerChartTracks(1);
+
+    assert.strictEqual(requests, 1);
+    assert.deepStrictEqual(first[0], {
+      deezerId: "42",
+      artist: "Neon Artist",
+      artistId: "9",
+      title: "Fresh Signal",
+      duration: 183000,
+      albumId: "7",
+      albumTitle: "Tonight",
+      artworkUrl: "https://cdn.example.test/cover.jpg",
+      catalogRank: 850000,
+      popularity: 85,
+    });
+    assert.deepStrictEqual(second, first);
   });
 });

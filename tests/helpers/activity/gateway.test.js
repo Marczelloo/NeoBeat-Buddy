@@ -8,6 +8,7 @@ const {
   resolveActivityPlayback,
   serializeActivityActionResult,
   stringifyJson,
+  withAutoplayRequesterLabel,
 } = require("../../../helpers/activity/server");
 const { getActivityStateRevision, markActivityStateChanged, resetActivityStateRevision } = require("../../../helpers/activity/sync");
 
@@ -79,6 +80,15 @@ test("Activity progress follows the event-backed position anchor across view rem
   assert.equal(getActivityPosition(player, state, 180_000, now), 49_000);
   assert.equal(getActivityPosition({ position: 0, isPaused: true }, state, 180_000, now), 46_000);
   assert.equal(getActivityPosition(player, state, 48_000, now), 48_000);
+});
+
+test("Activity always labels autoplay rows as MewBit even when a provider preserved a user requester", () => {
+  const track = withAutoplayRequesterLabel({
+    info: { title: "Queued by autoplay", requesterTag: "marczelloo#0001", autoplayed: true },
+    userData: { autoplay: true },
+  }, { user: { username: "MewBit" } });
+
+  assert.equal(track.info.requesterTag, "MewBit");
 });
 
 function waitForListening(server) {

@@ -6,11 +6,16 @@ const { getBaseTitle, normalizeComparableText } = require("./trackNormalization"
 
 const metadataCache = new Map();
 const albumTracksCache = new Map();
+const chartTracksCache = new Map();
 const METADATA_CACHE_TTL_MS = Math.max(
   Number(process.env.AUTOPLAY_DEEZER_METADATA_CACHE_TTL_MS) || 7 * 24 * 60 * 60 * 1000,
   60 * 60 * 1000
 );
 const REQUEST_TIMEOUT_MS = Math.max(Number(process.env.AUTOPLAY_METADATA_TIMEOUT_MS) || 3500, 500);
+const DEEZER_CHART_CACHE_TTL_MS = Math.max(
+  Number(process.env.SURPRISE_ME_TRENDING_CACHE_TTL_MS) || 15 * 60 * 1000,
+  60 * 1000
+);
 
 function isFinitePositive(value) {
   return Number.isFinite(Number(value)) && Number(value) > 0;
@@ -144,6 +149,41 @@ async function getDeezerAlbumTracks(candidate, limit = 12) {
 
   albumTracksCache.set(metadata.albumId, { timestamp: Date.now(), tracks });
   return { metadata, tracks: sortAlbumTracksForReference(tracks, metadata).slice(0, limit) };
+}
+
+/**
+ * A cached slice of Deezer's public global chart. Surprise Me uses this only
+ * as a fresh discovery pool; the AI DJ still has to make a song fit the room.
+ */
+async function getDeezerChartTracks(limit = 18) {
+  const cacheKey = "global";
+  const cached = chartTracksCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < DEEZER_CHART_CACHE_TTL_MS) {
+    return cached.tracks.slice(0, limit).map((track) => ({ ...track }));
+  }
+
+  try {
+    const payload = await fetchJson("https://api.deezer.com/chart/0/tracks?limit=50");
+    const tracks = (Array.isArray(payload?.data) ? payload.data : [])
+      .filter((track) => track?.id && track?.title && track?.artist?.name)
+      .map((track) => ({
+        deezerId: String(track.id),
+        artist: String(track.artist.name).trim(),
+        artistId: track.artist.id ? String(track.artist.id) : null,
+        title: String(track.title).trim(),
+        duration: Number.isFinite(Number(track.duration)) ? Number(track.duration) * 1000 : null,
+        albumId: track.album?.id ? String(track.album.id) : null,
+        albumTitle: String(track.album?.title || "").trim() || null,
+        artworkUrl: track.album?.cover_xl || track.album?.cover_big || track.album?.cover_medium || null,
+        catalogRank: Number.isFinite(Number(track.rank)) ? Number(track.rank) : null,
+        popularity: Number.isFinite(Number(track.rank)) ? Math.min(100, Math.max(0, Math.round(Number(track.rank) / 10_000))) : 0,
+      }));
+    chartTracksCache.set(cacheKey, { timestamp: Date.now(), tracks });
+    return tracks.slice(0, limit).map((track) => ({ ...track }));
+  } catch (error) {
+    Log.debug("Deezer trending chart lookup failed", error.name === "AbortError" ? "timeout" : error.message);
+    return cached?.tracks?.slice(0, limit).map((track) => ({ ...track })) || [];
+  }
 }
 
 function sortAlbumTracksForReference(tracks, metadata) {
@@ -341,6 +381,7 @@ function getTempoDistance(left, right) {
 function clearAutoplayMetadataCache() {
   metadataCache.clear();
   albumTracksCache.clear();
+  chartTracksCache.clear();
 }
 
 module.exports = {
@@ -350,6 +391,7 @@ module.exports = {
   enrichCandidatesWithDeezerMetadata,
   getDeezerMetadata,
   getDeezerAlbumTracks,
+  getDeezerChartTracks,
   deriveCatalogFeatureHints,
   getFeatureCoverage,
   getTempoDistance,

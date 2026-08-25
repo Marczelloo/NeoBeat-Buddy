@@ -36,6 +36,8 @@ Return 3 to maximumProposals specific, real recordings in deliberate priority or
 - "bridge": a different artist that preserves the energy, mood, scene, and cultural context.
 Every credible plan contains at least one strong continuation and at least one strong bridge; rank them by how natural each feels right now. Add at most one "explore" pick, normally only late in a session and only for a well-motivated deliberate shift. A direct surprise request may explicitly invite an explore pick earlier, but it must still be traceably connected to the supplied taste anchor. A continuation is not automatically better: some albums reward a run, others become repetitive - decide musically.
 
+SURPRISE ME: when selectionIntent.mode is "popular", verifiedCatalog may include a small live chart pool marked source "deezer_chart". Treat that as a freshness bonus only: choose a charting recording when its fit is close to the best transition, never force a chart hit that breaks the room's energy or mood.
+
 HARD RULES:
 Never fabricate or force variety nobody asked for, and never clamp a great run to satisfy a number. Leaving an artist does not ban returning later. Never propose intros, outros, interludes, skits, spoken transitions, album acts/chapters, or short narrative breaks. No remixes, covers, live cuts, sped-up/slowed versions, karaoke, or duplicate recordings unless the current lane explicitly is that style. Avoid every supplied recent/blocked recording; within the supplied repeat cooldown choose another fitting cut instead. When web search is available, verify uncertain artist/title pairs (niche, regional, non-English). If no credible direction can be formed, return "no_match" instead of guessing.
 
