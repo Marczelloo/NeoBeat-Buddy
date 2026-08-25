@@ -57,7 +57,7 @@ export function sendActivityAction({ guildId, accessToken, action, payload }) {
       // Surprise me intentionally runs the full AI-first recommendation and
       // verification path. It can outlast a regular control request while
       // still succeeding, so do not report a false failure after 12 seconds.
-      timeoutMs: action === "surprise_me" ? 45_000 : 12_000,
+      timeoutMs: action === "surprise_me" ? 75_000 : 12_000,
     },
     accessToken
   );
@@ -66,6 +66,7 @@ export function sendActivityAction({ guildId, accessToken, action, payload }) {
 export function connectActivitySocket({ guildId, accessToken, onState, onReady, onError }) {
   let socket = null;
   let reconnectTimer = null;
+  let heartbeatTimer = null;
   let stopped = false;
   let retryCount = 0;
 
@@ -75,6 +76,10 @@ export function connectActivitySocket({ guildId, accessToken, onState, onReady, 
     socket.addEventListener("open", () => {
       retryCount = 0;
       socket.send(JSON.stringify({ type: "auth", guildId, token: accessToken }));
+      window.clearInterval(heartbeatTimer);
+      heartbeatTimer = window.setInterval(() => {
+        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "heartbeat" }));
+      }, 20_000);
     });
     socket.addEventListener("message", (event) => {
       try {
@@ -87,6 +92,8 @@ export function connectActivitySocket({ guildId, accessToken, onState, onReady, 
       }
     });
     socket.addEventListener("close", () => {
+      window.clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
       if (stopped) return;
       const baseDelay = Math.min(5000, 600 * (2 ** Math.min(retryCount, 3)));
       const delay = Math.round(baseDelay * (0.75 + Math.random() * 0.5));
@@ -101,6 +108,7 @@ export function connectActivitySocket({ guildId, accessToken, onState, onReady, 
   return () => {
     stopped = true;
     window.clearTimeout(reconnectTimer);
+    window.clearInterval(heartbeatTimer);
     socket?.close();
   };
 }

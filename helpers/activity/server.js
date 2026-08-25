@@ -32,7 +32,7 @@ const {
 } = require("../lavalink/index");
 const { getUserVolume } = require("../lavalink/loudness");
 const { fetchLyrics } = require("../lavalink/lyricsClient");
-const { getInterpolatedPosition, stopLyricsSession } = require("../lavalink/lyricsFormatter");
+const { stopLyricsSession } = require("../lavalink/lyricsFormatter");
 const { getPoru } = require("../lavalink/players");
 const { markManualTrack, moveQueueTrackWithinOrigin, normalizeQueueAutoplayPartition } = require("../lavalink/queueOrdering");
 const { searchAcrossSources, searchSingleSource } = require("../lavalink/searchAggregator");
@@ -428,8 +428,8 @@ function buildActivityState(client, guildId, userId) {
   // A track enters playbackState only on Lavalink TrackStart. Using that
   // event-backed state avoids displaying Poru's transient queued/cleared
   // currentTrack during an error or queue transition.
-  const playing = Boolean(livePlaybackState?.currentTrack && !paused && player?.isPlaying !== false);
-  const position = playback.usesPlayerTrack ? getInterpolatedPosition(player, Date.now(), 0) : 0;
+  const playing = Boolean(playback.track && !paused && (livePlaybackState?.currentTrack || player?.isPlaying));
+  const position = getActivityPosition(player, livePlaybackState, playback.durationMs, Date.now());
   const botStatus = client?.user?.presence?.activities?.find((activity) => activity.type === 2)?.name || null;
 
   const generatedAt = Date.now();
@@ -474,13 +474,21 @@ function resolveActivityPlayback(stateTrack, playerTrack) {
   // behind even though the audio had already changed.
   const track = stateTrack || playerTrack || null;
   const usesPlayerTrack = !stateTrack && Boolean(playerTrack);
-  const playerDuration = Number(playerTrack?.info?.length) || 0;
-
   return {
     track,
     usesPlayerTrack,
-    durationMs: usesPlayerTrack ? playerDuration : Number(track?.info?.length) || 0,
+    durationMs: Number(track?.info?.length) || 0,
   };
+}
+
+function getActivityPosition(player, state, durationMs, now = Date.now()) {
+  const anchoredPosition = Number(state?.lastPosition ?? player?.position ?? 0) || 0;
+  const anchoredAt = Number(state?.lastTimestamp) || now;
+  const estimated = state?.paused || player?.isPaused
+    ? anchoredPosition
+    : anchoredPosition + Math.max(0, now - anchoredAt);
+  const duration = Number(durationMs) || Number.MAX_SAFE_INTEGER;
+  return Math.max(0, Math.min(estimated, duration));
 }
 
 function limitText(value, max = 200) {
@@ -557,23 +565,46 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       if (!textId) throw Object.assign(new Error("Set the player channel first with /setup player channel."), { statusCode: 400 });
 
       const liveState = playbackState.get(guildId) || {};
-      const selection = selectSurpriseSeed({
+      const surpriseTaste = {
         currentTrack: liveState.currentTrack || player?.currentTrack || null,
         roomHistory: liveState.history || [],
         userHistory: getHistory(identity.id, null, 50),
         likedTracks: playlistStore.getLikedSongs(identity.id)?.tracks || [],
         topTracks: statsStore.getTopTracks(identity.id, 25),
-      }, { memoryKey: `${guildId}:${identity.id}` });
+      };
+      const surpriseMemoryKey = `${guildId}:${identity.id}`;
+      let selection = null;
+      let recommendation = null;
+      const attemptedSeeds = new Set();
+
+      // A single obscure/current recording can legitimately have no usable
+      // catalogue. Surprise me should then pivot to another recent, liked, or
+      // frequently played taste anchor instead of reporting a false dead end.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const candidateSelection = selectSurpriseSeed(surpriseTaste, { memoryKey: surpriseMemoryKey });
+        if (!candidateSelection || attemptedSeeds.has(candidateSelection.seedKey)) break;
+        attemptedSeeds.add(candidateSelection.seedKey);
+        selection = candidateSelection;
+
+        recommendation = await fetchAutoplayV3Track(selection.seed, guildId, {
+          pendingManualTracks: Array.from(player?.queue || []).slice(0, 4),
+          allowWhenAutoplayDisabled: true,
+          selectionIntent: selection.intent,
+        });
+        if (recommendation) break;
+
+        Log.info(
+          "Surprise me retrying with another taste anchor",
+          "",
+          `guild=${guildId}`,
+          `attempt=${attempt + 1}`,
+          `seed=${selection.seed.info?.author || "Unknown"} - ${selection.seed.info?.title || "Unknown"}`
+        );
+      }
 
       if (!selection) {
         throw Object.assign(new Error("MewBit needs one taste signal first. Play or like a track, then try Surprise me again."), { statusCode: 400 });
       }
-
-      const recommendation = await fetchAutoplayV3Track(selection.seed, guildId, {
-        pendingManualTracks: Array.from(player?.queue || []).slice(0, 4),
-        allowWhenAutoplayDisabled: true,
-        selectionIntent: selection.intent,
-      });
       if (!recommendation) {
         throw Object.assign(new Error("MewBit could not find a verified surprise right now. Try again in a moment."), { statusCode: 503 });
       }
@@ -949,6 +980,9 @@ function createActivityServer(client) {
           return;
         }
         if (!socket.authorized) return sendSocket(socket, { type: "error", error: "Authenticate the Activity socket first." });
+        if (message.type === "heartbeat") {
+          return sendSocket(socket, { type: "heartbeat", time: Date.now() });
+        }
         if (message.type === "action") {
           const actionLimit = consumeRateLimit(`ws-action:${socket.identity.id}`, { limit: 120, windowMs: 60_000 });
           if (!actionLimit.allowed) throw Object.assign(new Error("Too many actions. Try again shortly."), { statusCode: 429 });
@@ -1007,6 +1041,7 @@ function createActivityServer(client) {
 module.exports = {
   createActivityServer,
   buildActivityState,
+  getActivityPosition,
   resolveActivityPlayback,
   isAllowedArtworkUrl,
   runActivityAction,

@@ -1,7 +1,14 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { WebSocket } = require("ws");
-const { createActivityServer, isAllowedArtworkUrl, resolveActivityPlayback, serializeActivityActionResult, stringifyJson } = require("../../../helpers/activity/server");
+const {
+  createActivityServer,
+  getActivityPosition,
+  isAllowedArtworkUrl,
+  resolveActivityPlayback,
+  serializeActivityActionResult,
+  stringifyJson,
+} = require("../../../helpers/activity/server");
 const { getActivityStateRevision, markActivityStateChanged, resetActivityStateRevision } = require("../../../helpers/activity/sync");
 
 test("Activity state revisions only move forward for a guild", () => {
@@ -62,6 +69,16 @@ test("Activity uses the event-backed state track during a transient player trans
   assert.equal(playback.track, staleTrack);
   assert.equal(playback.durationMs, 120000);
   assert.equal(playback.usesPlayerTrack, false);
+});
+
+test("Activity progress follows the event-backed position anchor across view remounts", () => {
+  const now = 1_000_000;
+  const state = { lastPosition: 46_000, lastTimestamp: now - 3_000, paused: false };
+  const player = { position: 0, isPaused: false };
+
+  assert.equal(getActivityPosition(player, state, 180_000, now), 49_000);
+  assert.equal(getActivityPosition({ position: 0, isPaused: true }, state, 180_000, now), 46_000);
+  assert.equal(getActivityPosition(player, state, 48_000, now), 48_000);
 });
 
 function waitForListening(server) {

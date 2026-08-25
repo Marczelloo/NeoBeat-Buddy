@@ -1451,6 +1451,8 @@ function App() {
 
   useEffect(() => {
     let stopSocket = null;
+    let reconcileTimer = null;
+    let reconciliationInFlight = false;
     let alive = true;
 
     setupDiscord()
@@ -1488,6 +1490,27 @@ function App() {
           onReady: () => { if (alive) setConnection({ status: "live", message: "Realtime gateway connected" }); },
           onError: (error) => { if (alive && nextContext.mode === "discord") setConnection({ status: "preview", message: error.message }); },
         });
+
+        // WebSocket events are the fast path. This small reconciliation loop
+        // deliberately makes the player resilient to an iframe/proxy socket
+        // that remains open but stops delivering messages while the Activity
+        // is hidden or a panel is remounted.
+        reconcileTimer = window.setInterval(async () => {
+          if (!alive || reconciliationInFlight) return;
+          reconciliationInFlight = true;
+          try {
+            const response = await fetchActivityState(nextContext);
+            if (alive && response.state) {
+              applyState(response.state);
+              setConnection({ status: "live", message: "Realtime gateway connected" });
+            }
+          } catch {
+            // The socket can still be healthy; avoid turning a transient
+            // reconciliation failure into a noisy user-facing error.
+          } finally {
+            reconciliationInFlight = false;
+          }
+        }, 2_000);
       })
       .catch((error) => {
         if (alive) {
@@ -1497,7 +1520,12 @@ function App() {
         }
       });
 
-    return () => { alive = false; stopSocket?.(); window.clearTimeout(hydrationTimer.current); };
+    return () => {
+      alive = false;
+      stopSocket?.();
+      window.clearInterval(reconcileTimer);
+      window.clearTimeout(hydrationTimer.current);
+    };
   }, [applyState, finishHydration, showToast]);
 
   const updateActionPending = useCallback((key, change) => {
