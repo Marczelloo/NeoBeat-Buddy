@@ -46,18 +46,31 @@ describe("Surprise me selector", () => {
     assert.equal(selectSurpriseSeed({}, { memoryKey: "empty" }), null);
   });
 
-  test("uses fresh, chart-biased choices for an empty-room freestyle without replaying the last pick", () => {
+  test("keeps empty-room freestyle inside a fresh, high-quality chart window", () => {
     const candidates = [
       { artist: "Chart One", title: "Top Signal", chartPosition: 1, popularity: 100 },
       { artist: "Chart Two", title: "Fresh Signal", chartPosition: 2, popularity: 96 },
       { artist: "Chart Three", title: "Third Signal", chartPosition: 3, popularity: 92 },
+      { artist: "Chart Four", title: "Low Signal", chartPosition: 20, popularity: 88 },
     ];
     const memoryKey = "freestyle";
-    const first = selectFreestyleCandidates(candidates, { memoryKey, count: 1, random: () => 0 })[0];
+    const first = selectFreestyleCandidates(candidates.map((candidate) => ({ ...candidate, duration: 180_000 })), { memoryKey, count: 1, random: () => 0 })[0];
     rememberFreestyleCandidate(first, memoryKey);
-    const second = selectFreestyleCandidates(candidates, { memoryKey, count: 1, random: () => 0 })[0];
+    const second = selectFreestyleCandidates(candidates.map((candidate) => ({ ...candidate, duration: 180_000 })), { memoryKey, count: 1, random: () => 0 })[0];
 
     assert.equal(first.title, "Top Signal");
     assert.notEqual(second.title, first.title);
+    assert.notEqual(second.title, "Low Signal");
+  });
+
+  test("uses distinct artists in a freestyle fallback shortlist when possible", () => {
+    const selected = selectFreestyleCandidates([
+      { artist: "Artist A", title: "One", chartPosition: 1, popularity: 100, duration: 180_000 },
+      { artist: "Artist A", title: "Two", chartPosition: 2, popularity: 99, duration: 180_000 },
+      { artist: "Artist B", title: "Three", chartPosition: 3, popularity: 98, duration: 180_000 },
+      { artist: "Artist C", title: "Four", chartPosition: 4, popularity: 97, duration: 180_000 },
+    ], { count: 3, random: () => 0, memoryKey: "artists" });
+
+    assert.deepEqual(selected.map((candidate) => candidate.artist), ["Artist A", "Artist B", "Artist C"]);
   });
 });

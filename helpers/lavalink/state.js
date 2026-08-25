@@ -12,6 +12,7 @@ const isAutoplayTrack = (track) => Boolean(track?.info?.autoplayed || track?.use
 const ensurePlaybackState = (guildId) => {
   const state = playbackState.get(guildId) || {};
 
+  if (!state.sessionStartedAt) state.sessionStartedAt = Date.now();
   if (!state.history) state.history = [];
   if (!state.autoplayHistory) state.autoplayHistory = [];
   if (!state.manualHistory) state.manualHistory = [];

@@ -26,6 +26,21 @@ test("Activity feed records attributable room actions without leaking raw payloa
   clearActivityEvents(guildId);
 });
 
+test("Activity feed describes chart picks and save actions with their outcome", () => {
+  const guildId = "activity-feed-details";
+  clearActivityEvents(guildId);
+
+  recordActivityAction(guildId, { username: "Neko" }, "surprise_me", {}, null, {
+    track: { info: { title: "Espresso", author: "Sabrina Carpenter" } },
+  });
+  recordActivityAction(guildId, { username: "Neko" }, "toggle_like", {}, null, { liked: true });
+  const events = getActivityEvents(guildId);
+
+  assert.match(events[0].detail, /saved a track to liked songs/i);
+  assert.match(events[1].detail, /picked espresso from today’s chart/i);
+  clearActivityEvents(guildId);
+});
+
 test("Activity feed preserves playback issues for the shared player", () => {
   const guildId = "activity-feed-issue";
   clearActivityEvents(guildId);

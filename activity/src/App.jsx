@@ -5,6 +5,7 @@ import {
   Bell,
   CaretRight,
   Check,
+  ClockCounterClockwise,
   Cloud,
   DotsSixVertical,
   CopySimple,
@@ -40,7 +41,7 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { setMewbitPresence, setupDiscord } from "./discord.js";
+import { openExternalLink, setMewbitPresence, setupDiscord } from "./discord.js";
 import { connectActivitySocket, fetchActivityState, searchActivity, sendActivityAction } from "./api.js";
 import { parseMusicLink } from "./musicLink.js";
 import { createMockState, createEmptyState, mockSearchResults } from "./mockState.js";
@@ -190,6 +191,55 @@ function moveQueueTrackForDisplay(queue = [], from, to) {
 function getActionPendingKey(action, payload = {}) {
   if (action === "remove_queue" || action === "play_next") return `${action}:${Number(payload.position)}`;
   return action;
+}
+
+function formatHistoryTime(timestamp) {
+  const playedAt = Number(timestamp);
+  if (!Number.isFinite(playedAt) || playedAt <= 0) return "Earlier";
+
+  const elapsedMs = Math.max(0, Date.now() - playedAt);
+  const minutes = Math.floor(elapsedMs / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(playedAt));
+}
+
+function trackFeedbackLabel(track) {
+  const title = String(track?.title || "").trim();
+  const author = String(track?.author || "").trim();
+  if (!title) return "";
+  return author ? `${title} — ${author}` : title;
+}
+
+function getActionFeedback(action, payload = {}, result = null, state = null) {
+  const currentTrack = result?.track || state?.player?.currentTrack || payload.track || null;
+  const track = trackFeedbackLabel(currentTrack);
+  switch (action) {
+    case "play": return payload.playNow ? (track ? `Playing now: ${track}` : "Playing now") : (track ? `Added to queue: ${track}` : "Added to queue");
+    case "surprise_me": return track ? `Picked from today’s chart: ${track}` : "Picked a verified chart track";
+    case "stop": return "Playback stopped and queue cleared";
+    case "skip": return "Skipped to the next track";
+    case "previous": return "Restarted the current track";
+    case "shuffle": return "Queue shuffled";
+    case "play_next": return "Moved to play next";
+    case "autoplay": return payload.enabled ? "Autoplay on — MewBit will keep the room moving" : "Autoplay off — the queue is now manual";
+    case "loop": {
+      const loop = state?.player?.loop || "NONE";
+      return loop === "TRACK" ? "Looping this track" : loop === "QUEUE" ? "Looping the queue" : "Loop off";
+    }
+    case "toggle_like": return result?.liked ? "Saved to Liked Songs" : "Removed from Liked Songs";
+    case "add_to_playlist": return payload.name ? `Added to ${payload.name}` : "Added to playlist";
+    case "create_playlist": return payload.name ? `Created ${payload.name}` : "Playlist created";
+    case "import_playlist": return result?.count ? `Imported ${result.count} tracks` : "Playlist imported";
+    case "play_playlist": return payload.shuffle ? "Playing playlist in shuffle" : "Playing playlist";
+    case "filter": return String(payload.preset || "").toLowerCase() === "off" ? "Effects reset" : `Applied ${payload.preset} effect`;
+    case "equalizer_preset": return `EQ preset: ${payload.preset}`;
+    case "refresh_lyrics": return result?.lines?.length || result?.text ? "Lyrics refreshed" : "No lyrics found for this track";
+    case "update_playlist": return "Playlist changes saved";
+    default: return null;
+  }
 }
 
 function PlaylistMenu({ track, playlists, onAction, className = "" }) {
@@ -614,6 +664,60 @@ function LazyLiveLyricsPanel({ player, onAction }) {
   return <LazyLyricsPanel lyrics={player.lyrics} position={position} onAction={onAction} PanelTitle={PanelTitle} />;
 }
 
+function ExternalLinkConfirmDialog({ request, onCancel, onConfirm }) {
+  const dialogRef = useRef(null);
+  const confirmRef = useRef(null);
+
+  useEffect(() => {
+    if (!request) return undefined;
+    const returnFocus = document.activeElement;
+    window.requestAnimationFrame(() => confirmRef.current?.focus());
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(dialogRef.current?.querySelectorAll("button:not([disabled])") || [])];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      returnFocus?.focus?.();
+    };
+  }, [onCancel, request]);
+
+  if (!request) return null;
+  let host = "this music site";
+  try { host = new URL(request.url).hostname.replace(/^www\./, ""); } catch { /* URL was already validated before opening. */ }
+
+  return (
+    <div className="external-link-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+      <section ref={dialogRef} className="external-link-dialog" role="dialog" aria-modal="true" aria-labelledby="external-link-title" aria-describedby="external-link-description">
+        <button className="external-link-close" type="button" onClick={onCancel} aria-label="Cancel opening browser"><X size={17} aria-hidden="true" /></button>
+        <div className="external-link-icon" aria-hidden="true"><ArrowBendUpRight size={21} weight="bold" /></div>
+        <h2 id="external-link-title">Open this track in your browser?</h2>
+        <p id="external-link-description">Discord will take you to <strong>{host}</strong> for <span>{request.title || "this track"}</span>.</p>
+        <div className="external-link-actions">
+          <button className="secondary-button" type="button" onClick={onCancel}>Stay in Discord</button>
+          <button ref={confirmRef} className="primary-button" type="button" onClick={onConfirm}><ArrowBendUpRight size={16} weight="bold" aria-hidden="true" /> Open browser</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onAction, isActionPending = () => false }) {
   const isPlaying = player.playing && !player.paused;
   const volume = clamp(Number(player.volume || 0), 0, 100);
@@ -677,7 +781,7 @@ function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onA
   );
 }
 
-function NowPlaying({ state, onTab, onAction, isActionPending, className = "" }) {
+function NowPlaying({ state, onTab, onAction, onOpenExternalLink, isActionPending, className = "" }) {
   const { player } = state;
   const position = usePlayerPosition(player);
   const track = player.currentTrack;
@@ -708,13 +812,12 @@ function NowPlaying({ state, onTab, onAction, isActionPending, className = "" })
             <div className="track-text">
               <h1>
                 {track ? (
-                  <a
+                  <button
                     ref={titleRef}
                     className="track-title-link"
-                    href={trackLinkUrl || "#"}
-                    target={trackLinkUrl ? "_blank" : undefined}
-                    rel="noopener noreferrer"
-                    onClick={(event) => { if (!trackLinkUrl) event.preventDefault(); }}
+                    type="button"
+                    disabled={!trackLinkUrl}
+                    onClick={() => onOpenExternalLink?.(trackLinkUrl, track.title)}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -724,8 +827,8 @@ function NowPlaying({ state, onTab, onAction, isActionPending, className = "" })
                       });
                     }}
                     aria-haspopup="menu"
-                    title={trackLinkUrl || undefined}
-                  >{track.title}</a>
+                    title={trackLinkUrl ? "Open the original track page" : undefined}
+                  >{track.title}</button>
                 ) : "Nothing is playing"}
               </h1>
               <p className="track-author">{track?.author || "Pick a track from search to start the room"}</p>
@@ -910,6 +1013,78 @@ function QueuePanel({ queue, playlists = [], likedTrackIds = [], onAction, isAct
 function QueueRowLikeMenuItem({ track, playlists = [], likedTrackIds = [], onAction, onClose }) {
   if (!track) return null;
   return <TrackMenuActions track={track} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} onClose={onClose} />;
+}
+
+function QueueHistoryPanel({ history = [], sessionStartedAt }) {
+  const [userFilter, setUserFilter] = useState("all");
+  const [rangeFilter, setRangeFilter] = useState("all");
+  const [sessionOnly, setSessionOnly] = useState(false);
+
+  const users = useMemo(() => [...new Set(history
+    .map((track) => String(track?.requester || (track?.autoplay ? "MewBit" : "Unknown")).trim())
+    .filter(Boolean))].sort((left, right) => left.localeCompare(right)), [history]);
+
+  const filteredHistory = useMemo(() => {
+    const now = Date.now();
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const rangeStart = {
+      "1h": now - 60 * 60_000,
+      today: startOfToday.getTime(),
+      "7d": now - 7 * 24 * 60 * 60_000,
+    }[rangeFilter] || 0;
+    const sessionStart = sessionOnly ? Number(sessionStartedAt || 0) : 0;
+
+    return history.filter((track) => {
+      const requester = String(track?.requester || (track?.autoplay ? "MewBit" : "Unknown")).trim();
+      const playedAt = Number(track?.playedAt || 0);
+      return (userFilter === "all" || requester === userFilter)
+        && (!rangeStart || playedAt >= rangeStart)
+        && (!sessionStart || playedAt >= sessionStart);
+    });
+  }, [history, rangeFilter, sessionOnly, sessionStartedAt, userFilter]);
+
+  return (
+    <section className="queue-history" aria-label="Playback history">
+      <div className="history-filter-grid">
+        <label>
+          <span>Played by</span>
+          <select value={userFilter} onChange={(event) => setUserFilter(event.target.value)}>
+            <option value="all">Everyone</option>
+            {users.map((user) => <option value={user} key={user}>{user}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>When</span>
+          <select value={rangeFilter} onChange={(event) => setRangeFilter(event.target.value)}>
+            <option value="all">Any time</option>
+            <option value="1h">Last hour</option>
+            <option value="today">Today</option>
+            <option value="7d">Last 7 days</option>
+          </select>
+        </label>
+      </div>
+      <label className={`history-session-toggle ${sessionOnly ? "is-active" : ""}`}>
+        <input type="checkbox" checked={sessionOnly} onChange={(event) => setSessionOnly(event.target.checked)} />
+        <span>This room session</span>
+      </label>
+      {filteredHistory.length === 0 ? <div className="empty-state compact queue-history-empty"><ClockCounterClockwise size={28} weight="duotone" aria-hidden="true" /><strong>{history.length ? "No matching tracks" : "Nothing has finished yet"}</strong><span>{history.length ? "Try another person or time range." : "Finished tracks will appear here for this room session."}</span></div> : (
+        <div className="history-list">
+          {filteredHistory.map((track, index) => (
+            <article className="history-row" key={`${track.id}-${track.playedAt || index}`}>
+              <Artwork track={track} size="small" />
+              <div className="history-track-copy">
+                <strong title={track.title}>{track.title}</strong>
+                <span title={track.author}>{track.author}</span>
+                <div className="history-track-meta"><SourceTag source={track.source} /><span>{track.requester || (track.autoplay ? "MewBit" : "Unknown")}</span></div>
+              </div>
+              <time dateTime={track.playedAt ? new Date(track.playedAt).toISOString() : undefined} title={track.playedAt ? new Date(track.playedAt).toLocaleString() : undefined}>{formatHistoryTime(track.playedAt)}</time>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function SearchPanel({ query, setQuery, source, setSource, results, status, onSearch, onAction, playlists = [], likedTrackIds = [], isActionPending = () => false, showSearchBar = true }) {
@@ -1197,17 +1372,21 @@ function PlaylistSidebar({ playlists, selectedPlaylist, onSelect, onCreate, onAc
   );
 }
 
-function QueueSidebar({ queue, playlists = [], likedTrackIds = [], queueOpen, onToggleQueue, onAction, isActionPending, loading = false }) {
+function QueueSidebar({ queue, history = [], sessionStartedAt = null, playlists = [], likedTrackIds = [], queueOpen, onToggleQueue, onAction, isActionPending, loading = false }) {
+  const [view, setView] = useState("queue");
+  const showingHistory = view === "history";
+
   return (
     <div className="sidebar-content queue-sidebar-content">
       <div className="sidebar-heading"><button className="drawer-close" type="button" aria-label="Close queue panel" onClick={onToggleQueue}><X size={16} aria-hidden="true" /></button>
-        <h2>Queue</h2>
+        <h2>{showingHistory ? "History" : "Queue"}</h2>
         <div className="queue-head-meta">
-          <span className="queue-upnext">{loading ? "…" : `${queue.length} up next`}</span>
-          <IconButton label="Clear queue" loading={isActionPending("clear_queue")} onClick={() => onAction("clear_queue")} disabled={loading || !queue.length}><Trash size={16} aria-hidden="true" /></IconButton>
+          <span className="queue-upnext">{loading ? "…" : (showingHistory ? `${history.length} played` : `${queue.length} up next`)}</span>
+          <IconButton label={showingHistory ? "Show queue" : "Show playback history"} className={`queue-history-button ${showingHistory ? "is-active" : ""}`} onClick={() => setView((current) => current === "queue" ? "history" : "queue")} disabled={loading} aria-pressed={showingHistory}><ClockCounterClockwise size={16} aria-hidden="true" /></IconButton>
+          {!showingHistory ? <IconButton label="Clear queue" loading={isActionPending("clear_queue")} onClick={() => onAction("clear_queue")} disabled={loading || !queue.length}><Trash size={16} aria-hidden="true" /></IconButton> : null}
         </div>
       </div>
-      {loading ? <div className="queue-skeletons" aria-label="Loading queue"><span /><span /><span /></div> : <QueuePanel queue={queue} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} isActionPending={isActionPending} />}
+      {loading ? <div className="queue-skeletons" aria-label="Loading queue"><span /><span /><span /></div> : (showingHistory ? <QueueHistoryPanel history={history} sessionStartedAt={sessionStartedAt} /> : <QueuePanel queue={queue} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} isActionPending={isActionPending} />)}
     </div>
   );
 }
@@ -1260,7 +1439,7 @@ function ActivityLoader({ message, leaving }) {
   );
 }
 
-function PlayerBar({ state, onAction, onView, isActionPending }) {
+function PlayerBar({ state, onAction, onView, onOpenExternalLink, isActionPending }) {
   const { player } = state;
   const position = usePlayerPosition(player);
   const track = player.currentTrack;
@@ -1299,13 +1478,12 @@ function PlayerBar({ state, onAction, onView, isActionPending }) {
           <span className="bar-track-copy">
             <strong>
               {track ? (
-                <a
+                <button
                   ref={titleRef}
                   className="bar-title-link"
-                  href={trackLinkUrl || "#"}
-                  target={trackLinkUrl ? "_blank" : undefined}
-                  rel="noopener noreferrer"
-                  onClick={(event) => event.stopPropagation()}
+                  type="button"
+                  disabled={!trackLinkUrl}
+                  onClick={(event) => { event.stopPropagation(); onOpenExternalLink?.(trackLinkUrl, track.title); }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -1315,8 +1493,8 @@ function PlayerBar({ state, onAction, onView, isActionPending }) {
                     });
                   }}
                   aria-haspopup="menu"
-                  title={trackLinkUrl || undefined}
-                >{track.title}</a>
+                  title={trackLinkUrl ? "Open the original track page" : undefined}
+                >{track.title}</button>
               ) : "Nothing is playing"}
             </strong>
             <small>{track?.author || "Choose a track to start the room"}</small>
@@ -1372,6 +1550,7 @@ function App() {
   const [context, setContext] = useState({ mode: "local", guildId: "demo", accessToken: null, user: { username: "Local Listener" } });
   const [connection, setConnection] = useState({ status: "connecting", message: "Starting Activity" });
   const [activeTab, setActiveTab] = useState("home");
+  const [externalLinkRequest, setExternalLinkRequest] = useState(null);
   const [soundSection, setSoundSection] = useState("effects");
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 900);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(() => typeof window === "undefined" || window.innerWidth > 900);
@@ -1404,6 +1583,7 @@ function App() {
   const activityEvents = state.activity?.events || [];
   const hasActivityErrors = activityEvents.some((event) => event.level === "error" || event.level === "warning");
   const appShellRef = useRef(null);
+  const activityReturnTab = useRef("home");
 
   useEffect(() => {
     if (!isDrawerViewport || (!leftSidebarOpen && !rightSidebarOpen)) return undefined;
@@ -1436,7 +1616,15 @@ function App() {
   }, [isDrawerViewport, leftSidebarOpen, rightSidebarOpen]);
 
   const goToView = useCallback((view) => {
-    setActiveTab(view);
+    setActiveTab((current) => {
+      if (view === "activity") {
+        if (current === "activity") return activityReturnTab.current || "home";
+        activityReturnTab.current = current || "home";
+        return "activity";
+      }
+      if (current !== "activity") activityReturnTab.current = view;
+      return view;
+    });
   }, []);
 
   const showToast = useCallback((message, type = "info", action = null) => {
@@ -1444,6 +1632,25 @@ function App() {
     window.clearTimeout(showToast.timer);
     showToast.timer = window.setTimeout(() => setToast(null), 3200);
   }, []);
+
+  const requestExternalLink = useCallback((url, title) => {
+    if (!/^https?:\/\//i.test(String(url || ""))) {
+      showToast("This track does not have an external source page.", "error");
+      return;
+    }
+    setExternalLinkRequest({ url, title });
+  }, [showToast]);
+
+  const confirmExternalLink = useCallback(async () => {
+    const request = externalLinkRequest;
+    if (!request) return;
+    setExternalLinkRequest(null);
+    try {
+      await openExternalLink(context.sdk, request.url);
+    } catch (error) {
+      showToast(error.message || "Could not open the browser.", "error");
+    }
+  }, [context.sdk, externalLinkRequest, showToast]);
 
   useEffect(() => {
     const events = state.activity?.events || [];
@@ -1699,8 +1906,8 @@ function App() {
           if (response.result?.success === false) throw new Error(response.result.error || "Activity action failed.");
           if (response.result?.playlist) setSelectedPlaylistDetail(response.result.playlist);
           if (action === "delete_playlist" && response.result?.success) { setSelectedPlaylistDetail(null); setSelectedPlaylist(null); }
-          if (action === "get_playlist" && response.result?.playlist) { setSelectedPlaylist(response.result.playlist.id || response.result.playlist.name); setActiveTab("playlists"); }
-          const successMessage = action === "play" ? (nextPayload.playNow ? "Playing now" : "Added to queue") : action === "surprise_me" ? "MewBit found your next track" : action === "stop" ? "Playback stopped" : null;
+          if (action === "get_playlist" && response.result?.playlist) { setSelectedPlaylist(response.result.playlist.id || response.result.playlist.name); goToView("playlists"); }
+          const successMessage = getActionFeedback(action, nextPayload, response.result, response.state);
           if (successMessage) showToast(successMessage, "success");
           if ((action === "remove_queue" || action === "clear_queue") && response.result?.undoToken) {
             showToast(action === "clear_queue" ? "Queue cleared" : "Track removed", "info", { label: "Undo", action: "undo_queue", payload: { token: response.result.undoToken } });
@@ -1713,8 +1920,8 @@ function App() {
             localUndoSnapshots.current.set(undoToken, structuredClone(stateRef.current.player.queue || []));
           }
           localMutation(action, nextPayload);
-          if (action === "play") showToast(nextPayload.playNow ? "Playing now" : "Added to queue", "info");
-          if (action === "surprise_me") showToast("MewBit found your next track", "success");
+          const successMessage = getActionFeedback(action, nextPayload, null, stateRef.current);
+          if (successMessage) showToast(successMessage, "info");
           if (undoToken) showToast(action === "clear_queue" ? "Queue cleared" : "Track removed", "info", { label: "Undo", action: "undo_queue", payload: { token: undoToken } });
           if (action === "undo_queue") showToast("Queue restored", "success");
         }
@@ -1742,7 +1949,7 @@ function App() {
     }
     const realtimeActions = new Set(["pause", "resume", "toggle", "skip", "previous", "stop", "volume", "seek"]);
     return enqueue(realtimeActions.has(action) ? controlActionQueue : actionQueue, () => execute(payload));
-  }, [applyState, context, localMutation, showToast, updateActionPending]);
+  }, [applyState, context, goToView, localMutation, showToast, updateActionPending]);
 
   const runSearch = useCallback(async () => {
     const query = searchQuery.trim();
@@ -1860,7 +2067,7 @@ function App() {
               </div>
             </div>
             <div className={`main-content main-view-${activeTab}`}>
-              {activeTab === "home" ? (isHydrating ? <Suspense fallback={<HomePanelFallback />}><LazyHomePanel loading /></Suspense> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={state} onTab={goToView} onAction={onAction} isActionPending={isActionPending} /> : <Suspense fallback={<HomePanelFallback />}><LazyHomePanel onView={goToView} onAction={onAction} isActionPending={isActionPending} /></Suspense>) : null}
+              {activeTab === "home" ? (isHydrating ? <Suspense fallback={<HomePanelFallback />}><LazyHomePanel loading /></Suspense> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={state} onTab={goToView} onAction={onAction} onOpenExternalLink={requestExternalLink} isActionPending={isActionPending} /> : <Suspense fallback={<HomePanelFallback />}><LazyHomePanel onView={goToView} onAction={onAction} isActionPending={isActionPending} /></Suspense>) : null}
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
               {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading sound controls</span></div>}><LazyFiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} onAction={onAction} isActionPending={isActionPending} /></Suspense></section> : null}
               {activeTab === "lyrics" ? <section className="content-panel panel-surface"><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading lyrics</span></div>}><LazyLiveLyricsPanel player={state.player} onAction={onAction} /></Suspense></section> : null}
@@ -1869,12 +2076,13 @@ function App() {
             </div>
           </section>
           <aside className="sidebar sidebar-right" aria-label="Queue sidebar" role={isDrawerViewport ? "dialog" : undefined} aria-modal={isDrawerViewport && rightSidebarOpen ? "true" : undefined} aria-hidden={isDrawerViewport && !rightSidebarOpen ? "true" : undefined} inert={isDrawerViewport && !rightSidebarOpen || undefined}>
-            <QueueSidebar queue={state.player.queue} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} queueOpen={rightSidebarOpen} onToggleQueue={() => setRightSidebarOpen((value) => !value)} onAction={onAction} isActionPending={isActionPending} loading={isHydrating} />
+            <QueueSidebar queue={state.player.queue} history={state.player.history || []} sessionStartedAt={state.player.sessionStartedAt} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} queueOpen={rightSidebarOpen} onToggleQueue={() => setRightSidebarOpen((value) => !value)} onAction={onAction} isActionPending={isActionPending} loading={isHydrating} />
           </aside>
         </div>
-        {activeTab === "home" ? null : <div className="player-bar-shell" aria-hidden={isDrawerViewport && (leftSidebarOpen || rightSidebarOpen) ? "true" : undefined} inert={isDrawerViewport && (leftSidebarOpen || rightSidebarOpen) || undefined}><PlayerBar state={state} onAction={onAction} onView={goToView} isActionPending={isActionPending} /></div>}
+        {activeTab === "home" ? null : <div className="player-bar-shell" aria-hidden={isDrawerViewport && (leftSidebarOpen || rightSidebarOpen) ? "true" : undefined} inert={isDrawerViewport && (leftSidebarOpen || rightSidebarOpen) || undefined}><PlayerBar state={state} onAction={onAction} onView={goToView} onOpenExternalLink={requestExternalLink} isActionPending={isActionPending} /></div>}
       </>}
       </div>
+      <ExternalLinkConfirmDialog request={externalLinkRequest} onCancel={() => setExternalLinkRequest(null)} onConfirm={confirmExternalLink} />
       {toast ? <div className={`toast toast-${toast.type}`} role="status"><span>{toast.type === "error" ? <WarningCircle size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}</span><span className="toast-message">{toast.message}</span>{toast.action ? <button className="toast-action" type="button" onClick={() => { const action = toast.action; setToast(null); onAction(action.action, action.payload); }}>{toast.action.label}</button> : null}<button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification"><X size={16} aria-hidden="true" /></button></div> : null}
     </main>
   );

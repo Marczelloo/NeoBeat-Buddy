@@ -23,6 +23,9 @@ const INTENTS = Object.freeze({
 
 const listenerMemory = new Map();
 const MAX_LISTENER_MEMORY = 500;
+const FREESTYLE_CHART_WINDOW = 12;
+const FREESTYLE_SHORTLIST_SIZE = 5;
+const FREESTYLE_RESOLVE_DEADLINE_MS = 6_500;
 
 function normalize(value) {
   return String(value || "")
@@ -178,25 +181,44 @@ function getFreestyleCandidateKey(candidate) {
   return getTrackKey({ info: { title: candidate?.title, author: candidate?.artist } });
 }
 
-function selectFreestyleCandidates(candidates, { memoryKey = "default", count = 3, random = Math.random } = {}) {
+function freestyleQuality(candidate) {
+  const position = Math.max(1, Number(candidate?.chartPosition) || FREESTYLE_CHART_WINDOW + 1);
+  const popularity = Math.max(0, Math.min(100, Number(candidate?.popularity) || 0));
+  const catalogRank = Math.max(0, Number(candidate?.catalogRank) || 0);
+  // Chart order remains the authority. Catalog rank only separates otherwise
+  // close chart positions, so a viral but low-quality mirror cannot leapfrog
+  // a verified chart leader.
+  return Math.max(0, FREESTYLE_CHART_WINDOW + 1 - position) * 24
+    + popularity * 1.35
+    + Math.min(18, Math.log10(Math.max(1, catalogRank)) * 2);
+}
+
+function selectFreestyleCandidates(candidates, { memoryKey = "default", count = FREESTYLE_SHORTLIST_SIZE, random = Math.random } = {}) {
   const memory = listenerMemory.get(memoryKey) || { intents: [], seeds: [], freestyleTracks: [] };
   const recentlyPlayed = new Set(memory.freestyleTracks || []);
-  const fresh = (candidates || []).filter((candidate) => !recentlyPlayed.has(getFreestyleCandidateKey(candidate)));
-  const pool = fresh.length >= count ? fresh : (candidates || []);
+  const valid = (candidates || [])
+    .filter((candidate) => candidate?.artist && candidate?.title)
+    .filter((candidate) => Number(candidate.duration || 0) >= 100_000)
+    .sort((left, right) => freestyleQuality(right) - freestyleQuality(left));
+  const fresh = valid.filter((candidate) => !recentlyPlayed.has(getFreestyleCandidateKey(candidate)));
+  const sourcePool = fresh.length >= Math.min(3, count) ? fresh : valid;
+  const pool = sourcePool.slice(0, Math.max(FREESTYLE_CHART_WINDOW, count));
   const selected = [];
-  const remaining = [...pool];
+  const usedArtists = new Set();
+  let remaining = [...pool];
 
   while (remaining.length && selected.length < count) {
-    const candidate = weightedPick(remaining, (entry) => {
-      const position = Math.max(1, Number(entry.chartPosition) || 24);
-      // Bias toward chart leaders without turning the same five songs into a
-      // deterministic radio loop.
-      return Math.max(1, 28 - position) + (Number(entry.popularity) || 0) / 16;
+    const distinctArtists = remaining.filter((entry) => !usedArtists.has(normalize(entry.artist)));
+    const candidatesForPick = distinctArtists.length ? distinctArtists : remaining;
+    const candidate = weightedPick(candidatesForPick, (entry) => {
+      // Keep the opening pick fresh, but confine chance to the proven chart
+      // window rather than allowing a low-ranked result to win on speed.
+      return Math.max(1, freestyleQuality(entry) ** 1.55);
     }, random);
     if (!candidate) break;
     selected.push(candidate);
-    const index = remaining.indexOf(candidate);
-    if (index >= 0) remaining.splice(index, 1);
+    usedArtists.add(normalize(candidate.artist));
+    remaining = remaining.filter((entry) => entry !== candidate);
   }
 
   return selected;
@@ -213,31 +235,50 @@ function rememberFreestyleCandidate(candidate, memoryKey = "default") {
 
 /**
  * Cold-start Surprise Me path. It deliberately does not pretend an empty
- * room has a vibe: pick a few current-chart candidates, resolve only fast
- * playback sources in parallel, and start the first verified full track.
+ * room has a vibe: choose from a narrow, current chart window and resolve a
+ * small quality-ranked shortlist in parallel. Resolution speed must never be
+ * the reason a lower-ranked song beats the intended opening pick.
  */
 async function fetchFreestyleSurpriseTrack(guildId, { memoryKey = "default", random = Math.random } = {}) {
   const { applyCandidateMetadata, fetchDeezerChartCandidates, resolveToPlayable } = require("./autoplayCandidates");
   const { isValidSong } = require("./trackValidation");
-  const chartCandidates = await fetchDeezerChartCandidates(guildId, { limit: 24 });
-  const shortlist = selectFreestyleCandidates(chartCandidates, { memoryKey, count: 3, random });
+  const chartCandidates = await fetchDeezerChartCandidates(guildId, { limit: FREESTYLE_CHART_WINDOW });
+  const shortlist = selectFreestyleCandidates(chartCandidates, { memoryKey, count: FREESTYLE_SHORTLIST_SIZE, random });
   if (!shortlist.length) return null;
 
-  const attempts = shortlist.map(async (candidate) => {
+  const resolved = new Map();
+  const attempts = shortlist.map((candidate, index) => (async () => {
     const track = await resolveToPlayable(candidate, guildId, {
       providerSources: ["youtube", "soundcloud"],
       debugLabel: `surprise-freestyle:${candidate.artist} - ${candidate.title}`,
     });
     if (!isValidSong(track?.info, { allowStreams: false, strictDuration: true, excludeInterludes: true })) {
-      throw new Error("Freestyle candidate was not a full playable song");
+      return null;
     }
     applyCandidateMetadata(track, candidate);
-    return { candidate, track };
-  });
+    const outcome = { candidate, track };
+    resolved.set(index, outcome);
+    return outcome;
+  })().catch(() => null));
 
   try {
-    const winner = await Promise.any(attempts);
-    winner.track.userData = { ...(winner.track.userData || {}), surpriseMe: "freestyle" };
+    // Wait briefly for the parallel providers, then prefer the highest-ranked
+    // candidate that actually resolved. We never let a slow mirror make the
+    // opening CTA feel stuck just because a lower-priority request is hung.
+    let deadline;
+    await Promise.race([
+      Promise.all(attempts),
+      new Promise((resolve) => { deadline = setTimeout(resolve, FREESTYLE_RESOLVE_DEADLINE_MS); }),
+    ]);
+    clearTimeout(deadline);
+    const winner = shortlist.map((_, index) => resolved.get(index)).find(Boolean);
+    if (!winner) return null;
+    winner.track.userData = {
+      ...(winner.track.userData || {}),
+      surpriseMe: "freestyle",
+      surpriseSource: "global_chart",
+      surpriseChartPosition: Number(winner.candidate.chartPosition) || null,
+    };
     rememberFreestyleCandidate(winner.candidate, memoryKey);
     return winner.track;
   } catch {

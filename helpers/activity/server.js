@@ -365,6 +365,16 @@ function getSerializedQueue(player, client) {
   ));
 }
 
+function getSerializedPlaybackHistory(history, client) {
+  return Array.from(history || [])
+    .slice()
+    .reverse()
+    .map((track, index) => ({
+      ...serializeTrack(withAutoplayRequesterLabel(track, client), index),
+      playedAt: Number(track?.userData?.autoplayPlayedAt) || null,
+    }));
+}
+
 function createQueueUndoSnapshot(guildId, player) {
   const queue = Array.from(player?.queue || []).map(cloneTrack).filter(Boolean);
   if (!queue.length) return null;
@@ -460,6 +470,8 @@ function buildActivityState(client, guildId, userId) {
       autoplay: Boolean(settings?.autoplay),
       currentTrack,
       queue: getSerializedQueue(player, client),
+      history: getSerializedPlaybackHistory(livePlaybackState?.history, client),
+      sessionStartedAt: Number(livePlaybackState?.sessionStartedAt) || null,
       filters: serializeFilters(filters),
       lyrics,
       updatedAt: generatedAt,
@@ -838,7 +850,7 @@ async function runTrackedActivityAction({ guildId, identity, action, payload = {
   try {
     const result = await runActivityAction({ guildId, identity, action, payload });
     if (result !== false && result?.success !== false) {
-      recordActivityAction(guildId, identity, action, payload, serializeTrack(beforeTrack));
+      recordActivityAction(guildId, identity, action, payload, serializeTrack(beforeTrack), result);
     }
     markActivityStateChanged(guildId, `activity:${action}`);
     return result;
@@ -1076,6 +1088,7 @@ module.exports = {
   getActivityPosition,
   resolveActivityPlayback,
   withAutoplayRequesterLabel,
+  getSerializedPlaybackHistory,
   isAllowedArtworkUrl,
   runActivityAction,
   searchActivityTracks,

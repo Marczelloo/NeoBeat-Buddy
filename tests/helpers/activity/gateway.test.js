@@ -9,6 +9,7 @@ const {
   serializeActivityActionResult,
   stringifyJson,
   withAutoplayRequesterLabel,
+  getSerializedPlaybackHistory,
 } = require("../../../helpers/activity/server");
 const { getActivityStateRevision, markActivityStateChanged, resetActivityStateRevision } = require("../../../helpers/activity/sync");
 const { resetActivitySessions } = require("../../../helpers/activity/sessions");
@@ -92,6 +93,18 @@ test("Activity always labels autoplay rows as MewBit even when a provider preser
   assert.equal(track.info.requesterTag, "MewBit");
 });
 
+test("Activity serializes playback history newest first with a played timestamp", () => {
+  const history = [
+    { track: "older", info: { identifier: "older", title: "Older", author: "Artist", length: 120000 }, userData: { autoplayPlayedAt: 100 } },
+    { track: "newer", info: { identifier: "newer", title: "Newer", author: "Artist", length: 120000, autoplayed: true }, userData: { autoplay: true, autoplayPlayedAt: 200 } },
+  ];
+  const serialized = getSerializedPlaybackHistory(history, { user: { username: "MewBit" } });
+
+  assert.deepEqual(serialized.map((track) => track.id), ["newer", "older"]);
+  assert.deepEqual(serialized.map((track) => track.playedAt), [200, 100]);
+  assert.equal(serialized[0].requester, "MewBit");
+});
+
 function waitForListening(server) {
   if (server.listening) return Promise.resolve();
   return new Promise((resolve, reject) => {
@@ -149,6 +162,8 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
   assert.equal(typeof state.state.revision, "number");
   assert.equal(typeof state.state.generatedAt, "number");
   assert.equal(state.state.player.currentTrack, null);
+  assert.deepEqual(state.state.player.history, []);
+  assert.equal(state.state.player.sessionStartedAt, null);
   assert.equal(state.state.activity.active, false);
   assert.equal(blockedArtworkResponse.status, 400);
   assert.match(blockedArtwork.error, /not allowed/i);

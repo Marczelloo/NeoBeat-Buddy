@@ -33,29 +33,35 @@ function clearActivityEvents(guildId) {
   eventsByGuild.delete(String(guildId || ""));
 }
 
-function actionDetail(action, payload, beforeTrack) {
-  const trackTitle = text(beforeTrack?.title || payload?.track?.title || payload?.query, 100);
+function actionDetail(action, payload, beforeTrack, result) {
+  const resultTrack = result?.track?.info || result?.track || null;
+  const trackTitle = text(resultTrack?.title || beforeTrack?.title || payload?.track?.title || payload?.query, 100);
   switch (action) {
-    case "play": return trackTitle ? `queued ${trackTitle}` : "started playback";
-    case "surprise_me": return "started a freestyle";
+    case "play": return payload?.playNow ? (trackTitle ? `started ${trackTitle}` : "started playback") : (trackTitle ? `queued ${trackTitle}` : "added a track to the queue");
+    case "surprise_me": return trackTitle ? `picked ${trackTitle} from today’s chart` : "picked a verified chart track";
     case "pause": return "paused playback";
     case "resume": return "resumed playback";
     case "stop": return "stopped playback and cleared the queue";
     case "skip": return trackTitle ? `skipped ${trackTitle}` : "skipped the current track";
     case "previous": return "returned to the previous track";
-    case "loop": return `changed loop to ${text(payload?.mode, 24) || "the next mode"}`;
+    case "loop": return "changed the loop mode";
     case "shuffle": return "shuffled the queue";
     case "autoplay": return payload?.enabled ? "turned autoplay on" : "turned autoplay off";
     case "play_next": return "moved a track to play next";
     case "remove_queue": return "removed a queued track";
     case "clear_queue": return "cleared the queue";
     case "undo_queue": return "restored the queue";
+    case "toggle_like": return result?.liked ? "saved a track to Liked Songs" : "removed a track from Liked Songs";
+    case "add_to_playlist": return payload?.name ? `saved a track to ${text(payload.name, 80)}` : "saved a track to a playlist";
+    case "filter": return text(payload?.preset, 40).toLowerCase() === "off" ? "reset the audio effects" : `applied the ${text(payload?.preset, 40)} effect`;
+    case "equalizer_preset": return `changed the EQ preset to ${text(payload?.preset, 40)}`;
+    case "play_playlist": return payload?.shuffle ? "started a playlist in shuffle" : "started a playlist";
     default: return null;
   }
 }
 
-function recordActivityAction(guildId, identity, action, payload, beforeTrack) {
-  const detail = actionDetail(action, payload, beforeTrack);
+function recordActivityAction(guildId, identity, action, payload, beforeTrack, result) {
+  const detail = actionDetail(action, payload, beforeTrack, result);
   if (!detail) return null;
   return pushActivityEvent(guildId, {
     level: "info",

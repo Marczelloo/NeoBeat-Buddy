@@ -79,6 +79,19 @@ export async function setupDiscord() {
   };
 }
 
+export async function openExternalLink(sdk, url) {
+  const target = String(url || "").trim();
+  if (!/^https?:\/\//i.test(target)) throw new Error("That track does not have a safe external link.");
+
+  if (sdk?.commands?.openExternalLink) {
+    await sdk.commands.openExternalLink({ url: target });
+    return;
+  }
+
+  const opened = window.open(target, "_blank", "noopener,noreferrer");
+  if (!opened) throw new Error("Your browser blocked the new tab. Allow pop-ups for MewBit and try again.");
+}
+
 function cleanPresenceText(value, fallback, limit = 128) {
   const text = String(value || fallback).replace(/\s+/g, " ").trim();
   return text.slice(0, limit);

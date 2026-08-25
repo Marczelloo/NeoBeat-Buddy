@@ -58,5 +58,7 @@ describe("Autoplay reservation history", () => {
     const playback = state.playbackState.get(guildId);
     assert.deepStrictEqual(playback.manualHistory.map((track) => track.info.identifier), ["id-1"]);
     assert.deepStrictEqual(playback.history.map((track) => track.info.identifier), ["id-1", "id-2"]);
+    assert.equal(typeof playback.sessionStartedAt, "number");
+    assert.equal(typeof playback.history[0].userData.autoplayPlayedAt, "number");
   });
 });
