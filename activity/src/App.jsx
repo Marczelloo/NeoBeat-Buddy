@@ -577,7 +577,7 @@ function HomePanelFallback() {
 }
 
 function LazyLiveLyricsPanel({ player, onAction }) {
-  const position = usePlayerPosition(player);
+  const position = usePlayerPosition(player, player.lyricsSyncOffsetMs);
   return <LazyLyricsPanel lyrics={player.lyrics} position={position} onAction={onAction} PanelTitle={PanelTitle} />;
 }
 
@@ -739,7 +739,7 @@ function NowPlaying({ state, onTab, onAction, isActionPending, className = "" })
 
 function CompactPlayer({ state }) {
   const { player } = state;
-  const position = usePlayerPosition(player);
+  const position = usePlayerPosition(player, player.lyricsSyncOffsetMs);
   const track = player.currentTrack;
   const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
   const progress = clamp(position, 0, duration);

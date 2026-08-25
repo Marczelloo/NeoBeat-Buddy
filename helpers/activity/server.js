@@ -32,14 +32,14 @@ const {
 } = require("../lavalink/index");
 const { getUserVolume } = require("../lavalink/loudness");
 const { fetchLyrics } = require("../lavalink/lyricsClient");
-const { stopLyricsSession } = require("../lavalink/lyricsFormatter");
+const { LYRICS_SYNC_OFFSET_MS, stopLyricsSession } = require("../lavalink/lyricsFormatter");
 const { getPoru } = require("../lavalink/players");
 const { markManualTrack, moveQueueTrackWithinOrigin, normalizeQueueAutoplayPartition } = require("../lavalink/queueOrdering");
 const { searchAcrossSources, searchSingleSource } = require("../lavalink/searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("../lavalink/searchRanking");
 const { skipWithLearning } = require("../lavalink/skipLearning");
 const { cloneTrack, getLyricsState, playbackState, setLyricsState } = require("../lavalink/state");
-const { selectSurpriseSeed } = require("../lavalink/surpriseMe");
+const { fetchFreestyleSurpriseTrack, selectSurpriseSeed } = require("../lavalink/surpriseMe");
 const Log = require("../logs/log");
 const { importPlaylistFromUrl } = require("../playlists/import");
 const playlistStore = require("../playlists/store");
@@ -446,6 +446,7 @@ function buildActivityState(client, guildId, userId) {
       paused,
       playing,
       positionMs: Math.max(0, Math.round(position)),
+      lyricsSyncOffsetMs: LYRICS_SYNC_OFFSET_MS,
       durationMs: playback.durationMs || currentTrack?.durationMs || 0,
       volume: getUserVolume(player),
       loop: player?.loop || "NONE",
@@ -574,30 +575,38 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       let recommendation = null;
       const attemptedSeeds = new Set();
 
-      // A single obscure/current recording can legitimately have no usable
-      // catalogue. Surprise me should then pivot to another recent, liked, or
-      // frequently played taste anchor instead of reporting a false dead end.
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const candidateSelection = selectSurpriseSeed(surpriseTaste, { memoryKey: surpriseMemoryKey });
-        if (!candidateSelection || attemptedSeeds.has(candidateSelection.seedKey)) break;
-        attemptedSeeds.add(candidateSelection.seedKey);
-        selection = candidateSelection;
+      if (!surpriseTaste.currentTrack && !surpriseTaste.roomHistory.length) {
+        selection = {
+          seed: null,
+          intent: { mode: "freestyle", goal: "Start a fresh room with a current, verified track.", preferredLanes: ["explore"] },
+        };
+        recommendation = await fetchFreestyleSurpriseTrack(guildId, { memoryKey: surpriseMemoryKey });
+      } else {
+        // A single obscure/current recording can legitimately have no usable
+        // catalogue. Surprise me should then pivot to another recent, liked,
+        // or frequently played taste anchor instead of reporting a false dead end.
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const candidateSelection = selectSurpriseSeed(surpriseTaste, { memoryKey: surpriseMemoryKey });
+          if (!candidateSelection || attemptedSeeds.has(candidateSelection.seedKey)) break;
+          attemptedSeeds.add(candidateSelection.seedKey);
+          selection = candidateSelection;
 
-        recommendation = await fetchAutoplayV3Track(selection.seed, guildId, {
-          pendingManualTracks: Array.from(player?.queue || []).slice(0, 4),
-          allowWhenAutoplayDisabled: true,
-          selectionIntent: selection.intent,
-          mode: "surprise",
-        });
-        if (recommendation) break;
+          recommendation = await fetchAutoplayV3Track(selection.seed, guildId, {
+            pendingManualTracks: Array.from(player?.queue || []).slice(0, 4),
+            allowWhenAutoplayDisabled: true,
+            selectionIntent: selection.intent,
+            mode: "surprise",
+          });
+          if (recommendation) break;
 
-        Log.info(
-          "Surprise me retrying with another taste anchor",
-          "",
-          `guild=${guildId}`,
-          `attempt=${attempt + 1}`,
-          `seed=${selection.seed.info?.author || "Unknown"} - ${selection.seed.info?.title || "Unknown"}`
-        );
+          Log.info(
+            "Surprise me retrying with another taste anchor",
+            "",
+            `guild=${guildId}`,
+            `attempt=${attempt + 1}`,
+            `seed=${selection.seed.info?.author || "Unknown"} - ${selection.seed.info?.title || "Unknown"}`
+          );
+        }
       }
 
       if (!selection) {

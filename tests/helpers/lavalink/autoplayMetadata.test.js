@@ -131,6 +131,7 @@ describe("Autoplay metadata without Spotify audio features", () => {
       artworkUrl: "https://cdn.example.test/cover.jpg",
       catalogRank: 850000,
       popularity: 85,
+      chartPosition: 1,
     });
     assert.deepStrictEqual(second, first);
   });

@@ -42,7 +42,7 @@ MewBit is a Discord music bot with a shared listening **Discord Activity**. It u
 - Uses direct YouTube Mix candidates only as a constrained, score-gated fallback for tracks with insufficient metadata (for example niche or meme uploads), rather than broad unrelated search.
 - Excludes album skits, interludes, short intros/outros, transitions, and streams from autoplay candidates while still allowing a user to play them manually.
 - Places manually queued tracks ahead of autoplay tracks; a manually added track goes after other manual items and before the autoplay tail.
-- **Surprise Me** is intentionally lighter than a full autoplay prefetch: it uses the listener's room/history/likes, a compact mix and recommendation pool, plus a cached global-trending discovery pool. The AI DJ may choose a current chart track only when it also fits the active mood and energy.
+- **Surprise Me** is intentionally lighter than a full autoplay prefetch. In an empty room it is a genuine freestyle: MewBit samples the current cached global chart, verifies three candidates in parallel through YouTube/SoundCloud, avoids its 16 latest freestyle picks, and starts the first full matching track. Once the room has listening context, it uses the listener's room/history/likes, a compact mix and recommendation pool; the AI DJ may choose a current chart track only when it also fits the active mood and energy.
 - Optional AI DJ mode is the primary music director. It uses fast `gpt-5.6-luna` with the first user-selected track as a durable anchor, a longer memory of user-picked tracks, recurring artists and albums, the current track, the autoplay trail, the pending manual queue, and a compact catalog of already provider-verified candidates. It prefers that playable catalog but may discover two additional recordings. Open proposals resolve through YouTube/YouTube Music, Deezer, SoundCloud, then Spotify; every resolved result is rechecked for mirror, version, skip, album, artist, and repeat safety before it can be queued. V3 remains a constrained fallback only when the AI plan is unavailable, invalid, low confidence, or cannot be resolved.
 
 ### Discord Activity
@@ -157,6 +157,7 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `INACTIVITY_TIMEOUT_MS` | `300000` | Disconnect after this many idle milliseconds. |
 | `TRACK_START_TIMEOUT_MS` | `15000` | Retry a queued item through verified fallbacks when Lavalink never emits `TrackStart`. |
 | `PROGRESS_UPDATE_INTERVAL_MS` | `0` | Player-message update interval; `0` uses the built-in behavior. |
+| `LYRICS_SYNC_OFFSET_MS` | `-450` | Shared lyric timing offset in milliseconds. The default compensates for Discord voice delivery so synced lines do not lead the audio. |
 | `LOUDNESS_NORMALIZATION` | `true` | Enables source-aware playback gain compensation. |
 | `LOUDNESS_<SOURCE>_DB` | provider default | Optional gain offset for a provider, e.g. `LOUDNESS_SOUNDCLOUD_DB=-3`. |
 | `PLAYER_RECOVERY_MAX_AGE_MS` | `7200000` | How long an unexpected-disconnect snapshot is eligible for restoration after a user explicitly resumes playback. |

@@ -3,6 +3,8 @@ const { beforeEach, describe, test } = require("node:test");
 const {
   buildSurpriseSeedPool,
   clearSurpriseMemory,
+  rememberFreestyleCandidate,
+  selectFreestyleCandidates,
   selectSurpriseSeed,
 } = require("../../../helpers/lavalink/surpriseMe");
 
@@ -42,5 +44,20 @@ describe("Surprise me selector", () => {
 
   test("returns null when no taste signal exists", () => {
     assert.equal(selectSurpriseSeed({}, { memoryKey: "empty" }), null);
+  });
+
+  test("uses fresh, chart-biased choices for an empty-room freestyle without replaying the last pick", () => {
+    const candidates = [
+      { artist: "Chart One", title: "Top Signal", chartPosition: 1, popularity: 100 },
+      { artist: "Chart Two", title: "Fresh Signal", chartPosition: 2, popularity: 96 },
+      { artist: "Chart Three", title: "Third Signal", chartPosition: 3, popularity: 92 },
+    ];
+    const memoryKey = "freestyle";
+    const first = selectFreestyleCandidates(candidates, { memoryKey, count: 1, random: () => 0 })[0];
+    rememberFreestyleCandidate(first, memoryKey);
+    const second = selectFreestyleCandidates(candidates, { memoryKey, count: 1, random: () => 0 })[0];
+
+    assert.equal(first.title, "Top Signal");
+    assert.notEqual(second.title, first.title);
   });
 });

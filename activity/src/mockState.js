@@ -17,6 +17,7 @@ export function createMockState({ idle = false } = {}) {
       paused: idle,
       playing: !idle,
       positionMs: idle ? 0 : 73500,
+      lyricsSyncOffsetMs: -450,
       durationMs: idle ? 0 : tracks[0].durationMs,
       volume: 52,
       loop: "NONE",

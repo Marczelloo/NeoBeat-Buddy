@@ -166,7 +166,7 @@ async function getDeezerChartTracks(limit = 18) {
     const payload = await fetchJson("https://api.deezer.com/chart/0/tracks?limit=50");
     const tracks = (Array.isArray(payload?.data) ? payload.data : [])
       .filter((track) => track?.id && track?.title && track?.artist?.name)
-      .map((track) => ({
+      .map((track, index) => ({
         deezerId: String(track.id),
         artist: String(track.artist.name).trim(),
         artistId: track.artist.id ? String(track.artist.id) : null,
@@ -177,6 +177,7 @@ async function getDeezerChartTracks(limit = 18) {
         artworkUrl: track.album?.cover_xl || track.album?.cover_big || track.album?.cover_medium || null,
         catalogRank: Number.isFinite(Number(track.rank)) ? Number(track.rank) : null,
         popularity: Number.isFinite(Number(track.rank)) ? Math.min(100, Math.max(0, Math.round(Number(track.rank) / 10_000))) : 0,
+        chartPosition: index + 1,
       }));
     chartTracksCache.set(cacheKey, { timestamp: Date.now(), tracks });
     return tracks.slice(0, limit).map((track) => ({ ...track }));

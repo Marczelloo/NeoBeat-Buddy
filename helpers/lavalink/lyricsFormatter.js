@@ -7,6 +7,11 @@ const MAX_EMBEDS = 10;
 const SYNCED_LINES_BEFORE = 2; // Lines to show before current
 const SYNCED_LINES_AFTER = 3; // Lines to show after current
 const UPDATE_INTERVAL = 250; // Check every 250ms for responsive updates
+// Lavalink position is the server-side audio clock; Discord listeners hear
+// that stream a little later. A small negative offset prevents lyrics from
+// anticipating the line the room is actually hearing. It remains adjustable
+// for hosts whose voice path has materially different latency.
+const LYRICS_SYNC_OFFSET_MS = Math.max(-2_000, Math.min(2_000, Number(process.env.LYRICS_SYNC_OFFSET_MS ?? -450) || 0));
 
 /**
  * Get accurate interpolated position for the player
@@ -17,7 +22,7 @@ function isPlayerPaused(player) {
   return player?.isPaused === true || player?.paused === true;
 }
 
-function getInterpolatedPosition(player, now = Date.now(), lookaheadMs = 300) {
+function getInterpolatedPosition(player, now = Date.now(), lookaheadMs = LYRICS_SYNC_OFFSET_MS) {
   if (!player) return 0;
 
   const state = playbackState.get(player.guildId);
@@ -324,6 +329,7 @@ async function buildSyncedLyricsDisplay({ interaction, player, payload, trackTit
 module.exports = {
   MAX_EMBED_DESCRIPTION,
   MAX_EMBEDS,
+  LYRICS_SYNC_OFFSET_MS,
   chunkLyrics,
   buildLyricsResponse,
   getInterpolatedPosition,

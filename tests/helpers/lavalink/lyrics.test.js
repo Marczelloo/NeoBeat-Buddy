@@ -162,6 +162,22 @@ describe("Lyrics System", () => {
         playbackState.delete(guildId);
       });
 
+      it("applies the shared negative timing offset so lyrics do not lead Discord audio", () => {
+        const { playbackState } = require("../../../helpers/lavalink/state");
+        const guildId = "lyrics-delivery-latency-test";
+        const now = 100000;
+        playbackState.set(guildId, { lastPosition: 42000, lastTimestamp: now, paused: false });
+
+        const position = getInterpolatedPosition(
+          { guildId, isPaused: false, position: 42000, currentTrack: { info: { length: 180000 } } },
+          now,
+          -450
+        );
+
+        assert.strictEqual(position, 41550);
+        playbackState.delete(guildId);
+      });
+
       it("should delete registered lyrics messages during cleanup", async () => {
         const deleted = [];
         const message = {

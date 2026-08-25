@@ -174,6 +174,77 @@ function selectSurpriseSeed(input, { random = Math.random, memoryKey = "default"
   };
 }
 
+function getFreestyleCandidateKey(candidate) {
+  return getTrackKey({ info: { title: candidate?.title, author: candidate?.artist } });
+}
+
+function selectFreestyleCandidates(candidates, { memoryKey = "default", count = 3, random = Math.random } = {}) {
+  const memory = listenerMemory.get(memoryKey) || { intents: [], seeds: [], freestyleTracks: [] };
+  const recentlyPlayed = new Set(memory.freestyleTracks || []);
+  const fresh = (candidates || []).filter((candidate) => !recentlyPlayed.has(getFreestyleCandidateKey(candidate)));
+  const pool = fresh.length >= count ? fresh : (candidates || []);
+  const selected = [];
+  const remaining = [...pool];
+
+  while (remaining.length && selected.length < count) {
+    const candidate = weightedPick(remaining, (entry) => {
+      const position = Math.max(1, Number(entry.chartPosition) || 24);
+      // Bias toward chart leaders without turning the same five songs into a
+      // deterministic radio loop.
+      return Math.max(1, 28 - position) + (Number(entry.popularity) || 0) / 16;
+    }, random);
+    if (!candidate) break;
+    selected.push(candidate);
+    const index = remaining.indexOf(candidate);
+    if (index >= 0) remaining.splice(index, 1);
+  }
+
+  return selected;
+}
+
+function rememberFreestyleCandidate(candidate, memoryKey = "default") {
+  const key = getFreestyleCandidateKey(candidate);
+  if (!key) return;
+  const memory = listenerMemory.get(memoryKey) || { intents: [], seeds: [], freestyleTracks: [] };
+  memory.freestyleTracks = [...(memory.freestyleTracks || []).filter((item) => item !== key), key].slice(-16);
+  listenerMemory.set(memoryKey, memory);
+  trimMemory();
+}
+
+/**
+ * Cold-start Surprise Me path. It deliberately does not pretend an empty
+ * room has a vibe: pick a few current-chart candidates, resolve only fast
+ * playback sources in parallel, and start the first verified full track.
+ */
+async function fetchFreestyleSurpriseTrack(guildId, { memoryKey = "default", random = Math.random } = {}) {
+  const { applyCandidateMetadata, fetchDeezerChartCandidates, resolveToPlayable } = require("./autoplayCandidates");
+  const { isValidSong } = require("./trackValidation");
+  const chartCandidates = await fetchDeezerChartCandidates(guildId, { limit: 24 });
+  const shortlist = selectFreestyleCandidates(chartCandidates, { memoryKey, count: 3, random });
+  if (!shortlist.length) return null;
+
+  const attempts = shortlist.map(async (candidate) => {
+    const track = await resolveToPlayable(candidate, guildId, {
+      providerSources: ["youtube", "soundcloud"],
+      debugLabel: `surprise-freestyle:${candidate.artist} - ${candidate.title}`,
+    });
+    if (!isValidSong(track?.info, { allowStreams: false, strictDuration: true, excludeInterludes: true })) {
+      throw new Error("Freestyle candidate was not a full playable song");
+    }
+    applyCandidateMetadata(track, candidate);
+    return { candidate, track };
+  });
+
+  try {
+    const winner = await Promise.any(attempts);
+    winner.track.userData = { ...(winner.track.userData || {}), surpriseMe: "freestyle" };
+    rememberFreestyleCandidate(winner.candidate, memoryKey);
+    return winner.track;
+  } catch {
+    return null;
+  }
+}
+
 function clearSurpriseMemory() {
   listenerMemory.clear();
 }
@@ -182,7 +253,11 @@ module.exports = {
   INTENTS,
   buildSurpriseSeedPool,
   clearSurpriseMemory,
+  fetchFreestyleSurpriseTrack,
+  getFreestyleCandidateKey,
   getTrackKey,
+  rememberFreestyleCandidate,
+  selectFreestyleCandidates,
   selectSurpriseSeed,
   toReferenceTrack,
 };

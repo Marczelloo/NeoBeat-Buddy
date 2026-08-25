@@ -4,7 +4,7 @@ export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-export function usePlayerPosition(player) {
+export function usePlayerPosition(player, offsetMs = 0) {
   const [now, setNow] = useState(() => Date.now());
   const anchorRef = useRef({ positionMs: Number(player?.positionMs) || 0, receivedAt: Date.now() });
   const trackId = player?.currentTrack?.id;
@@ -21,7 +21,7 @@ export function usePlayerPosition(player) {
     return () => window.clearInterval(timer);
   }, [shouldTick]);
 
-  if (!shouldTick) return Number(player?.positionMs) || 0;
+  if (!shouldTick) return clamp((Number(player?.positionMs) || 0) + Number(offsetMs || 0), 0, Number(player?.durationMs) || Number.MAX_SAFE_INTEGER);
   const anchor = anchorRef.current;
-  return clamp(anchor.positionMs + (now - anchor.receivedAt), 0, Number(player?.durationMs) || Number.MAX_SAFE_INTEGER);
+  return clamp(anchor.positionMs + (now - anchor.receivedAt) + Number(offsetMs || 0), 0, Number(player?.durationMs) || Number.MAX_SAFE_INTEGER);
 }
