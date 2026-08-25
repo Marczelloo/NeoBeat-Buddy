@@ -95,7 +95,12 @@ function queueAutoplayTrack(player, lastTrack, textChannelId) {
       );
 
       if (!player.currentTrack && player.queue.length > 0) {
-        await player.play();
+        // Do not await Poru's lazy resolver here. A metadata-only candidate
+        // can otherwise keep the shared autoplay task pending forever; the
+        // client-level start watchdog will recover a missing TrackStart.
+        void player.play().catch((error) => {
+          Log.warning("Autoplay playback request failed", error?.message || String(error), `guild=${player.guildId}`);
+        });
       }
 
       return true;

@@ -39,9 +39,9 @@ lavalink:
     - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
-    # The YouTube plugin is supplied as a locally-built patch in
-    # helpers/lavalink/plugins. It retains youtube-source 1.18.2 and only
-    # replaces the rejected TV Cobalt user agent with the accepted PS4 one.
+    - dependency: "dev.lavalink.youtube:youtube-plugin:f45bbb7aebfcbc1c553769e04af6cd43afa8b7c3"
+      repository: "https://maven.lavalink.dev/snapshots"
+      snapshot: true
     - dependency: "com.github.topi314.lavalyrics:lavalyrics-plugin:1.1.0"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false

@@ -5,10 +5,12 @@ const {
   enrichCandidatesWithDeezerMetadata,
   getDeezerAlbumTracks,
 } = require("./autoplayMetadata");
+const { AUTOPLAY_RESOLVE_TIMEOUT_MS } = require("./constants");
 const { normalizeGenreTags } = require("./genreUtils");
 const { getLastFmSimilarTracks, getLastFmTagProfile } = require("./lastfmClient");
 const { normalizeReleaseYear } = require("./metadataValidation");
 const { getPoru } = require("./players");
+const { withTimeout } = require("./resolveTimeout");
 const { searchSingleSource } = require("./searchAggregator");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 const { genreCache, isAutoplayTrack } = require("./sessionProfile");
@@ -145,6 +147,24 @@ async function mapWithConcurrency(items, limit, worker) {
 
 function getRelevantPlayableTrack(tracks, query) {
   return getRelevantPlayableTracks(tracks, query)[0] || null;
+}
+
+// Candidate collection talks to Lavalink's raw REST endpoint, while Poru's
+// queue expects the same encoded value under `track`. Without this bridge,
+// an otherwise valid Deezer candidate is resolved again only after the
+// previous track ends. That late resolver call can hang and leave the player
+// in a silent state with no TrackException event.
+function normalizePlayableTrack(track) {
+  const encoded = track?.track || track?.encoded;
+  if (!track || !encoded) return null;
+
+  return {
+    ...track,
+    track: encoded,
+    info: { ...(track.info || {}) },
+    pluginInfo: track.pluginInfo ? { ...track.pluginInfo } : undefined,
+    userData: track.userData ? { ...track.userData } : undefined,
+  };
 }
 
 function getRelevantPlayableTracks(tracks, query) {
@@ -689,40 +709,41 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "", prov
     return null;
   }
 
-  if (candidate.track) {
-    const resolvedVersion = getAutoplayVersionCompatibility(candidate.track.info?.title, candidate.title);
-    if (!resolvedVersion.allowed || (getVariantKinds(candidate.title).length && !getVariantKinds(candidate.track.info?.title).length)) {
+  const directTrack = normalizePlayableTrack(candidate.track);
+  if (directTrack) {
+    const resolvedVersion = getAutoplayVersionCompatibility(directTrack.info?.title, candidate.title);
+    if (!resolvedVersion.allowed || (getVariantKinds(candidate.title).length && !getVariantKinds(directTrack.info?.title).length)) {
       Log.debug(
         "Skipping mismatched alternate-version autoplay resolution",
         "",
         `guild=${guildId}`,
-        `resolved=${formatLogValue(candidate.track.info?.title)}`,
+        `resolved=${formatLogValue(directTrack.info?.title)}`,
         `mode=${resolvedVersion.mode}`
       );
       return null;
     }
-    const directProviderIssue = getProviderValidationIssue(candidate, candidate.track);
+    const directProviderIssue = getProviderValidationIssue(candidate, directTrack);
     if (directProviderIssue) {
       Log.debug(
         "Skipping provider track with suspicious autoplay identity",
         "",
         `guild=${guildId}`,
         `reason=${directProviderIssue}`,
-        `resolved=${formatLogValue(`${candidate.track.info?.author} - ${candidate.track.info?.title}`)}`
+        `resolved=${formatLogValue(`${directTrack.info?.author} - ${directTrack.info?.title}`)}`
       );
       return null;
     }
-    if (!matchesAutoplayCandidate(candidate, candidate.track)) {
+    if (!matchesAutoplayCandidate(candidate, directTrack)) {
       Log.debug(
         "Skipping provider track with mismatched canonical identity",
         "",
         `guild=${guildId}`,
         `expected=${formatLogValue(`${candidate.artist} - ${candidate.title}`)}`,
-        `resolved=${formatLogValue(`${candidate.track.info?.author} - ${candidate.track.info?.title}`)}`
+        `resolved=${formatLogValue(`${directTrack.info?.author} - ${directTrack.info?.title}`)}`
       );
       return null;
     }
-    return applyCandidateMetadata(candidate.track, candidate);
+    return applyCandidateMetadata(directTrack, candidate);
   }
 
   const poru = getPoru();
@@ -733,8 +754,16 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "", prov
   for (const source of sources) {
     try {
       const tracks = source === "legacy-youtube"
-        ? (await poru.resolve({ query: `ytsearch:${searchQuery}` })).tracks || []
-        : await searchSingleSource(poru, searchQuery, source);
+        ? (await withTimeout(
+          poru.resolve({ query: `ytsearch:${searchQuery}` }),
+          AUTOPLAY_RESOLVE_TIMEOUT_MS,
+          `Autoplay YouTube resolver (${searchQuery})`
+        )).tracks || []
+        : await withTimeout(
+          searchSingleSource(poru, searchQuery, source),
+          AUTOPLAY_RESOLVE_TIMEOUT_MS,
+          `Autoplay ${source} resolver (${searchQuery})`
+        );
       const rankedTracks = getRelevantPlayableTracks(tracks, searchQuery).slice(0, 6);
       if (!rankedTracks.length) {
         Log.debug("Autoplay proposal provider returned no playable result", "", `guild=${guildId}`, `label=${debugLabel}`, `provider=${source}`, `query=${formatLogValue(searchQuery)}`);
@@ -793,6 +822,7 @@ module.exports = {
   formatLogValue,
   getAutoplayReference,
   getProviderValidationIssue,
+  normalizePlayableTrack,
   getRelevantPlayableTrack,
   getRelevantPlayableTracks,
   loadLavalinkTracks,

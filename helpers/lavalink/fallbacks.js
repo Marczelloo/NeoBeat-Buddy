@@ -1,6 +1,7 @@
 const { inspect } = require("util");
 const Log = require("../logs/log");
-const { MAX_FALLBACK_ATTEMPTS } = require("./constants");
+const { AUTOPLAY_RESOLVE_TIMEOUT_MS, MAX_FALLBACK_ATTEMPTS } = require("./constants");
+const { withTimeout } = require("./resolveTimeout");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 const {
   cleanArtistName,
@@ -153,7 +154,11 @@ async function tryQueueFallbackTrack(player, failedTrack) {
 
   for (const { source, query } of queries) {
     try {
-      const response = await poru.resolve({ query, source });
+      const response = await withTimeout(
+        poru.resolve({ query, source }),
+        AUTOPLAY_RESOLVE_TIMEOUT_MS,
+        `Fallback ${source} resolver (${query})`
+      );
       const validTracks = (response?.tracks || []).filter((t) => t?.track && t?.info);
       const rankedTracks = rankSearchResults(filterPlayableSearchResults(validTracks, query), query);
       const verified = rankedTracks

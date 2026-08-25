@@ -1,5 +1,7 @@
 const MAX_FALLBACK_ATTEMPTS = 1;
 const INACTIVITY_TIMEOUT_MS = Number(process.env.INACTIVITY_TIMEOUT_MS ?? 5 * 60 * 1000);
+const TRACK_START_TIMEOUT_MS = Number(process.env.TRACK_START_TIMEOUT_MS ?? 15_000);
+const AUTOPLAY_RESOLVE_TIMEOUT_MS = Number(process.env.AUTOPLAY_RESOLVE_TIMEOUT_MS ?? 12_000);
 // Keep enough context to prevent a long autoplay session from cycling back to
 // tracks it played an hour ago. This is deliberately separate from the short
 // window used to model the current room vibe.
@@ -277,6 +279,8 @@ const EQUALIZER_PRESETS = {
 module.exports = {
   MAX_FALLBACK_ATTEMPTS,
   INACTIVITY_TIMEOUT_MS,
+  TRACK_START_TIMEOUT_MS,
+  AUTOPLAY_RESOLVE_TIMEOUT_MS,
   TRACK_HISTORY_LIMIT,
   EQUALIZER_PRESETS,
   PROGRESS_UPDATE_INTERVAL_MS,

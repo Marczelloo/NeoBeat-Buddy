@@ -154,6 +154,7 @@ If a provider requires browser cookies, obtain them from an account you control 
 | --- | --- | --- |
 | `DEFAULT_VOLUME` | `50` | Initial player volume (0–100). |
 | `INACTIVITY_TIMEOUT_MS` | `300000` | Disconnect after this many idle milliseconds. |
+| `TRACK_START_TIMEOUT_MS` | `15000` | Retry a queued item through verified fallbacks when Lavalink never emits `TrackStart`. |
 | `PROGRESS_UPDATE_INTERVAL_MS` | `0` | Player-message update interval; `0` uses the built-in behavior. |
 | `LOUDNESS_NORMALIZATION` | `true` | Enables source-aware playback gain compensation. |
 | `LOUDNESS_<SOURCE>_DB` | provider default | Optional gain offset for a provider, e.g. `LOUDNESS_SOUNDCLOUD_DB=-3`. |
@@ -207,6 +208,7 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `AUTOPLAY_DEEZER_METADATA_LIMIT` | `18` | Maximum candidates enriched with Deezer metadata during one autoplay cycle. |
 | `AUTOPLAY_DEEZER_METADATA_CACHE_TTL_MS` | `604800000` | In-memory cache lifetime for Deezer catalog metadata (7 days). |
 | `AUTOPLAY_METADATA_TIMEOUT_MS` | `3500` | Timeout for non-critical metadata requests; playback continues if the lookup fails. |
+| `AUTOPLAY_RESOLVE_TIMEOUT_MS` | `12000` | Per-provider timeout while resolving an autoplay or fallback track. |
 | `AUTOPLAY_COMMUNITY_METADATA` | `true` | Uses one bounded metadata aggregator for active/manual autoplay anchors. It prefers Last.fm track tags, verifies sparse recordings with MusicBrainz, then uses TheAudioDB only when genre/mood information is still missing. |
 | `AUTOPLAY_COMMUNITY_METADATA_CACHE_TTL_MS` | `2592000000` | In-memory lifetime for community metadata (30 days). |
 | `AUTOPLAY_COMMUNITY_METADATA_MIN_TAGS` | `2` | Number of usable tags that stops lower-priority community lookups. |

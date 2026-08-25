@@ -14,6 +14,7 @@ const { tryQueueFallbackTrack, describeTrack } = require("./fallbacks");
 const { applyNormalizedVolume } = require("./loudness");
 const { fetchLyrics } = require("./lyricsClient");
 const { clearRecoverySnapshot } = require("./recovery");
+const { armTrackStartWatchdog, clearTrackStartWatchdog } = require("./startWatchdog");
 const {
   ensurePlaybackState,
   cloneTrack,
@@ -31,6 +32,73 @@ const {
 } = require("./timers");
 
 const stopLyricsSession = (...args) => require("./lyricsFormatter").stopLyricsSession(...args);
+
+function requestQueuedTrackStart(player, expectedTrack, recover) {
+  if (!player || !expectedTrack) return;
+
+  armTrackStartWatchdog(player, expectedTrack, recover);
+  void player.play().catch((error) => {
+    Log.warning(
+      "Queued track start request failed",
+      error?.message || String(error),
+      `guild=${player.guildId}`,
+      `track=${expectedTrack.info?.title || "unknown"}`
+    );
+  });
+}
+
+async function recoverStalledTrackStart(player, stalledTrack) {
+  if (!player || player.isPaused) return;
+
+  const failedTrack = player.currentTrack || stalledTrack;
+  if (!failedTrack) return;
+
+  clearProgressInterval(player.guildId);
+  player.currentTrack = null;
+  player.isPlaying = false;
+  player.isPaused = false;
+  player.position = 0;
+
+  const state = ensurePlaybackState(player.guildId);
+  state.currentTrack = null;
+  state.paused = false;
+  playbackState.set(player.guildId, state);
+  markActivityStateChanged(player.guildId, "trackStartTimeout");
+
+  Log.warning(
+    "Retrying stalled queue item through verified fallbacks",
+    "",
+    `guild=${player.guildId}`,
+    `track=${failedTrack.info?.author || "Unknown"} - ${failedTrack.info?.title || "Unknown"}`
+  );
+
+  const fallbackTrack = await tryQueueFallbackTrack(player, failedTrack);
+  if (fallbackTrack) {
+    requestQueuedTrackStart(player, fallbackTrack, recoverStalledTrackStart);
+    return;
+  }
+
+  const nextQueuedTrack = player.queue?.[0] || null;
+  if (nextQueuedTrack) {
+    Log.warning("Skipping stalled item and continuing the queue", "", `guild=${player.guildId}`);
+    requestQueuedTrackStart(player, nextQueuedTrack, recoverStalledTrackStart);
+    return;
+  }
+
+  const guildSettings = getGuildState(player.guildId);
+  const referenceTrack = state.lastEndedTrack || state.history?.[state.history.length - 1] || null;
+  if (guildSettings?.autoplay && referenceTrack) {
+    const { queueAutoplayTrack } = require("./autoplay");
+    const added = await queueAutoplayTrack(player, referenceTrack, player.textChannel);
+    const expectedTrack = player.currentTrack || player.queue?.[0] || null;
+    if (added && expectedTrack) {
+      armTrackStartWatchdog(player, expectedTrack, recoverStalledTrackStart);
+      return;
+    }
+  }
+
+  scheduleInactivityDisconnect(player, "trackStartTimeout");
+}
 
 const buildPlaybackErrorMessage = (err, fallback = "Unable to play this track") => {
   if (!err) return fallback;
@@ -94,13 +162,13 @@ function createPoru(client) {
       `error=${errorSummary}`
     );
     const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
-    if (!channel) return;
-
-    const placeholder = await channel
-      .send({
-        embeds: [errorEmbed("Trying alternate source", "The current provider failed; checking a verified mirror…")],
-      })
-      .catch(() => null);
+    const placeholder = channel
+      ? await channel
+          .send({
+            embeds: [errorEmbed("Trying alternate source", "The current provider failed; checking a verified mirror…")],
+          })
+          .catch(() => null)
+      : null;
 
     const fallbackTrack = await tryQueueFallbackTrack(player, track);
 
@@ -117,19 +185,16 @@ function createPoru(client) {
             ],
           })
           .catch(() => null);
-
-        return;
       }
+      return;
+    }
 
-      if (placeholder) {
-        await placeholder
-          .edit({
-            embeds: [errorEmbed("Playback error", buildPlaybackErrorMessage(err))],
-          })
-          .catch(() => null);
-
-        return;
-      }
+    if (placeholder) {
+      await placeholder
+        .edit({
+          embeds: [errorEmbed("Playback error", buildPlaybackErrorMessage(err))],
+        })
+        .catch(() => null);
     }
 
     if (!fallbackTrack && player.queue.length) {
@@ -148,6 +213,7 @@ function createPoru(client) {
       return;
     }
 
+    clearTrackStartWatchdog(player.guildId, "trackStart");
     clearInactivityTimer(player.guildId, "trackStart");
     void stopLyricsSession(player.guildId);
     scheduleProgressUpdates(player);
@@ -307,6 +373,13 @@ function createPoru(client) {
       scheduleInactivityDisconnect(player, "trackEndEmpty");
     }
 
+    // Poru advances the queue after emitting this event. Arm a bounded
+    // watchdog now so an unresolved next track cannot leave the player silent
+    // forever without a TrackException or queueEnd event.
+    if (player.queue.length > 0) {
+      armTrackStartWatchdog(player, player.queue[0], recoverStalledTrackStart);
+    }
+
     try {
       statsStore.finishTrackSession(player.guildId, endedTrack, reasonCode);
 
@@ -321,6 +394,7 @@ function createPoru(client) {
   });
 
   poru.on("queueEnd", async (player) => {
+    clearTrackStartWatchdog(player.guildId, "queueEnd");
     markActivityStateChanged(player.guildId, "queueEnd");
     Log.info("🏁 Queue ended", `guild=${player.guildId}`);
 
@@ -400,6 +474,8 @@ function createPoru(client) {
       const added = await queueAutoplayTrack(player, lastTrack, player.textChannel);
 
       if (added || player.currentTrack || player.queue.length) {
+        const expectedTrack = player.currentTrack || player.queue?.[0] || null;
+        if (expectedTrack) armTrackStartWatchdog(player, expectedTrack, recoverStalledTrackStart);
         return;
       }
     }
