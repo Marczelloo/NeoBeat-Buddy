@@ -1,3 +1,4 @@
+const { markActivityStateChanged } = require("../activity/sync");
 const Log = require("../logs/log");
 const { recordAutoplayExposure } = require("./autoplayExposure");
 const { fetchAutoplayV3Track } = require("./autoplayV3");
@@ -81,6 +82,10 @@ function queueAutoplayTrack(player, lastTrack, textChannelId) {
 
       await player.queue.add(cloned);
       rememberAutoplayTrack(player.guildId, cloned);
+      // Prefetching changes the visible queue even when the current track is
+      // still playing. Notify Activity immediately instead of leaving it to
+      // its low-frequency heartbeat or the next view change.
+      markActivityStateChanged(player.guildId, "autoplayQueued");
       await recordAutoplayExposure(player.guildId, cloned, lastTrack).catch((error) => {
         Log.warning("Autoplay exposure memory update failed", "", `guild=${player.guildId}`, `error=${error.message}`);
       });

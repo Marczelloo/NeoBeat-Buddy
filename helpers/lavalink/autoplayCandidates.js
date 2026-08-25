@@ -27,6 +27,12 @@ const LASTFM_AUTOPLAY_FETCH_LIMIT = Number(process.env.LASTFM_AUTOPLAY_FETCH_LIM
 const LASTFM_AUTOPLAY_RESOLVE_LIMIT = Number(process.env.LASTFM_AUTOPLAY_RESOLVE_LIMIT ?? 12);
 const USE_DEEZER_METADATA = process.env.AUTOPLAY_DEEZER_METADATA !== "false";
 const AUTOPLAY_DEEZER_METADATA_LIMIT = Number(process.env.AUTOPLAY_DEEZER_METADATA_LIMIT ?? 18);
+// Deezer and Spotify tracks are excellent catalogue/metadata candidates, but
+// neither is a dependable direct audio transport on a self-hosted Lavalink.
+// In particular, Deezer can accept a search and then reject the stream with a
+// 403 at playback time. Resolve those candidates to a verified playable
+// mirror before they ever enter the queue.
+const MIRROR_ONLY_PLAYBACK_SOURCES = new Set(["deezer", "spotify"]);
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
 const CONTROL_CHARACTER_PATTERN = new RegExp(
   `[${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]`,
@@ -165,6 +171,12 @@ function normalizePlayableTrack(track) {
     pluginInfo: track.pluginInfo ? { ...track.pluginInfo } : undefined,
     userData: track.userData ? { ...track.userData } : undefined,
   };
+}
+
+function requiresVerifiedMirror(candidate = {}, track = candidate?.track) {
+  const info = track?.info || {};
+  const source = String(info.sourceName || info.source || candidate.source || "").trim().toLowerCase();
+  return MIRROR_ONLY_PLAYBACK_SOURCES.has(source);
 }
 
 function getRelevantPlayableTracks(tracks, query) {
@@ -710,7 +722,7 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "", prov
   }
 
   const directTrack = normalizePlayableTrack(candidate.track);
-  if (directTrack) {
+  if (directTrack && !requiresVerifiedMirror(candidate, directTrack)) {
     const resolvedVersion = getAutoplayVersionCompatibility(directTrack.info?.title, candidate.title);
     if (!resolvedVersion.allowed || (getVariantKinds(candidate.title).length && !getVariantKinds(directTrack.info?.title).length)) {
       Log.debug(
@@ -746,10 +758,24 @@ async function resolveToPlayable(candidate, guildId, { referenceTitle = "", prov
     return applyCandidateMetadata(directTrack, candidate);
   }
 
+  if (directTrack) {
+    Log.debug(
+      "Autoplay candidate requires a verified playback mirror",
+      "",
+      `guild=${guildId}`,
+      `source=${directTrack.info?.sourceName || candidate.source || "unknown"}`,
+      `candidate=${formatLogValue(`${candidate.artist} - ${candidate.title}`)}`
+    );
+  }
+
   const poru = getPoru();
   const searchTitle = getVariantKinds(candidate.title).length ? candidate.title : getBaseTitle(candidate.title);
   const searchQuery = `${candidate.artist} ${searchTitle}`;
-  const sources = Array.isArray(providerSources) && providerSources.length ? providerSources : ["legacy-youtube"];
+  const sources = requiresVerifiedMirror(candidate, directTrack)
+    ? ["youtube", "soundcloud"]
+    : Array.isArray(providerSources) && providerSources.length
+      ? providerSources
+      : ["legacy-youtube"];
 
   for (const source of sources) {
     try {
@@ -823,6 +849,7 @@ module.exports = {
   getAutoplayReference,
   getProviderValidationIssue,
   normalizePlayableTrack,
+  requiresVerifiedMirror,
   getRelevantPlayableTrack,
   getRelevantPlayableTracks,
   loadLavalinkTracks,

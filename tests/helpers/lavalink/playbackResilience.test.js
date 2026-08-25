@@ -1,7 +1,11 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { normalizePlayableTrack, resolveToPlayable } = require("../../../helpers/lavalink/autoplayCandidates");
+const {
+  normalizePlayableTrack,
+  requiresVerifiedMirror,
+  resolveToPlayable,
+} = require("../../../helpers/lavalink/autoplayCandidates");
 const { withTimeout } = require("../../../helpers/lavalink/resolveTimeout");
 const {
   armTrackStartWatchdog,
@@ -31,6 +35,25 @@ test("normalizes raw Lavalink candidate encodings before queueing", async () => 
     "resilience-normalization"
   );
   assert.equal(resolved.track, "encoded-deezer-track");
+});
+
+test("keeps Deezer and Spotify candidates on a verified mirror path", () => {
+  const deezer = normalizePlayableTrack({
+    encoded: "encoded-deezer-track",
+    info: { title: "Like That", author: "Future", sourceName: "deezer" },
+  });
+  const spotify = normalizePlayableTrack({
+    encoded: "encoded-spotify-track",
+    info: { title: "Like That", author: "Future", sourceName: "spotify" },
+  });
+  const youtube = normalizePlayableTrack({
+    encoded: "encoded-youtube-track",
+    info: { title: "Like That", author: "Future", sourceName: "youtube" },
+  });
+
+  assert.equal(requiresVerifiedMirror({ source: "deezer" }, deezer), true);
+  assert.equal(requiresVerifiedMirror({ source: "spotify" }, spotify), true);
+  assert.equal(requiresVerifiedMirror({ source: "youtube" }, youtube), false);
 });
 
 test("resolver timeout rejects a stalled provider request", async () => {

@@ -54,14 +54,14 @@ test("Activity artwork proxy only accepts known HTTPS media hosts", () => {
   assert.equal(isAllowedArtworkUrl("https://example.test/not-allowed.jpg"), false);
 });
 
-test("Activity uses the live player track when state lags behind a queue transition", () => {
+test("Activity uses the event-backed state track during a transient player transition", () => {
   const staleTrack = { track: "old", info: { identifier: "old", title: "Old", length: 120000 } };
   const liveTrack = { track: "new", info: { identifier: "new", title: "New", length: 240000 } };
   const playback = resolveActivityPlayback(staleTrack, liveTrack);
 
-  assert.equal(playback.track, liveTrack);
-  assert.equal(playback.durationMs, 240000);
-  assert.equal(playback.usesPlayerTrack, true);
+  assert.equal(playback.track, staleTrack);
+  assert.equal(playback.durationMs, 120000);
+  assert.equal(playback.usesPlayerTrack, false);
 });
 
 function waitForListening(server) {

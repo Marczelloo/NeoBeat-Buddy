@@ -13,16 +13,17 @@ function websocketUrl(path) {
 }
 
 async function request(path, options = {}, accessToken = null) {
+  const { timeoutMs = 12_000, ...fetchOptions } = options;
   const headers = new Headers(options.headers || {});
   headers.set("Content-Type", "application/json");
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(new Error("Activity request timed out.")), 12_000);
+  const timeout = window.setTimeout(() => controller.abort(new Error("Activity request timed out.")), timeoutMs);
   const abort = () => controller.abort(options.signal?.reason);
   options.signal?.addEventListener("abort", abort, { once: true });
   try {
-    const response = await fetch(apiUrl(path), { ...options, headers, signal: controller.signal });
+    const response = await fetch(apiUrl(path), { ...fetchOptions, headers, signal: controller.signal });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `Activity request failed (${response.status}).`);
     return payload;
@@ -50,7 +51,14 @@ export function searchActivity({ guildId, accessToken, query, source, signal }) 
 export function sendActivityAction({ guildId, accessToken, action, payload }) {
   return request(
     "/api/activity/action",
-    { method: "POST", body: JSON.stringify({ guildId, action, payload }) },
+    {
+      method: "POST",
+      body: JSON.stringify({ guildId, action, payload }),
+      // Surprise me intentionally runs the full AI-first recommendation and
+      // verification path. It can outlast a regular control request while
+      // still succeeding, so do not report a false failure after 12 seconds.
+      timeoutMs: action === "surprise_me" ? 45_000 : 12_000,
+    },
     accessToken
   );
 }

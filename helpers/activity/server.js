@@ -55,7 +55,7 @@ const CLIENT_CACHE_TTL = 5 * 60 * 1000;
 const MAX_IDENTITY_CACHE_ENTRIES = 1_000;
 const MAX_ACTIVITY_SOCKETS = 200;
 const QUEUE_UNDO_TTL_MS = 15_000;
-const ACTIVITY_STATE_HEARTBEAT_MS = Math.max(1_000, Number(process.env.ACTIVITY_STATE_HEARTBEAT_MS) || 5_000);
+const ACTIVITY_STATE_HEARTBEAT_MS = Math.max(1_000, Number(process.env.ACTIVITY_STATE_HEARTBEAT_MS) || 2_000);
 const ARTWORK_HOSTS = Object.freeze([
   "dzcdn.net",
   "sndcdn.com",
@@ -424,6 +424,11 @@ function buildActivityState(client, guildId, userId) {
   const guild = client.guilds.cache.get(guildId);
   const settings = guildState.getGuildState(guildId);
   const lyrics = serializeLyrics(getLyricsState(guildId));
+  const paused = Boolean(livePlaybackState?.paused || player?.isPaused);
+  // A track enters playbackState only on Lavalink TrackStart. Using that
+  // event-backed state avoids displaying Poru's transient queued/cleared
+  // currentTrack during an error or queue transition.
+  const playing = Boolean(livePlaybackState?.currentTrack && !paused && player?.isPlaying !== false);
   const position = playback.usesPlayerTrack ? getInterpolatedPosition(player, Date.now(), 0) : 0;
   const botStatus = client?.user?.presence?.activities?.find((activity) => activity.type === 2)?.name || null;
 
@@ -441,8 +446,8 @@ function buildActivityState(client, guildId, userId) {
     },
     player: {
       connected: Boolean(player),
-      paused: Boolean(player?.isPaused),
-      playing: Boolean(player?.isPlaying && !player?.isPaused),
+      paused,
+      playing,
       positionMs: Math.max(0, Math.round(position)),
       durationMs: playback.durationMs || currentTrack?.durationMs || 0,
       volume: getUserVolume(player),
@@ -463,10 +468,12 @@ function buildActivityState(client, guildId, userId) {
 }
 
 function resolveActivityPlayback(stateTrack, playerTrack) {
-  // Poru's player is the source of truth for the active stream. The state
-  // snapshot is intentionally only a fallback while a player is unavailable.
-  const usesPlayerTrack = Boolean(playerTrack);
-  const track = usesPlayerTrack ? playerTrack : stateTrack || playerTrack || null;
+  // playbackState is updated synchronously by TrackStart/TrackEnd. Prefer it
+  // for Activity metadata: Poru mutates currentTrack while it dequeues and
+  // retries providers, which previously left title/artwork one transition
+  // behind even though the audio had already changed.
+  const track = stateTrack || playerTrack || null;
+  const usesPlayerTrack = !stateTrack && Boolean(playerTrack);
   const playerDuration = Number(playerTrack?.info?.length) || 0;
 
   return {

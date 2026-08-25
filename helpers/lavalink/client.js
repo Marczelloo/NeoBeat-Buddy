@@ -32,6 +32,25 @@ const {
 } = require("./timers");
 
 const stopLyricsSession = (...args) => require("./lyricsFormatter").stopLyricsSession(...args);
+const TRACK_FAILURE_SETTLE_MS = 350;
+const trackFailureRecoveries = new Map();
+const lastActivityProgressSyncAt = new Map();
+
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function getTrackKey(track) {
+  return String(track?.track || track?.encoded || track?.info?.identifier || track?.info?.uri || "");
+}
+
+function isDifferentActiveTrack(player, failedTrack) {
+  const activeKey = getTrackKey(player?.currentTrack);
+  const failedKey = getTrackKey(failedTrack);
+  return Boolean(activeKey && failedKey && activeKey !== failedKey && player?.isPlaying);
+}
+
+function isPlayerTransitionActive(player) {
+  return Boolean(player?.currentTrack || player?.isPlaying || player?.queue?.length);
+}
 
 function requestQueuedTrackStart(player, expectedTrack, recover) {
   if (!player || !expectedTrack) return;
@@ -161,49 +180,59 @@ function createPoru(client) {
       `guild=${player.guildId}`,
       `error=${errorSummary}`
     );
-    const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
-    const placeholder = channel
-      ? await channel
-          .send({
-            embeds: [errorEmbed("Trying alternate source", "The current provider failed; checking a verified mirror…")],
-          })
-          .catch(() => null)
-      : null;
+    // Poru emits TrackException and immediately calls skip without awaiting
+    // this listener. Keep a recovery lock so its following queueEnd cannot
+    // start a competing autoplay request while we resolve a verified mirror.
+    const recovery = (async () => {
+      const fallbackTrack = await tryQueueFallbackTrack(player, track);
 
-    const fallbackTrack = await tryQueueFallbackTrack(player, track);
-
-    if (fallbackTrack) {
-      if (placeholder) {
+      if (fallbackTrack) {
         const title = fallbackTrack.info?.title || fallbackTrack.info?.identifier || "this track";
-        await placeholder
-          .edit({
-            embeds: [
-              errorEmbed(
-                "Trying alternate source",
-                `The current provider failed, so I'm retrying a verified mirror for **${title}**.`
-              ),
-            ],
+        // A late exception for a previous provider must not replace a stream
+        // that already recovered on its own.
+        if (isDifferentActiveTrack(player, track)) {
+          Log.info("Ignoring stale provider error after playback recovered", "", `guild=${player.guildId}`, `track=${trackTitle}`);
+          return true;
+        }
+
+        clearProgressInterval(player.guildId);
+        player.currentTrack = null;
+        player.isPlaying = false;
+        player.isPaused = false;
+        player.position = 0;
+        const state = ensurePlaybackState(player.guildId);
+        state.currentTrack = null;
+        state.paused = false;
+        playbackState.set(player.guildId, state);
+        markActivityStateChanged(player.guildId, "trackErrorRecovery");
+        requestQueuedTrackStart(player, fallbackTrack, recoverStalledTrackStart);
+
+        // Discord text-channel delivery is non-critical.  Do it after the
+        // replacement request and do not await it: Poru can emit queueEnd
+        // directly after TrackException, so the recovery lock needs to settle
+        // as soon as playback has been requested.
+        void poru.client.channels
+          .fetch(player.textChannel)
+          .then((channel) => {
+            if (!channel) return null;
+            return channel.send({
+              embeds: [errorEmbed("Trying alternate source", `Retrying a verified mirror for **${title}**.`)],
+            });
           })
           .catch(() => null);
+        return true;
       }
-      return;
-    }
 
-    if (placeholder) {
-      await placeholder
-        .edit({
-          embeds: [errorEmbed("Playback error", buildPlaybackErrorMessage(err))],
-        })
-        .catch(() => null);
-    }
+      const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
+      if (channel) await channel.send({ embeds: [errorEmbed("Playback error", buildPlaybackErrorMessage(err))] }).catch(() => null);
+      return false;
+    })();
 
-    if (!fallbackTrack && player.queue.length) {
-      Log.warning(
-        "Waiting for Lavalink auto-skip after error",
-        "",
-        `guild=${player.guildId}`,
-        `queueLength=${player.queue.length}`
-      );
+    trackFailureRecoveries.set(player.guildId, recovery);
+    try {
+      await recovery;
+    } finally {
+      if (trackFailureRecoveries.get(player.guildId) === recovery) trackFailureRecoveries.delete(player.guildId);
     }
   });
 
@@ -215,6 +244,8 @@ function createPoru(client) {
 
     clearTrackStartWatchdog(player.guildId, "trackStart");
     clearInactivityTimer(player.guildId, "trackStart");
+    player.isPlaying = true;
+    player.isPaused = false;
     void stopLyricsSession(player.guildId);
     scheduleProgressUpdates(player);
 
@@ -394,6 +425,22 @@ function createPoru(client) {
   });
 
   poru.on("queueEnd", async (player) => {
+    const recovery = trackFailureRecoveries.get(player.guildId);
+    if (recovery) {
+      Log.info("⏳ Waiting for provider-error recovery before queue end", "", `guild=${player.guildId}`);
+      await recovery.catch(() => false);
+    }
+
+    // Lavalink can emit queueEnd immediately after a provider exception while
+    // the fallback's TrackStart is already in flight. Give that event a short
+    // settle window before clearing the authoritative Activity state.
+    await wait(TRACK_FAILURE_SETTLE_MS);
+    if (isPlayerTransitionActive(player)) {
+      markActivityStateChanged(player.guildId, "queueEndRecovered");
+      Log.info("Ignoring stale queue end during active transition", "", `guild=${player.guildId}`);
+      return;
+    }
+
     clearTrackStartWatchdog(player.guildId, "queueEnd");
     markActivityStateChanged(player.guildId, "queueEnd");
     Log.info("🏁 Queue ended", `guild=${player.guildId}`);
@@ -489,6 +536,12 @@ function createPoru(client) {
     state.lastTimestamp = Date.now();
     state.paused = Boolean(player.isPaused);
     playbackState.set(player.guildId, state);
+
+    const now = Date.now();
+    if (now - (lastActivityProgressSyncAt.get(player.guildId) || 0) >= 1_000) {
+      lastActivityProgressSyncAt.set(player.guildId, now);
+      markActivityStateChanged(player.guildId, "playerUpdate");
+    }
 
     try {
       statsStore.updateProgress(player.guildId, player.position);
