@@ -1,5 +1,6 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { backupCorruptFile, writeJsonAtomic } = require("../data/atomicJson");
 const Log = require("../logs/log");
 
 const DATA_FILE = path.join(__dirname, "../data/userPreferences.json");
@@ -17,7 +18,8 @@ async function init() {
       preferences = {};
       await save();
     } else if (err instanceof SyntaxError) {
-      Log.warning("User preferences file corrupted, resetting");
+      const backupPath = await backupCorruptFile(DATA_FILE).catch(() => null);
+      Log.warning(`User preferences file corrupted and preserved at ${backupPath || "an unavailable backup path"}`);
       preferences = {};
       await save();
     } else {
@@ -29,8 +31,7 @@ async function init() {
 
 async function save() {
   try {
-    await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-    await fs.writeFile(DATA_FILE, JSON.stringify(preferences, null, 2), "utf-8");
+    await writeJsonAtomic(DATA_FILE, preferences);
   } catch (err) {
     Log.error("Failed to save user preferences", err);
   }
@@ -72,10 +73,19 @@ function setUserDefaultSource(userId, source) {
   return setUserPreference(userId, "defaultSource", source);
 }
 
+async function flush() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  await save();
+}
+
 module.exports = {
   init,
   getUserPreferences,
   setUserPreference,
   getUserDefaultSource,
   setUserDefaultSource,
+  flush,
 };

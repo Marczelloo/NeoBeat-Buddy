@@ -165,7 +165,7 @@ function shareWithUser(userId, guildId, playlistName, targetUserId) {
  */
 function unshareWithUser(userId, guildId, playlistName, targetUserId) {
   const data = loadPlaylists();
-  const playlist = getPlaylist(userId, guildId, playlistName);
+  const playlist = data.user[userId]?.find((entry) => entry.name.toLowerCase() === playlistName.toLowerCase());
 
   if (!playlist) {
     return { success: false, error: `Playlist "${playlistName}" not found.` };

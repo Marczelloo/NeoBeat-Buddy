@@ -1,3 +1,4 @@
+const { randomBytes } = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const {
@@ -12,6 +13,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require("discord.js");
+const { backupCorruptFile, writeJsonAtomic } = require("../../helpers/data/atomicJson");
 const Log = require("../../helpers/logs/log");
 
 const DATA_FILE = path.join(__dirname, "..", "..", "helpers", "data", "tickets.json");
@@ -19,6 +21,7 @@ const DATA_FILE = path.join(__dirname, "..", "..", "helpers", "data", "tickets.j
 // In-memory cache
 let ticketsData = { config: {}, tickets: [] };
 let loaded = false;
+let writeQueue = Promise.resolve();
 
 async function loadData() {
   if (loaded) return;
@@ -27,6 +30,10 @@ async function loadData() {
     ticketsData = JSON.parse(raw);
     loaded = true;
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      const backupPath = await backupCorruptFile(DATA_FILE).catch(() => null);
+      Log.error("Ticket data was corrupted and preserved", backupPath || error);
+    }
     if (error.code !== "ENOENT") {
       Log.error("Failed to load tickets data", error);
     }
@@ -36,12 +43,9 @@ async function loadData() {
 }
 
 async function saveData() {
-  try {
-    await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-    await fs.writeFile(DATA_FILE, JSON.stringify(ticketsData, null, 2), "utf-8");
-  } catch (error) {
-    Log.error("Failed to save tickets data", error);
-  }
+  const snapshot = structuredClone(ticketsData);
+  writeQueue = writeQueue.catch(() => {}).then(() => writeJsonAtomic(DATA_FILE, snapshot));
+  return writeQueue.catch((error) => Log.error("Failed to save tickets data", error));
 }
 
 function getGuildConfig(guildId) {
@@ -54,17 +58,16 @@ function setGuildConfig(guildId, config) {
 }
 
 function generateTicketId() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let id = "";
-  for (let i = 0; i < 6; i++) {
-    id += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return id;
+  return randomBytes(6).toString("base64url").toUpperCase().slice(0, 8);
 }
 
 function createTicket(guildId, userId, type, title, description) {
   const ticket = {
-    id: generateTicketId(),
+    id: (() => {
+      let id;
+      do id = generateTicketId(); while (ticketsData.tickets.some((ticket) => ticket.id === id));
+      return id;
+    })(),
     guildId,
     userId,
     type,
@@ -80,8 +83,8 @@ function createTicket(guildId, userId, type, title, description) {
   return ticket;
 }
 
-function getTicket(ticketId) {
-  return ticketsData.tickets.find((t) => t.id === ticketId);
+function getTicket(ticketId, guildId) {
+  return ticketsData.tickets.find((ticket) => ticket.id === ticketId && ticket.guildId === guildId);
 }
 
 function getGuildTickets(guildId, status = null) {
@@ -100,8 +103,8 @@ function getUserTickets(userId, guildId = null) {
   return tickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-function updateTicketStatus(ticketId, status, responderId = null, response = null) {
-  const ticket = getTicket(ticketId);
+function updateTicketStatus(guildId, ticketId, status, responderId = null, response = null) {
+  const ticket = getTicket(ticketId, guildId);
   if (!ticket) return null;
 
   ticket.status = status;
@@ -486,7 +489,7 @@ async function handleList(interaction) {
 
 async function handleView(interaction) {
   const ticketId = interaction.options.getString("id");
-  const ticket = getTicket(ticketId);
+  const ticket = getTicket(ticketId, interaction.guild.id);
 
   if (!ticket) {
     return interaction.reply({
@@ -571,7 +574,7 @@ async function handlePending(interaction) {
 
 async function handleRespond(interaction) {
   const ticketId = interaction.options.getString("id");
-  const ticket = getTicket(ticketId);
+  const ticket = getTicket(ticketId, interaction.guild.id);
 
   if (!ticket) {
     return interaction.reply({
@@ -596,10 +599,13 @@ async function handleRespond(interaction) {
 }
 
 async function handleRespondModal(interaction) {
+  if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+    return interaction.reply({ content: "❌ You need **Manage Server** permission to manage tickets.", ephemeral: true });
+  }
   const ticketId = interaction.customId.replace("ticket_respond:", "");
   const response = interaction.fields.getTextInputValue("response");
 
-  const ticket = updateTicketStatus(ticketId, "in-progress", interaction.user.id, response);
+  const ticket = updateTicketStatus(interaction.guild.id, ticketId, "in-progress", interaction.user.id, response);
 
   if (!ticket) {
     return interaction.reply({
@@ -643,7 +649,7 @@ async function handleClose(interaction) {
   const ticketId = interaction.options.getString("id");
   const reason = interaction.options.getString("reason") || "No reason provided";
 
-  const ticket = updateTicketStatus(ticketId, "closed", interaction.user.id, `Closed: ${reason}`);
+  const ticket = updateTicketStatus(interaction.guild.id, ticketId, "closed", interaction.user.id, `Closed: ${reason}`);
 
   if (!ticket) {
     return interaction.reply({
@@ -695,7 +701,7 @@ async function handleTicketButton(interaction) {
     });
   }
 
-  const ticket = getTicket(ticketId);
+  const ticket = getTicket(ticketId, interaction.guild.id);
 
   if (!ticket) {
     return interaction.reply({
@@ -706,7 +712,7 @@ async function handleTicketButton(interaction) {
 
   switch (action) {
     case "ticket_progress": {
-      updateTicketStatus(ticketId, "in-progress");
+      updateTicketStatus(interaction.guild.id, ticketId, "in-progress");
       await interaction.reply({
         content: `✅ Ticket \`${ticketId}\` marked as in-progress.`,
         ephemeral: true,
@@ -734,7 +740,7 @@ async function handleTicketButton(interaction) {
     }
 
     case "ticket_close": {
-      updateTicketStatus(ticketId, "closed", interaction.user.id, "Closed via button");
+      updateTicketStatus(interaction.guild.id, ticketId, "closed", interaction.user.id, "Closed via button");
       await interaction.reply({
         content: `✅ Ticket \`${ticketId}\` has been closed.`,
         ephemeral: true,

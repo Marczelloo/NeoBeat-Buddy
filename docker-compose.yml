@@ -13,7 +13,7 @@ services:
       - .env
     environment:
       SERVER_PORT: 2333
-      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in .env}
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
       SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       YOUTUBE_PO_TOKEN: ${YOUTUBE_PO_TOKEN:-}
@@ -27,7 +27,7 @@ services:
       - ./helpers/lavalink/plugins:/opt/Lavalink/plugins
       - ./helpers/lavalink/youtube-cookies.txt:/opt/Lavalink/youtube-cookies.txt:ro
     ports:
-      - "2333:2333"
+      - "127.0.0.1:${LAVALINK_PUBLIC_PORT:-2333}:2333"
     restart: unless-stopped
     depends_on:
       yt-cipher:
@@ -35,7 +35,7 @@ services:
     healthcheck:
       test:
         - "CMD-SHELL"
-        - 'curl -sf -H "Authorization: ${LAVALINK_PASSWORD:-youshallnotpass}" http://localhost:2333/version || exit 1'
+        - 'curl -sf -H "Authorization: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in .env}" http://localhost:2333/version || exit 1'
       interval: 15s
       timeout: 5s
       retries: 5

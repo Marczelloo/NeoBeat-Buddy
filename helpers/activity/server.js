@@ -43,6 +43,7 @@ const { selectSurpriseSeed } = require("../lavalink/surpriseMe");
 const Log = require("../logs/log");
 const { importPlaylistFromUrl } = require("../playlists/import");
 const playlistStore = require("../playlists/store");
+const { consumeRateLimit } = require("../security/rateLimit");
 const statsStore = require("../stats/store");
 const { serializeFilters, serializeLyrics, serializePlaylist, serializePlaylistDetails, serializeTrack, normalizeSource } = require("./state");
 const { activityStateEvents, getActivityStateRevision, markActivityStateChanged } = require("./sync");
@@ -52,6 +53,7 @@ const MAX_BODY_SIZE = 64 * 1024;
 const MAX_ARTWORK_SIZE = 8 * 1024 * 1024;
 const CLIENT_CACHE_TTL = 5 * 60 * 1000;
 const MAX_IDENTITY_CACHE_ENTRIES = 1_000;
+const MAX_ACTIVITY_SOCKETS = 200;
 const QUEUE_UNDO_TTL_MS = 15_000;
 const ACTIVITY_STATE_HEARTBEAT_MS = Math.max(1_000, Number(process.env.ACTIVITY_STATE_HEARTBEAT_MS) || 5_000);
 const ARTWORK_HOSTS = Object.freeze([
@@ -81,12 +83,12 @@ function getActivityConfig() {
     enabled: !["0", "false", "off", "no"].includes(String(process.env.ACTIVITY_ENABLED ?? "true").toLowerCase()),
     host: process.env.ACTIVITY_HOST || "127.0.0.1",
     port: Number(process.env.ACTIVITY_PORT || DEFAULT_PORT),
-    allowDev: isTrue(process.env.ACTIVITY_ALLOW_DEV),
+    allowDev: isTrue(process.env.ACTIVITY_ALLOW_DEV) && process.env.NODE_ENV !== "production",
     devGuildId: process.env.ACTIVITY_DEV_GUILD_ID || "demo",
     devUserId: process.env.ACTIVITY_DEV_USER_ID || "local-user",
     clientSecret: process.env.ACTIVITY_CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET,
     redirectUri: process.env.ACTIVITY_REDIRECT_URI || "https://127.0.0.1",
-    allowedOrigins: String(process.env.ACTIVITY_ALLOWED_ORIGINS || "*")
+    allowedOrigins: String(process.env.ACTIVITY_ALLOWED_ORIGINS || (process.env.NODE_ENV === "production" ? "" : "*"))
       .split(",")
       .map((origin) => origin.trim())
       .filter(Boolean),
@@ -111,7 +113,7 @@ function sendJson(response, statusCode, payload, config) {
     ? "*"
     : config.allowedOrigins.includes(requestedOrigin)
       ? requestedOrigin
-      : config.allowedOrigins[0] || "null";
+      : "null";
 
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
@@ -236,6 +238,7 @@ async function fetchDiscordUser(token) {
 
   const response = await fetch("https://discord.com/api/v10/users/@me", {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) throw new Error("Discord authentication expired. Reopen the Activity.");
@@ -298,10 +301,12 @@ function assertControlPermission(guildId, identity, action) {
     "seek",
     "filter",
     "equalizer",
+    "equalizer_preset",
     "loop",
     "autoplay",
     "play",
     "surprise_me",
+    "play_playlist",
   ]);
 
   if (guardedActions.has(action)) {
@@ -323,6 +328,36 @@ function withAutoplayRequesterLabel(track, client) {
 
   const botUsername = client?.user?.username || "MewBit";
   return { ...track, info: { ...info, requesterTag: botUsername } };
+}
+
+function getRequestAddress(request) {
+  return String(request.headers["x-forwarded-for"] || request.socket?.remoteAddress || "unknown").split(",")[0].trim();
+}
+
+function enforceRateLimit(request, scope, limit, windowMs) {
+  const result = consumeRateLimit(`${scope}:${getRequestAddress(request)}`, { limit, windowMs });
+  if (result.allowed) return;
+  throw Object.assign(new Error("Too many requests. Try again shortly."), {
+    statusCode: 429,
+    retryAfterMs: result.retryAfterMs,
+  });
+}
+
+function isAllowedOrigin(origin, config) {
+  return !origin || config.allowedOrigins.includes("*") || config.allowedOrigins.includes(origin);
+}
+
+function assertPlayerVoiceAccess(player, identity, action) {
+  if (identity.dev || !player?.voiceChannel) return;
+  const guardedActions = new Set([
+    "pause", "resume", "toggle", "skip", "previous", "stop", "remove_queue", "play_next",
+    "move_queue", "clear_queue", "undo_queue", "shuffle", "volume", "seek", "filter",
+    "equalizer", "equalizer_preset", "loop", "autoplay", "play", "surprise_me", "play_playlist",
+  ]);
+  if (!guardedActions.has(action)) return;
+  if (identity.member?.voice?.channelId !== player.voiceChannel) {
+    throw Object.assign(new Error("Join the active voice channel to control playback."), { statusCode: 403 });
+  }
 }
 
 function getSerializedQueue(player, client) {
@@ -476,6 +511,7 @@ function serializeActivityActionResult(action, result) {
 async function runActivityAction({ guildId, identity, action, payload = {} }) {
   assertControlPermission(guildId, identity, action);
   const player = getPlayer(guildId);
+  assertPlayerVoiceAccess(player, identity, action);
 
   switch (action) {
     case "play": {
@@ -794,6 +830,7 @@ function createActivityServer(client) {
 
     try {
       if (request.method === "POST" && url.pathname === "/api/token") {
+        enforceRateLimit(request, "token", 12, 60_000);
         if (!config.clientSecret) throw Object.assign(new Error("DISCORD_CLIENT_SECRET is not configured on the Activity gateway."), { statusCode: 503 });
         const body = await readJson(request);
         if (!body.code) throw Object.assign(new Error("Missing Discord authorization code."), { statusCode: 400 });
@@ -805,13 +842,15 @@ function createActivityServer(client) {
             client_secret: config.clientSecret,
             grant_type: "authorization_code",
             code: body.code,
+            redirect_uri: config.redirectUri,
           }),
+          signal: AbortSignal.timeout(10_000),
         });
         const tokenPayload = await tokenResponse.json();
         if (!tokenResponse.ok) {
           const detail = [tokenPayload.error, tokenPayload.error_description].filter(Boolean).join(": ") || "Discord token exchange failed.";
           Log.error("Discord OAuth token exchange rejected", `status=${tokenResponse.status} ${detail}`);
-          throw Object.assign(new Error(detail), { statusCode: 502 });
+          throw Object.assign(new Error("Discord token exchange failed. Reopen the Activity and try again."), { statusCode: 502 });
         }
         return sendJson(response, 200, tokenPayload, config);
       }
@@ -825,12 +864,14 @@ function createActivityServer(client) {
       }
 
       if (url.pathname === "/api/activity/state" && request.method === "GET") {
+        enforceRateLimit(request, "state", 120, 60_000);
         const guildId = url.searchParams.get("guildId") || config.devGuildId;
         const identity = await authenticateRequest(client, request, guildId, config);
         return sendJson(response, 200, { ok: true, state: buildActivityState(client, guildId, identity.id), identity: { id: identity.id, username: identity.username } }, config);
       }
 
       if (url.pathname === "/api/activity/search" && request.method === "POST") {
+        enforceRateLimit(request, "search", 30, 60_000);
         const body = await readJson(request);
         const guildId = limitText(body.guildId || config.devGuildId, 80);
         await authenticateRequest(client, request, guildId, config);
@@ -839,6 +880,7 @@ function createActivityServer(client) {
       }
 
       if (url.pathname === "/api/activity/action" && request.method === "POST") {
+        enforceRateLimit(request, "action", 90, 60_000);
         const body = await readJson(request);
         const guildId = limitText(body.guildId || config.devGuildId, 80);
         const identity = await authenticateRequest(client, request, guildId, config);
@@ -874,11 +916,15 @@ function createActivityServer(client) {
   function handleUpgrade(request, socket, head) {
     const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
     if (url.pathname !== "/api/activity/ws") return socket.destroy();
+    if (!isAllowedOrigin(request.headers.origin, config) || !consumeRateLimit(`ws:${getRequestAddress(request)}`, { limit: 20, windowMs: 60_000 }).allowed) {
+      return socket.destroy();
+    }
     webSocketServer.handleUpgrade(request, socket, head, (webSocket) => webSocketServer.emit("connection", webSocket, request));
   }
 
-  const webSocketServer = new WebSocketServer({ noServer: true });
+  const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   webSocketServer.on("connection", (socket) => {
+    if (sockets.size >= MAX_ACTIVITY_SOCKETS) return socket.close(1013, "Activity is busy. Try again shortly.");
     socket.authorized = false;
     sockets.add(socket);
 
@@ -897,6 +943,8 @@ function createActivityServer(client) {
         }
         if (!socket.authorized) return sendSocket(socket, { type: "error", error: "Authenticate the Activity socket first." });
         if (message.type === "action") {
+          const actionLimit = consumeRateLimit(`ws-action:${socket.identity.id}`, { limit: 120, windowMs: 60_000 });
+          if (!actionLimit.allowed) throw Object.assign(new Error("Too many actions. Try again shortly."), { statusCode: 429 });
           await runActivityAction({ guildId: socket.guildId, identity: socket.identity, action: message.action, payload: message.payload || {} });
           markActivityStateChanged(socket.guildId, `activity:${message.action}`);
         }

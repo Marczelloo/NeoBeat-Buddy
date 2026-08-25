@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowBendUpRight,
@@ -13,7 +13,6 @@ import {
   Heart,
   House,
   LinkSimple,
-  ListDashes,
   MagnifyingGlass,
   MusicNotes,
   Pause,
@@ -44,31 +43,13 @@ import { setMewbitPresence, setupDiscord } from "./discord.js";
 import { connectActivitySocket, fetchActivityState, searchActivity, sendActivityAction } from "./api.js";
 import { parseMusicLink } from "./musicLink.js";
 import { createMockState, createEmptyState, mockSearchResults } from "./mockState.js";
+import { clamp, usePlayerPosition } from "./hooks/usePlayerPosition.js";
 
-const BAND_LABELS = ["60", "120", "250", "500", "1k", "2k", "4k", "8k", "16k", "31k", "63k", "125k", "250k", "500k", "1m"];
+const LazyFiltersPanel = lazy(() => import("./views/FiltersPanel.jsx"));
+const LazyHomePanel = lazy(() => import("./views/HomePanel.jsx"));
+const LazyLyricsPanel = lazy(() => import("./views/LyricsPanel.jsx"));
+
 const SOURCE_NAMES = ["auto", "youtube", "soundcloud", "deezer", "spotify"];
-const FILTER_PRESET_META = Object.freeze({
-  nightcore: { label: "Nightcore", description: "Faster, brighter, and slightly higher pitch" },
-  vaporwave: { label: "Vaporwave", description: "Slow, dreamy, and lower-pitched" },
-  chipmunk: { label: "Chipmunk", description: "High-pitched meme mode" },
-  deepvoice: { label: "Deep Voice", description: "Lower pitch for a darker voice" },
-  eightd: { label: "8D", description: "Slow stereo rotation for an 8D effect" },
-  karaoke: { label: "Karaoke", description: "Reduces center-panned vocals" },
-  wobble: { label: "Wobble", description: "Adds a playful tremolo wobble" },
-  vibrato: { label: "Vibrato", description: "Adds a noticeable vocal vibrato" },
-  robot: { label: "Robot", description: "Crunchy robotic distortion" },
-  telephone: { label: "Telephone", description: "Narrow, filtered telephone sound" },
-  mono: { label: "Mono", description: "Folds stereo into a centered mono mix" },
-  surround: { label: "Surround", description: "Gentle rotating surround feel" },
-  meme: { label: "Meme", description: "Fast pitch plus wobble for cursed moments" },
-});
-
-function getFilterPresetMeta(preset) {
-  const key = String(preset || "").toLowerCase();
-  if (FILTER_PRESET_META[key]) return FILTER_PRESET_META[key];
-  const label = key.replace(/[-_]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
-  return { label: label || "Effect", description: "Applies a live sound effect" };
-}
 // Mock preview is a dev-only affordance: production builds never render mock
 // data or search results, even if someone appends ?mock=1 to the URL.
 const MOCK_PREVIEW = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("mock");
@@ -139,36 +120,6 @@ function useBufferedSlider(externalValue, { acknowledgementTolerance = 0, optimi
   return { value, begin, update, commit };
 }
 
-function usePlayerPosition(player) {
-  const [now, setNow] = useState(() => Date.now());
-  const anchorRef = useRef({ positionMs: Number(player?.positionMs) || 0, receivedAt: Date.now() });
-  const trackId = player?.currentTrack?.id;
-  const shouldTick = Boolean(player?.playing && !player?.paused && trackId);
-
-  useEffect(() => {
-    anchorRef.current = { positionMs: Number(player?.positionMs) || 0, receivedAt: Date.now() };
-    setNow(Date.now());
-  }, [player?.positionMs, player?.updatedAt, player?.playing, player?.paused, trackId]);
-
-  useEffect(() => {
-    if (!shouldTick) return undefined;
-    const timer = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(timer);
-  }, [shouldTick]);
-
-  if (!shouldTick) return Number(player?.positionMs) || 0;
-  const anchor = anchorRef.current;
-  return clamp(anchor.positionMs + (now - anchor.receivedAt), 0, Number(player?.durationMs) || Number.MAX_SAFE_INTEGER);
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function formatEqGain(gain) {
-  const value = Number(gain) || 0;
-  return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
-}
 
 function useCompactViewport() {
   const query = "(max-height: 360px), (max-width: 620px) and (max-height: 420px)";
@@ -425,6 +376,21 @@ function SmartMenu({ open, position, rootRef, menuRef, guards, label, children }
   );
 }
 
+function useMediaQuery(query) {
+  const readQuery = () => typeof window !== "undefined" && window.matchMedia(query).matches;
+  const [matches, setMatches] = useState(readQuery);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, [query]);
+
+  return matches;
+}
+
 function PlaylistSubmenuItem({ track, playlists = [], onAction, onClose }) {
   const [open, setOpen] = useState(false);
   const [opensLeft, setOpensLeft] = useState(false);
@@ -606,6 +572,14 @@ function PanelTitle({ icon, title, description, action }) {
   );
 }
 
+function HomePanelFallback() {
+  return <section className="home-panel home-panel-loading panel-surface" aria-busy="true" aria-label="Loading Activity view"><div className="home-orbit" aria-hidden="true"><span /><span /><span /></div><div className="home-loading-copy"><span /><strong /><strong /><i /><i /><div><b /><b /></div></div><div className="home-signal" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div></section>;
+}
+
+function LazyLiveLyricsPanel({ player, onAction }) {
+  const position = usePlayerPosition(player);
+  return <LazyLyricsPanel lyrics={player.lyrics} position={position} onAction={onAction} PanelTitle={PanelTitle} />;
+}
 
 function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onAction, isActionPending = () => false }) {
   const isPlaying = player.playing && !player.paused;
@@ -971,93 +945,6 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
   );
 }
 
-function FiltersPanel({ filters, filterPresets, equalizerPresets = [], onAction, isActionPending = () => false, activeSection = "effects" }) {
-  const values = useMemo(() => Array.from({ length: 15 }, (_, index) => filters.equalizer?.find((band) => band.band === index)?.gain ?? 0), [filters.equalizer]);
-  const [bands, setBands] = useState(values);
-  const bandsRef = useRef(values);
-  const isAdjustingRef = useRef(false);
-  const pendingBandsRef = useRef(null);
-  const pendingBandsUntilRef = useRef(0);
-
-  useEffect(() => {
-    if (isAdjustingRef.current) return;
-
-    const pendingBands = pendingBandsRef.current;
-    if (pendingBands) {
-      const acknowledged = pendingBands.every((gain, index) => Math.abs((values[index] || 0) - gain) < 0.0001);
-      if (acknowledged) {
-        pendingBandsRef.current = null;
-      } else if (Date.now() < pendingBandsUntilRef.current) {
-        bandsRef.current = pendingBands;
-        setBands(pendingBands);
-        return;
-      } else {
-        pendingBandsRef.current = null;
-      }
-    }
-
-    bandsRef.current = values;
-    setBands(values);
-  }, [values]);
-
-  const updateBand = (index, nextGain) => {
-    isAdjustingRef.current = true;
-    pendingBandsRef.current = null;
-    const nextBands = bandsRef.current.map((gain, band) => (band === index ? Number(nextGain) : gain));
-    bandsRef.current = nextBands;
-    setBands(nextBands);
-  };
-
-  const resetBands = () => {
-    const flatBands = Array(15).fill(0);
-    isAdjustingRef.current = false;
-    pendingBandsRef.current = flatBands;
-    pendingBandsUntilRef.current = Date.now() + 5000;
-    bandsRef.current = flatBands;
-    setBands(flatBands);
-    onAction("equalizer", { bands: [] });
-  };
-
-  const commitBands = () => {
-    isAdjustingRef.current = false;
-    const committedBands = [...bandsRef.current];
-    pendingBandsRef.current = committedBands;
-    pendingBandsUntilRef.current = Date.now() + 5000;
-    onAction("equalizer", { bands: committedBands.map((gain, band) => ({ band, gain })) });
-  };
-  return (
-    <div className="filters-panel">
-      {activeSection === "effects" ? <div className="filter-section"><div className="filter-label-row"><div><strong>Fun Filters</strong><span>One-click Lavalink effects</span></div><button className="ghost-button" type="button" onClick={() => onAction("filter", { preset: "off" })} disabled={isActionPending("filter")}>{isActionPending("filter") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : null}Reset</button></div><div className="filter-grid">{(filterPresets || []).map((preset) => { const meta = getFilterPresetMeta(preset); return <button type="button" key={preset} className={`filter-tile ${filters.effectPreset === preset ? "is-selected" : ""}`} onClick={() => onAction("filter", { preset })} disabled={isActionPending("filter")}><span className="filter-tile-icon">{isActionPending("filter") && filters.effectPreset === preset ? <SpinnerGap className="button-spinner" size={17} aria-hidden="true" /> : <Faders size={17} aria-hidden="true" />}</span><span className="filter-tile-copy"><strong>{meta.label}</strong><small>{meta.description}</small></span>{filters.effectPreset === preset ? <Check size={15} weight="bold" aria-hidden="true" /> : null}</button>; })}</div></div> : null}
-      {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><div className="eq-actions"><label className="eq-preset-control"><span>Preset</span><select value={filters.preset === "custom" ? "custom" : filters.preset || "flat"} onChange={(event) => { if (event.target.value !== "custom") onAction("equalizer_preset", { preset: event.target.value }); }} disabled={isActionPending("equalizer_preset")} aria-label="Equalizer preset"><option value="custom" disabled>Custom curve</option>{equalizerPresets.map((preset) => <option value={preset.name} key={`${preset.custom ? "custom" : "built-in"}-${preset.name}`}>{preset.name}{preset.custom ? " • custom" : ""}</option>)}</select></label><button className="ghost-button" type="button" onClick={resetBands} disabled={isActionPending("equalizer")}>{isActionPending("equalizer") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : null}Flat</button></div></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><span className="eq-band-label">{BAND_LABELS[index]}</span><span className="eq-slider-control"><input type="range" min="-0.25" max="0.2" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band, ${formatEqGain(gain)} gain`} onPointerDown={() => { isAdjustingRef.current = true; }} onPointerCancel={commitBands} onChange={(event) => updateBand(index, event.target.value)} onPointerUp={commitBands} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") isAdjustingRef.current = true; }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /></span><span className="eq-band-value">{formatEqGain(gain)}</span></label>)}</div></div> : null}
-    </div>
-  );
-}
-
-function LyricsPanel({ lyrics, position, onAction }) {
-  const lines = lyrics?.lines || [];
-  const activeLine = lines.reduce((last, line, index) => line.timestamp <= position ? index : last, -1);
-  const activeLineRef = useRef(null);
-
-  useEffect(() => {
-    if (activeLine < 0) return;
-    activeLineRef.current?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-  }, [activeLine]);
-
-  return (
-    <div className="lyrics-panel">
-      <PanelTitle icon={<MusicNotes size={18} aria-hidden="true" />} title="Live lyrics" description={lyrics ? `${lyrics.provider} ${lyrics.synced ? "synced" : "static"}` : "Nothing loaded for this track"} action={<button className="ghost-button" type="button" onClick={() => onAction("refresh_lyrics")}><UploadSimple size={15} aria-hidden="true" /> Refresh</button>} />
-      {!lyrics ? <div className="empty-state"><MusicNotes size={38} weight="duotone" aria-hidden="true" /><strong>No lyrics loaded</strong><span>Ask MewBit to check the current track again.</span><button className="secondary-button" type="button" onClick={() => onAction("refresh_lyrics")}>Find lyrics</button></div> : null}
-      {lyrics?.synced && lines.length ? <div className="lyrics-lines">{lines.map((line, index) => <p ref={index === activeLine ? activeLineRef : null} className={index === activeLine ? "is-current" : index < activeLine ? "is-past" : ""} key={`${line.timestamp}-${index}`}>{line.line}</p>)}</div> : null}
-      {lyrics && !lyrics.synced ? <pre className="static-lyrics">{lyrics.text || "The provider returned no readable lyrics."}</pre> : null}
-    </div>
-  );
-}
-
-function LiveLyricsPanel({ player, onAction }) {
-  const position = usePlayerPosition(player);
-  return <LyricsPanel lyrics={player.lyrics} position={position} onAction={onAction} />;
-}
-
 function PlaylistsPanel({ playlists, currentTrack, selectedPlaylist, playlistDetail, likedTrackIds = [], composerOpen = false, onComposerClose, onAction }) {
   const [name, setName] = useState("");
   const [importUrl, setImportUrl] = useState("");
@@ -1283,37 +1170,6 @@ function QueueSidebar({ queue, playlists = [], likedTrackIds = [], queueOpen, on
   );
 }
 
-function HomePanel({ onView, onAction, isActionPending = () => false, loading = false }) {
-  if (loading) {
-    return (
-      <section className="home-panel home-panel-loading panel-surface" aria-busy="true" aria-label="Synchronizing MewBit Activity">
-        <div className="home-orbit" aria-hidden="true"><span /><span /><span /></div>
-        <div className="home-loading-copy"><span /><strong /><strong /><i /><i /><div><b /><b /></div></div>
-        <div className="home-signal" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="home-panel panel-surface">
-      <div className="home-orbit" aria-hidden="true"><span /><span /><span /></div>
-      <div className="home-copy">
-        <span className="home-kicker"><Waveform size={14} weight="bold" aria-hidden="true" /> MEWBIT RADIO</span>
-        <h1>Make the room<br /><em>sound like you.</em></h1>
-        <p>Search a track, open a playlist, or tune the signal. MewBit keeps the whole room in sync.</p>
-        <div className="home-actions">
-          <button className="primary-button" type="button" onClick={() => onView("search")}><MagnifyingGlass size={17} weight="bold" aria-hidden="true" /> Find a track</button>
-          <button className="surprise-button" type="button" onClick={() => onAction("surprise_me")} disabled={isActionPending("surprise_me")} aria-busy={isActionPending("surprise_me") || undefined}>
-            {isActionPending("surprise_me") ? <SpinnerGap className="button-spinner" size={17} aria-hidden="true" /> : <Sparkle size={17} weight="fill" aria-hidden="true" />}
-            {isActionPending("surprise_me") ? "Choosing..." : "Surprise me"}
-          </button>
-        </div>
-      </div>
-      <div className="home-signal" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div>
-    </section>
-  );
-}
-
 function ActivityLoader({ message, leaving }) {
   return (
     <section
@@ -1466,30 +1322,6 @@ function PlayerBar({ state, onAction, onView, isActionPending }) {
   );
 }
 
-function Workspace({ state, activeTab, setActiveTab, search, onAction }) {
-  const tabs = [
-    ["queue", "Queue", <ListDashes size={17} aria-hidden="true" />],
-    ["search", "Search", <MagnifyingGlass size={17} aria-hidden="true" />],
-    ["filters", "Sound", <SlidersHorizontal size={17} aria-hidden="true" />],
-    ["lyrics", "Lyrics", <Subtitles size={17} aria-hidden="true" />],
-    ["playlists", "Playlists", <VinylRecord size={17} aria-hidden="true" />],
-  ];
-  return (
-    <section className="workspace panel-surface">
-      <nav className="workspace-tabs" aria-label="Activity workspace">
-        {tabs.map(([value, label, icon]) => <button type="button" className={activeTab === value ? "is-active" : ""} key={value} onClick={() => setActiveTab(value)}>{icon}<span>{label}</span>{value === "queue" ? <b>{state.player.queue.length}</b> : null}</button>)}
-      </nav>
-      <div className="workspace-body">
-        {activeTab === "queue" ? <><PanelTitle icon={<Queue size={18} aria-hidden="true" />} title="Up next" description={`${state.player.queue.length} tracks in the room`} action={<button className="ghost-button" type="button" onClick={() => onAction("clear_queue")} disabled={!state.player.queue.length}><Trash size={15} aria-hidden="true" /> Clear</button>} /><QueuePanel queue={state.player.queue} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onAction={onAction} /></> : null}
-        {activeTab === "search" ? <><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...search} onAction={onAction} /></> : null}
-        {activeTab === "filters" ? <><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} onAction={onAction} /></> : null}
-        {activeTab === "lyrics" ? <LiveLyricsPanel player={state.player} onAction={onAction} /> : null}
-        {activeTab === "playlists" ? <PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} likedTrackIds={state.likedTrackIds || []} onAction={onAction} /> : null}
-      </div>
-    </section>
-  );
-}
-
 function App() {
   const [state, setState] = useState(() => {
     if (!import.meta.env.DEV) return createEmptyState();
@@ -1517,11 +1349,44 @@ function App() {
   const appliedSnapshot = useRef({ revision: -1, generatedAt: -1 });
   const searchRequest = useRef({ id: 0, controller: null });
   const actionQueue = useRef(Promise.resolve());
+  const controlActionQueue = useRef(Promise.resolve());
   const coalescedActions = useRef(new Map());
   const pendingActionCounts = useRef(new Map());
   const localUndoSnapshots = useRef(new Map());
   const stateRef = useRef(state);
   const isCompact = useCompactViewport();
+  const isDrawerViewport = useMediaQuery("(max-width: 900px)");
+  const appShellRef = useRef(null);
+
+  useEffect(() => {
+    if (!isDrawerViewport || (!leftSidebarOpen && !rightSidebarOpen)) return undefined;
+    const openDrawer = appShellRef.current?.querySelector(leftSidebarOpen ? ".sidebar-left .sidebar-content" : ".sidebar-right .sidebar-content");
+    const closeButton = openDrawer?.querySelector(".drawer-close");
+    const focusableSelector = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])";
+    window.requestAnimationFrame(() => closeButton?.focus());
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setLeftSidebarOpen(false);
+        setRightSidebarOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !openDrawer) return;
+      const focusable = [...openDrawer.querySelectorAll(focusableSelector)];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isDrawerViewport, leftSidebarOpen, rightSidebarOpen]);
 
   const goToView = useCallback((view) => {
     setActiveTab(view);
@@ -1769,10 +1634,10 @@ function App() {
         else showToast(error.message, "error");
       }
     };
-    const enqueue = (task) => {
+    const enqueue = (queue, task) => {
       updateActionPending(pendingKey, 1);
-      const queued = actionQueue.current.then(task, task);
-      actionQueue.current = queued.catch(() => undefined);
+      const queued = queue.current.then(task, task);
+      queue.current = queued.catch(() => undefined);
       return queued.finally(() => updateActionPending(pendingKey, -1));
     };
     if (action === "seek" || action === "volume") {
@@ -1782,11 +1647,12 @@ function App() {
         return queuedAction.promise;
       }
       const holder = { payload, promise: null };
-      holder.promise = enqueue(() => execute(holder.payload)).finally(() => coalescedActions.current.delete(action));
+      holder.promise = enqueue(controlActionQueue, () => execute(holder.payload)).finally(() => coalescedActions.current.delete(action));
       coalescedActions.current.set(action, holder);
       return holder.promise;
     }
-    return enqueue(() => execute(payload));
+    const realtimeActions = new Set(["pause", "resume", "toggle", "skip", "previous", "stop", "volume", "seek"]);
+    return enqueue(realtimeActions.has(action) ? controlActionQueue : actionQueue, () => execute(payload));
   }, [applyState, context, localMutation, showToast, updateActionPending]);
 
   const runSearch = useCallback(async () => {
@@ -1868,14 +1734,15 @@ function App() {
   return (
     <main className={`activity-app ${isCompact ? "is-compact" : ""} ${isHydrating ? "is-hydrating" : ""}`}>
       {showLoader ? <ActivityLoader message={connection.message} leaving={!isHydrating} /> : null}
+      <div className="activity-content" aria-hidden={showLoader ? "true" : undefined} inert={showLoader || undefined}>
       {isCompact ? <CompactPlayer state={state} /> : <>
-        <div className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
+        <div ref={appShellRef} className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
           <div
             className={`drawer-scrim ${leftSidebarOpen || rightSidebarOpen ? "is-open" : ""}`}
             onClick={() => { setLeftSidebarOpen(false); setRightSidebarOpen(false); }}
             aria-hidden="true"
           />
-          <aside className="sidebar sidebar-left" aria-label="Playlists sidebar">
+          <aside className="sidebar sidebar-left" aria-label="Playlists sidebar" role={isDrawerViewport ? "dialog" : undefined} aria-modal={isDrawerViewport && leftSidebarOpen ? "true" : undefined} aria-hidden={isDrawerViewport && !leftSidebarOpen ? "true" : undefined} inert={isDrawerViewport && !leftSidebarOpen || undefined}>
             <PlaylistSidebar
               playlists={state.playlists}
               selectedPlaylist={selectedPlaylist}
@@ -1886,7 +1753,7 @@ function App() {
               loading={isHydrating}
             />
           </aside>
-          <section className="main-stage">
+          <section className="main-stage" aria-hidden={isDrawerViewport && (leftSidebarOpen || rightSidebarOpen) ? "true" : undefined} inert={isDrawerViewport && (leftSidebarOpen || rightSidebarOpen) || undefined}>
             <div className="stage-toolbar">
               <div className="stage-toolbar-inner">
                 <div className="stage-navigation" aria-label="Activity navigation">
@@ -1903,19 +1770,20 @@ function App() {
               </div>
             </div>
             <div className={`main-content main-view-${activeTab}`}>
-              {activeTab === "home" ? (isHydrating ? <HomePanel loading /> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={state} onTab={goToView} onAction={onAction} isActionPending={isActionPending} /> : <HomePanel onView={goToView} onAction={onAction} isActionPending={isActionPending} />) : null}
+              {activeTab === "home" ? (isHydrating ? <Suspense fallback={<HomePanelFallback />}><LazyHomePanel loading /></Suspense> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={state} onTab={goToView} onAction={onAction} isActionPending={isActionPending} /> : <Suspense fallback={<HomePanelFallback />}><LazyHomePanel onView={goToView} onAction={onAction} isActionPending={isActionPending} /></Suspense>) : null}
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
-              {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><FiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} onAction={onAction} isActionPending={isActionPending} /></section> : null}
-              {activeTab === "lyrics" ? <section className="content-panel panel-surface"><LiveLyricsPanel player={state.player} onAction={onAction} /></section> : null}
+              {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading sound controls</span></div>}><LazyFiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} onAction={onAction} isActionPending={isActionPending} /></Suspense></section> : null}
+              {activeTab === "lyrics" ? <section className="content-panel panel-surface"><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading lyrics</span></div>}><LazyLiveLyricsPanel player={state.player} onAction={onAction} /></Suspense></section> : null}
               {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} likedTrackIds={state.likedTrackIds || []} selectedPlaylist={selectedPlaylistDetail?.name || selectedPlaylist} playlistDetail={selectedPlaylistDetail} composerOpen={playlistComposerOpen} onComposerClose={closePlaylistComposer} onAction={onAction} /></section> : null}
             </div>
           </section>
-          <aside className="sidebar sidebar-right" aria-label="Queue sidebar">
+          <aside className="sidebar sidebar-right" aria-label="Queue sidebar" role={isDrawerViewport ? "dialog" : undefined} aria-modal={isDrawerViewport && rightSidebarOpen ? "true" : undefined} aria-hidden={isDrawerViewport && !rightSidebarOpen ? "true" : undefined} inert={isDrawerViewport && !rightSidebarOpen || undefined}>
             <QueueSidebar queue={state.player.queue} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} queueOpen={rightSidebarOpen} onToggleQueue={() => setRightSidebarOpen((value) => !value)} onAction={onAction} isActionPending={isActionPending} loading={isHydrating} />
           </aside>
         </div>
-        {activeTab === "home" ? null : <PlayerBar state={state} onAction={onAction} onView={goToView} isActionPending={isActionPending} />}
+        {activeTab === "home" ? null : <div className="player-bar-shell" aria-hidden={isDrawerViewport && (leftSidebarOpen || rightSidebarOpen) ? "true" : undefined} inert={isDrawerViewport && (leftSidebarOpen || rightSidebarOpen) || undefined}><PlayerBar state={state} onAction={onAction} onView={goToView} isActionPending={isActionPending} /></div>}
       </>}
+      </div>
       {toast ? <div className={`toast toast-${toast.type}`} role="status"><span>{toast.type === "error" ? <WarningCircle size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}</span><span className="toast-message">{toast.message}</span>{toast.action ? <button className="toast-action" type="button" onClick={() => { const action = toast.action; setToast(null); onAction(action.action, action.payload); }}>{toast.action.label}</button> : null}<button type="button" onClick={() => setToast(null)} aria-label="Dismiss notification"><X size={16} aria-hidden="true" /></button></div> : null}
     </main>
   );

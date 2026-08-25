@@ -1,8 +1,11 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { backupCorruptFileSync, writeJsonAtomicSync } = require("../data/atomicJson");
 
 const PLAYLISTS_FILE = path.join(__dirname, "../data/playlists.json");
+const MAX_PLAYLISTS_PER_OWNER = 100;
+const MAX_TRACKS_PER_PLAYLIST = 1_000;
 
 /**
  * Load playlists from file
@@ -12,14 +15,19 @@ function loadPlaylists() {
   try {
     if (!fs.existsSync(PLAYLISTS_FILE)) {
       const initialData = { user: {}, server: {} };
-      fs.writeFileSync(PLAYLISTS_FILE, JSON.stringify(initialData, null, 2));
+      writeJsonAtomicSync(PLAYLISTS_FILE, initialData);
       return initialData;
     }
     const data = fs.readFileSync(PLAYLISTS_FILE, "utf8");
     return JSON.parse(data);
   } catch (err) {
     console.error("Failed to load playlists:", err);
-    return { user: {}, server: {} };
+    if (err instanceof SyntaxError && fs.existsSync(PLAYLISTS_FILE)) {
+      const backupPath = backupCorruptFileSync(PLAYLISTS_FILE);
+      console.error(`Corrupt playlists were preserved at ${backupPath}`);
+      return { user: {}, server: {} };
+    }
+    throw err;
   }
 }
 
@@ -29,7 +37,7 @@ function loadPlaylists() {
  */
 function savePlaylists(data) {
   try {
-    fs.writeFileSync(PLAYLISTS_FILE, JSON.stringify(data, null, 2));
+    writeJsonAtomicSync(PLAYLISTS_FILE, data);
   } catch (err) {
     console.error("Failed to save playlists:", err);
     throw err;
@@ -99,6 +107,8 @@ function deduplicateTracks(tracks) {
  */
 function createPlaylist(userId, guildId, name, options = {}) {
   const data = loadPlaylists();
+  const normalizedName = String(name || "").trim().replace(/\s+/g, " ");
+  if (!normalizedName) return { success: false, error: "Playlist name cannot be empty." };
   const isServer = options.type === "server";
   const key = isServer ? guildId : userId;
   const type = isServer ? "server" : "user";
@@ -109,14 +119,17 @@ function createPlaylist(userId, guildId, name, options = {}) {
   }
 
   // Check for duplicate name
-  const existing = data[type][key].find((p) => p.name.toLowerCase() === name.toLowerCase());
+  const existing = data[type][key].find((p) => p.name.toLowerCase() === normalizedName.toLowerCase());
   if (existing) {
     return { success: false, error: `A ${type} playlist named "${name}" already exists.` };
+  }
+  if (data[type][key].length >= MAX_PLAYLISTS_PER_OWNER) {
+    return { success: false, error: `You can create up to ${MAX_PLAYLISTS_PER_OWNER} ${type} playlists.` };
   }
 
   const playlist = {
     id: generateId(),
-    name,
+    name: normalizedName,
     type,
     description: options.description || "",
     public: options.public || false,
@@ -276,6 +289,9 @@ function addTrack(userId, guildId, name, track) {
 
   if (targetPlaylist.tracks.some((existing) => tracksMatch(existing, track))) {
     return { success: true, duplicate: true, message: `"${track.info?.title || track.title}" is already in playlist "${name}".` };
+  }
+  if (targetPlaylist.tracks.length >= MAX_TRACKS_PER_PLAYLIST) {
+    return { success: false, error: `Playlist "${name}" has reached its ${MAX_TRACKS_PER_PLAYLIST}-track limit.` };
   }
 
   // Add track to the playlist in the data structure
@@ -536,7 +552,8 @@ function editPlaylist(userId, guildId, name, updates) {
  */
 function manageCollaborator(userId, guildId, name, collaboratorId, action) {
   const data = loadPlaylists();
-  const playlist = getPlaylist(userId, guildId, name);
+  const playlist = data.user[userId]?.find((entry) => entry.name.toLowerCase() === name.toLowerCase())
+    || data.server[guildId]?.find((entry) => entry.name.toLowerCase() === name.toLowerCase());
 
   if (!playlist) {
     return { success: false, error: `Playlist "${name}" not found.` };

@@ -4,6 +4,7 @@ const skipVotes = require("../dj/skipVotes");
 const { deletePanelState } = require("../equalizer/panel");
 const { clearPendingUpdates } = require("../equalizer/throttle");
 const Log = require("../logs/log");
+const { assertAllowedMusicUrl } = require("../security/mediaUrl");
 const statsStore = require("../stats/store");
 const { getEqualizerState } = require("./equalizerStore");
 const { toLavalinkFilters } = require("./filters");
@@ -118,6 +119,7 @@ async function loadProviderSearchResults(node, sourcePrefix, query) {
 async function lavalinkResolveTracks(query, source = "deezer") {
   const poru = getPoru();
   let q = String(query || "").trim();
+  assertAllowedMusicUrl(q);
   const isUrl = /^(https?:\/\/)/i.test(q);
 
   // For URLs (Spotify/YouTube links), let Lavalink handle via providers chain

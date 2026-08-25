@@ -1,8 +1,10 @@
 const fs = require("fs");
 const path = require("path");
+const { backupCorruptFileSync, writeJsonAtomicSync } = require("../data/atomicJson");
 
 const HISTORY_FILE = path.join(__dirname, "../data/searchHistory.json");
 const MAX_HISTORY_PER_USER = 100; // Keep last 100 searches per user
+const HISTORY_RETENTION_MS = Math.max(1, Number(process.env.HISTORY_RETENTION_DAYS) || 180) * 24 * 60 * 60 * 1000;
 
 /**
  * Load search history from file
@@ -12,14 +14,24 @@ function loadHistory() {
   try {
     if (!fs.existsSync(HISTORY_FILE)) {
       const initialData = {};
-      fs.writeFileSync(HISTORY_FILE, JSON.stringify(initialData, null, 2));
+      writeJsonAtomicSync(HISTORY_FILE, initialData);
       return initialData;
     }
     const data = fs.readFileSync(HISTORY_FILE, "utf8");
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    const cutoff = Date.now() - HISTORY_RETENTION_MS;
+    for (const userId of Object.keys(parsed)) {
+      parsed[userId] = Array.isArray(parsed[userId]) ? parsed[userId].filter((entry) => Number(entry.timestamp) >= cutoff) : [];
+      if (!parsed[userId].length) delete parsed[userId];
+    }
+    return parsed;
   } catch (err) {
     console.error("Failed to load search history:", err);
-    return {};
+    if (err instanceof SyntaxError && fs.existsSync(HISTORY_FILE)) {
+      console.error(`Corrupt history was preserved at ${backupCorruptFileSync(HISTORY_FILE)}`);
+      return {};
+    }
+    throw err;
   }
 }
 
@@ -29,7 +41,7 @@ function loadHistory() {
  */
 function saveHistory(data) {
   try {
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(data, null, 2));
+    writeJsonAtomicSync(HISTORY_FILE, data);
   } catch (err) {
     console.error("Failed to save search history:", err);
     throw err;

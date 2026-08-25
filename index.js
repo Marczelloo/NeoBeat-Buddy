@@ -30,26 +30,11 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildPresences,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildModeration,
-    GatewayIntentBits.GuildIntegrations,
-    GatewayIntentBits.GuildWebhooks,
-    GatewayIntentBits.GuildInvites,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildPresences,
-    GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildMessageTyping,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.DirectMessageReactions,
-    GatewayIntentBits.DirectMessageTyping,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildScheduledEvents,
-    GatewayIntentBits.AutoModerationConfiguration,
-    GatewayIntentBits.AutoModerationExecution,
   ],
   partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User],
 });
@@ -380,6 +365,7 @@ function connectClient() {
   client
     .login(token)
     .then(() => {
+      currentAttempt = 0;
       Log.success("Successfully connected to Discord!");
     })
     .catch((err) => {
@@ -406,67 +392,49 @@ function reconnectClient() {
   }
 }
 
-statsStore
-  .init()
-  .then(() => {
-    Log.info("✅ Stats store initialized");
-  })
-  .catch((err) => {
-    Log.error("Failed to initialize stats store:", err);
-  });
-
-djStore
-  .init()
-  .then(() => {
-    Log.info("✅ DJ store initialized");
-  })
-  .catch((err) => {
-    Log.error("Failed to initialize DJ store:", err);
-  });
-
-guildState
-  .init()
-  .then(() => {
-    Log.info("✅ Guild state initialized");
-  })
-  .catch((err) => {
-    Log.error("Failed to initialize guild state:", err);
-  });
-
-equalizerStore
-  .init()
-  .then(() => {
-    Log.info("✅ Equalizer store initialized");
-  })
-  .catch((err) => {
-    Log.error("Failed to initialize equalizer store:", err);
-  });
-
-userPrefs
-  .init()
-  .then(() => {
-    Log.info("✅ User preferences initialized");
-  })
-  .catch((err) => {
-    Log.error("Failed to initialize user preferences:", err);
-  });
-
-logsCommand
-  .loadConfig()
-  .then(() => {
-    Log.info("✅ Server logs config initialized");
-  })
-  .catch((err) => {
-    Log.error("Failed to initialize server logs config:", err);
-  });
-
-connectClient();
-
 const poru = createPoru(client);
 client.on("raw", (d) => poru.packetUpdate(d));
 
 const activityServer = createActivityServer(client);
-activityServer.start();
+
+async function bootstrap() {
+  const stores = [
+    ["Stats store", statsStore.init()],
+    ["DJ store", djStore.init()],
+    ["Guild state", guildState.init()],
+    ["Equalizer store", equalizerStore.init()],
+    ["User preferences", userPrefs.init()],
+    ["Server logs config", logsCommand.loadConfig()],
+  ];
+  const results = await Promise.allSettled(stores.map(([, task]) => task));
+  if (results.some((result) => result.status === "rejected")) {
+    results.forEach((result, index) => {
+      if (result.status === "rejected") Log.error(`Failed to initialize ${stores[index][0]}`, result.reason);
+    });
+    process.exitCode = 1;
+    return;
+  }
+  stores.forEach(([name]) => Log.info(`✅ ${name} initialized`));
+  activityServer.start();
+  health.startMonitoring();
+  connectClient();
+}
+
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  Log.info(`Received ${signal}; shutting down cleanly.`);
+  activityServer.stop();
+  health.stopMonitoring?.();
+  await Promise.allSettled([statsStore.flush?.(), userPrefs.flush?.()]);
+  client.destroy();
+  process.exit(0);
+}
+
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
+void bootstrap();
 
 // Function to measure Lavalink node latency
 async function measureNodeLatency(node) {
@@ -482,9 +450,6 @@ async function measureNodeLatency(node) {
     return null;
   }
 }
-
-// Start health monitoring
-health.startMonitoring();
 
 // Update Lavalink connection status
 poru.on("nodeConnect", async (node) => {

@@ -1,5 +1,6 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { backupCorruptFile, writeJsonAtomic } = require("./data/atomicJson");
 const Log = require("./logs/log");
 
 const DATA_FILE = path.join(__dirname, "data", "guildState.json");
@@ -27,7 +28,8 @@ async function init() {
       await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
       await persist();
     } else if (err instanceof SyntaxError) {
-      Log.warning("Guild state file corrupted, resetting");
+      const backupPath = await backupCorruptFile(DATA_FILE).catch(() => null);
+      Log.warning(`Guild state file corrupted and preserved at ${backupPath || "an unavailable backup path"}`);
       await persist();
     } else {
       Log.error("Failed to load guild state", err);
@@ -43,8 +45,7 @@ function scheduleSave() {
     saveTimer = null;
     try {
       const data = Object.fromEntries(guildState);
-      await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-      await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+      await writeJsonAtomic(DATA_FILE, data);
     } catch (err) {
       Log.error("Failed to save guild state", err);
     }
@@ -54,8 +55,7 @@ function scheduleSave() {
 async function persist() {
   try {
     const data = Object.fromEntries(guildState);
-    await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-    await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+    await writeJsonAtomic(DATA_FILE, data);
   } catch (err) {
     Log.error("Failed to persist guild state", err);
   }

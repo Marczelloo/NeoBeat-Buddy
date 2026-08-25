@@ -56,12 +56,15 @@ let poru = null;
 
 function createPoru(client) {
   if (poru) return poru;
+  if (!process.env.LAVALINK_PASSWORD) {
+    throw new Error("LAVALINK_PASSWORD must be configured before starting the bot.");
+  }
   const nodes = [
     {
       name: process.env.LAVALINK_NAME || "local",
       host: process.env.LAVALINK_HOST || "127.0.0.1",
       port: Number(process.env.LAVALINK_PORT || 2333),
-      password: process.env.LAVALINK_PASSWORD || "youshallnotpass",
+      password: process.env.LAVALINK_PASSWORD,
       secure: process.env.LAVALINK_SECURE === "1",
     },
   ];

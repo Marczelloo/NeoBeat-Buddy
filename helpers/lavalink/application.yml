@@ -10,14 +10,14 @@ dev:
 
 lavalink:
   server:
-    password: ${LAVALINK_SERVER_PASSWORD:youshallnotpass}
+    password: ${LAVALINK_SERVER_PASSWORD}
     sources:
       youtube: false # Disabled - using LavaSrc YouTube instead
       bandcamp: true
       soundcloud: true
       twitch: true
       vimeo: true
-      http: true
+      http: false
       local: false
     bufferDurationMs: 400
     resamplingQuality: HIGH

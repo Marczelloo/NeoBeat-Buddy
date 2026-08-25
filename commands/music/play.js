@@ -14,6 +14,7 @@ const { filterPlayableSearchResults, rankSearchResults } = require("../../helper
 const { resolveSearchSource } = require("../../helpers/lavalink/searchSources");
 const { normalizeComparableText } = require("../../helpers/lavalink/trackNormalization");
 const Log = require("../../helpers/logs/log");
+const { assertAllowedMusicUrl } = require("../../helpers/security/mediaUrl");
 const statsStore = require("../../helpers/stats/store");
 const userPrefs = require("../../helpers/users/preferences");
 
@@ -172,6 +173,8 @@ module.exports = {
 
     if (!query || query.trim() === "")
       return interaction.editReply({ embeds: [errorEmbed("Please provide a valid URL or search term.")] });
+
+    assertAllowedMusicUrl(query);
 
     const prepend = interaction.options.getBoolean("prepend") ?? false;
 

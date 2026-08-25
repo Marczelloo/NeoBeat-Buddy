@@ -1,5 +1,6 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { backupCorruptFile, writeJsonAtomic } = require("../data/atomicJson");
 const Log = require("../logs/log");
 
 const DATA_FILE = path.join(__dirname, "..", "data", "stats.json");
@@ -41,6 +42,7 @@ const DEFAULT_STATE = {
 const sessions = new Map();
 let state = { ...DEFAULT_STATE };
 let saveTimer = null;
+const STATS_RETENTION_DAYS = Math.max(30, Number(process.env.STATS_RETENTION_DAYS) || 365);
 
 async function init() {
   try {
@@ -69,6 +71,10 @@ async function init() {
   } catch (error) {
     if (error.code !== "ENOENT") {
       Log.error("Failed to load stats", error);
+      if (error instanceof SyntaxError) {
+        const backupPath = await backupCorruptFile(DATA_FILE).catch(() => null);
+        Log.warning(`Corrupt stats were preserved at ${backupPath || "an unavailable backup path"}`);
+      }
     }
     await ensureDataDir();
     await persist();
@@ -126,7 +132,26 @@ function scheduleSave() {
 
 async function persist() {
   await ensureDataDir();
-  await fs.writeFile(DATA_FILE, JSON.stringify(state, null, 2), "utf-8");
+  pruneRetainedStats();
+  await writeJsonAtomic(DATA_FILE, state);
+}
+
+function pruneRetainedStats() {
+  const cutoff = new Date(Date.now() - STATS_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  for (const user of Object.values(state.users)) {
+    if (!user || typeof user !== "object") continue;
+    for (const day of Object.keys(user.dailyActivity || {})) {
+      if (day < cutoff) delete user.dailyActivity[day];
+    }
+  }
+}
+
+async function flush() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  await persist();
 }
 
 function incrementSource(stats, sourceName) {
@@ -453,6 +478,7 @@ function getListeningStreak(userId) {
 
 module.exports = {
   init,
+  flush,
   beginTrackSession,
   beginSession,
   trackPlaylistAdded,

@@ -17,10 +17,22 @@ async function request(path, options = {}, accessToken = null) {
   headers.set("Content-Type", "application/json");
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
-  const response = await fetch(apiUrl(path), { ...options, headers });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Activity request failed (${response.status}).`);
-  return payload;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(new Error("Activity request timed out.")), 12_000);
+  const abort = () => controller.abort(options.signal?.reason);
+  options.signal?.addEventListener("abort", abort, { once: true });
+  try {
+    const response = await fetch(apiUrl(path), { ...options, headers, signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Activity request failed (${response.status}).`);
+    return payload;
+  } catch (error) {
+    if (controller.signal.aborted && !options.signal?.aborted) throw new Error("Activity request timed out. Please try again.");
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abort);
+  }
 }
 
 export function fetchActivityState({ guildId, accessToken }) {
@@ -68,7 +80,8 @@ export function connectActivitySocket({ guildId, accessToken, onState, onReady, 
     });
     socket.addEventListener("close", () => {
       if (stopped) return;
-      const delay = Math.min(5000, 600 * (2 ** Math.min(retryCount, 3)));
+      const baseDelay = Math.min(5000, 600 * (2 ** Math.min(retryCount, 3)));
+      const delay = Math.round(baseDelay * (0.75 + Math.random() * 0.5));
       retryCount += 1;
       window.clearTimeout(reconnectTimer);
       reconnectTimer = window.setTimeout(connect, delay);

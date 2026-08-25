@@ -7,7 +7,7 @@ import globals from "globals";
 
 export default defineConfig([
   {
-    ignores: ["activity/**"],
+    ignores: ["activity/dist/**"],
   },
   js.configs.recommended,
   {
@@ -40,5 +40,22 @@ export default defineConfig([
     files: ["**/*.mjs"],
     languageOptions: { sourceType: "module" },
     rules: { "import/no-unresolved": "off" },
+  },
+  {
+    files: ["activity/**/*.{js,jsx}"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: globals.browser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    rules: {
+      "n/no-missing-import": "off",
+      "n/no-missing-require": "off",
+      "import/no-unresolved": "off",
+      "import/named": "off",
+      "no-unused-vars": "off",
+      "unused-imports/no-unused-imports": "off",
+    },
   },
 ]);

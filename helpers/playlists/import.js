@@ -1,6 +1,9 @@
 const { getHighResolutionArtworkUrl } = require("../artwork");
 const { createPoru } = require("../lavalink");
+const { assertAllowedMusicUrl } = require("../security/mediaUrl");
 const { createPlaylist } = require("./store");
+
+const MAX_IMPORTED_TRACKS = 1_000;
 
 /**
  * Extract playlist ID from Spotify URL
@@ -23,11 +26,18 @@ function extractYouTubePlaylistId(url) {
 }
 
 function detectPlaylistSource(url) {
-  const value = String(url || "").toLowerCase();
-  if (value.includes("spotify.com/playlist")) return "spotify";
-  if (value.includes("youtube.com") || value.includes("youtu.be")) return "youtube";
-  if (value.includes("soundcloud.com") && (value.includes("/sets/") || value.includes("/set/"))) return "soundcloud";
-  if (value.includes("deezer.com") && value.includes("/playlist/")) return "deezer";
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  const pathname = parsed.pathname.toLowerCase();
+  if ((hostname === "spotify.com" || hostname.endsWith(".spotify.com")) && pathname.includes("/playlist/")) return "spotify";
+  if (hostname === "youtube.com" || hostname.endsWith(".youtube.com") || hostname === "youtu.be") return "youtube";
+  if ((hostname === "soundcloud.com" || hostname.endsWith(".soundcloud.com")) && (pathname.includes("/sets/") || pathname.includes("/set/"))) return "soundcloud";
+  if ((hostname === "deezer.com" || hostname.endsWith(".deezer.com")) && pathname.includes("/playlist/")) return "deezer";
   return null;
 }
 
@@ -41,6 +51,7 @@ function detectPlaylistSource(url) {
  * @returns {Promise<Object>} Import result
  */
 async function importPlaylistFromUrl(client, userId, guildId, url, options = {}) {
+  assertAllowedMusicUrl(url);
   const poru = createPoru(client);
 
   let playlistId = null;
@@ -104,7 +115,7 @@ async function importPlaylistFromUrl(client, userId, guildId, url, options = {})
     const targetPlaylist = data[storageType][storageKey].find((p) => p.id === result.playlist.id);
 
     if (targetPlaylist) {
-      targetPlaylist.tracks = resolved.tracks.map((track) => ({
+      targetPlaylist.tracks = resolved.tracks.slice(0, MAX_IMPORTED_TRACKS).map((track) => ({
         title: track.info.title,
         author: track.info.author,
         identifier: track.info.identifier,
@@ -121,9 +132,9 @@ async function importPlaylistFromUrl(client, userId, guildId, url, options = {})
 
     return {
       success: true,
-      message: `Imported playlist "${playlistName}" with ${resolved.tracks.length} tracks.`,
+      message: `Imported playlist "${playlistName}" with ${Math.min(resolved.tracks.length, MAX_IMPORTED_TRACKS)} tracks.`,
       playlistName,
-      trackCount: resolved.tracks.length,
+      trackCount: Math.min(resolved.tracks.length, MAX_IMPORTED_TRACKS),
       source,
       thumbnail,
     };
@@ -131,7 +142,7 @@ async function importPlaylistFromUrl(client, userId, guildId, url, options = {})
     console.error("Playlist import error:", error);
     return {
       success: false,
-      error: `Failed to import playlist: ${error.message || "Unknown error"}`,
+      error: "The playlist could not be imported. Check that it is public and try again.",
     };
   }
 }
