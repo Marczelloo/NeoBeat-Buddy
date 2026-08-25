@@ -1,6 +1,8 @@
 const { inspect } = require("util");
 const { Poru } = require("poru");
 const { markActivityStateChanged } = require("../activity/sync");
+const { reportActivityIssue } = require("../activity/feed");
+const { hasActiveActivitySession } = require("../activity/sessions");
 const {
   restoreVoiceChannelStatus,
   updateTrackVoiceChannelStatus,
@@ -171,6 +173,7 @@ function createPoru(client) {
     const trackInfo = track?.info || {};
     const trackTitle = trackInfo.title || "Unknown";
     const source = trackInfo.sourceName || "unknown";
+    const activityActive = hasActiveActivitySession(player.guildId);
 
     Log.error(
       "❌ Track error",
@@ -188,6 +191,10 @@ function createPoru(client) {
 
       if (fallbackTrack) {
         const title = fallbackTrack.info?.title || fallbackTrack.info?.identifier || "this track";
+        if (activityActive) {
+          reportActivityIssue(player.guildId, "Trying an alternate source", `Retrying a verified mirror for ${title}.`, "warning");
+          markActivityStateChanged(player.guildId, "trackErrorFallback");
+        }
         // A late exception for a previous provider must not replace a stream
         // that already recovered on its own.
         if (isDifferentActiveTrack(player, track)) {
@@ -211,18 +218,25 @@ function createPoru(client) {
         // replacement request and do not await it: Poru can emit queueEnd
         // directly after TrackException, so the recovery lock needs to settle
         // as soon as playback has been requested.
-        void poru.client.channels
-          .fetch(player.textChannel)
-          .then((channel) => {
-            if (!channel) return null;
-            return channel.send({
-              embeds: [errorEmbed("Trying alternate source", `Retrying a verified mirror for **${title}**.`)],
-            });
-          })
-          .catch(() => null);
+        if (!activityActive) {
+          void poru.client.channels
+            .fetch(player.textChannel)
+            .then((channel) => {
+              if (!channel) return null;
+              return channel.send({
+                embeds: [errorEmbed("Trying alternate source", `Retrying a verified mirror for **${title}**.`)],
+              });
+            })
+            .catch(() => null);
+        }
         return true;
       }
 
+      if (activityActive) {
+        reportActivityIssue(player.guildId, "Playback error", buildPlaybackErrorMessage(err));
+        markActivityStateChanged(player.guildId, "trackError");
+        return false;
+      }
       const channel = await poru.client.channels.fetch(player.textChannel).catch(() => null);
       if (channel) await channel.send({ embeds: [errorEmbed("Playback error", buildPlaybackErrorMessage(err))] }).catch(() => null);
       return false;

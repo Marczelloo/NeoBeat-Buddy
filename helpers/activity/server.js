@@ -47,6 +47,8 @@ const { consumeRateLimit } = require("../security/rateLimit");
 const statsStore = require("../stats/store");
 const { serializeFilters, serializeLyrics, serializePlaylist, serializePlaylistDetails, serializeTrack, normalizeSource } = require("./state");
 const { activityStateEvents, getActivityStateRevision, markActivityStateChanged } = require("./sync");
+const { getActivityEvents, recordActivityAction, reportActivityIssue } = require("./feed");
+const { registerActivitySession, unregisterActivitySession, hasActiveActivitySession } = require("./sessions");
 
 const DEFAULT_PORT = 8787;
 const MAX_BODY_SIZE = 64 * 1024;
@@ -435,6 +437,10 @@ function buildActivityState(client, guildId, userId) {
     revision: getActivityStateRevision(guildId),
     generatedAt,
     botStatus,
+    activity: {
+      active: hasActiveActivitySession(guildId),
+      events: getActivityEvents(guildId),
+    },
     guild: {
       id: guildId,
       name: guild?.name || "Local MewBit preview",
@@ -826,6 +832,25 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
   }
 }
 
+async function runTrackedActivityAction({ guildId, identity, action, payload = {} }) {
+  const player = getPlayer(guildId);
+  const beforeTrack = resolveActivityPlayback(playbackState.get(guildId)?.currentTrack, player?.currentTrack).track;
+  try {
+    const result = await runActivityAction({ guildId, identity, action, payload });
+    if (result !== false && result?.success !== false) {
+      recordActivityAction(guildId, identity, action, payload, serializeTrack(beforeTrack));
+    }
+    markActivityStateChanged(guildId, `activity:${action}`);
+    return result;
+  } catch (error) {
+    if ((Number(error.statusCode) || 500) >= 500) {
+      reportActivityIssue(guildId, "Activity action failed", error.message || "MewBit could not complete that action.");
+      markActivityStateChanged(guildId, `activity:${action}:error`);
+    }
+    throw error;
+  }
+}
+
 async function searchActivityTracks(query, preferredSource) {
   const poru = getPoru();
   if (!poru) throw Object.assign(new Error("Lavalink is still connecting."), { statusCode: 503 });
@@ -929,7 +954,7 @@ function createActivityServer(client) {
         const body = await readJson(request);
         const guildId = limitText(body.guildId || config.devGuildId, 80);
         const identity = await authenticateRequest(client, request, guildId, config);
-        let result = await runActivityAction({ guildId, identity, action: body.action, payload: body.payload || {} });
+        let result = await runTrackedActivityAction({ guildId, identity, action: body.action, payload: body.payload || {} });
         const actionPayload = body.payload || {};
         const detailName = actionPayload.newName || actionPayload.name || result?.playlistName;
         const detailActions = new Set([
@@ -946,7 +971,6 @@ function createActivityServer(client) {
           const playlist = playlistStore.getPlaylist(identity.id, guildId, detailName);
           if (playlist) result = { ...result, playlist: serializePlaylistDetails(playlist) };
         }
-        markActivityStateChanged(guildId, `activity:${body.action}`);
         return sendJson(response, 200, { ok: true, result: serializeActivityActionResult(body.action, result), state: buildActivityState(client, guildId, identity.id) }, config);
       }
 
@@ -980,8 +1004,10 @@ function createActivityServer(client) {
           const fakeRequest = { headers: { authorization: message.token ? `Bearer ${message.token}` : "" } };
           const guildId = limitText(message.guildId || config.devGuildId, 80);
           socket.identity = await authenticateRequest(client, fakeRequest, guildId, config);
+          if (socket.guildId) unregisterActivitySession(socket.guildId, socket);
           socket.guildId = guildId;
           socket.authorized = true;
+          registerActivitySession(guildId, socket);
           sendSocket(socket, { type: "ready", identity: { id: socket.identity.id, username: socket.identity.username } });
           sendSocket(socket, { type: "state", state: buildActivityState(client, guildId, socket.identity.id) });
           return;
@@ -993,16 +1019,15 @@ function createActivityServer(client) {
         if (message.type === "action") {
           const actionLimit = consumeRateLimit(`ws-action:${socket.identity.id}`, { limit: 120, windowMs: 60_000 });
           if (!actionLimit.allowed) throw Object.assign(new Error("Too many actions. Try again shortly."), { statusCode: 429 });
-          await runActivityAction({ guildId: socket.guildId, identity: socket.identity, action: message.action, payload: message.payload || {} });
-          markActivityStateChanged(socket.guildId, `activity:${message.action}`);
+          await runTrackedActivityAction({ guildId: socket.guildId, identity: socket.identity, action: message.action, payload: message.payload || {} });
         }
       } catch (error) {
         sendSocket(socket, { type: "error", error: error.message || "Activity socket error" });
       }
     });
 
-    socket.on("close", () => sockets.delete(socket));
-    socket.on("error", () => sockets.delete(socket));
+    socket.on("close", () => { unregisterActivitySession(socket.guildId, socket); sockets.delete(socket); });
+    socket.on("error", () => { unregisterActivitySession(socket.guildId, socket); sockets.delete(socket); });
   });
 
   return {

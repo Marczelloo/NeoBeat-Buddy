@@ -12,12 +12,19 @@ export function createMockState({ idle = false } = {}) {
   return {
     guild: { id: "demo", name: "MewBit test room", iconUrl: null, voiceChannelName: "Neon Listening Room" },
     botStatus: "the bassline has been peer reviewed",
+    activity: {
+      active: true,
+      events: [
+        { id: "mock-event-skip", timestamp: Date.now() - 42_000, level: "info", title: "Room activity", detail: "skipped a queued track", actor: "Neko" },
+        { id: "mock-event-fallback", timestamp: Date.now() - 95_000, level: "warning", title: "Trying an alternate source", detail: "Retrying a verified mirror for Tamagotchi." },
+      ],
+    },
     player: {
       connected: true,
       paused: idle,
       playing: !idle,
       positionMs: idle ? 0 : 73500,
-      lyricsSyncOffsetMs: -450,
+      lyricsSyncOffsetMs: -350,
       durationMs: idle ? 0 : tracks[0].durationMs,
       volume: 52,
       loop: "NONE",
@@ -70,6 +77,7 @@ export function createEmptyState() {
   return {
     guild: { id: null, name: null, iconUrl: null, voiceChannelName: null },
     botStatus: null,
+    activity: { active: false, events: [] },
     player: {
       connected: false,
       paused: true,

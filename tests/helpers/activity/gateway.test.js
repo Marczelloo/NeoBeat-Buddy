@@ -11,6 +11,7 @@ const {
   withAutoplayRequesterLabel,
 } = require("../../../helpers/activity/server");
 const { getActivityStateRevision, markActivityStateChanged, resetActivityStateRevision } = require("../../../helpers/activity/sync");
+const { resetActivitySessions } = require("../../../helpers/activity/sessions");
 
 test("Activity state revisions only move forward for a guild", () => {
   const guildId = "activity-revision-test";
@@ -119,6 +120,7 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
   const server = gateway.start();
   t.after(() => {
     gateway.stop();
+    resetActivitySessions();
     for (const [key, value] of Object.entries(previous)) {
       const envKey = {
         enabled: "ACTIVITY_ENABLED",
@@ -147,11 +149,13 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
   assert.equal(typeof state.state.revision, "number");
   assert.equal(typeof state.state.generatedAt, "number");
   assert.equal(state.state.player.currentTrack, null);
+  assert.equal(state.state.activity.active, false);
   assert.equal(blockedArtworkResponse.status, 400);
   assert.match(blockedArtwork.error, /not allowed/i);
 
   const messages = [];
   const revisions = [];
+  const socketStates = [];
   await new Promise((resolve, reject) => {
     const socket = new WebSocket(`ws://127.0.0.1:${port}/api/activity/ws`);
     const timeout = setTimeout(() => reject(new Error("Activity WebSocket handshake timed out.")), 2000);
@@ -161,6 +165,7 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
       messages.push(payload.type);
       if (payload.type === "state") {
         revisions.push(payload.state.revision);
+        socketStates.push(payload.state);
         if (revisions.length === 1) {
           markActivityStateChanged("activity-test-guild", "gateway-test");
         } else {
@@ -175,5 +180,6 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
 
   assert.deepEqual(messages, ["ready", "state", "state"]);
   assert.equal(revisions[1], revisions[0] + 1);
+  assert.equal(socketStates[0].activity.active, true);
   resetActivityStateRevision("activity-test-guild");
 });

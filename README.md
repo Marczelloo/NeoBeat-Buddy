@@ -157,7 +157,7 @@ If a provider requires browser cookies, obtain them from an account you control 
 | `INACTIVITY_TIMEOUT_MS` | `300000` | Disconnect after this many idle milliseconds. |
 | `TRACK_START_TIMEOUT_MS` | `15000` | Retry a queued item through verified fallbacks when Lavalink never emits `TrackStart`. |
 | `PROGRESS_UPDATE_INTERVAL_MS` | `0` | Player-message update interval; `0` uses the built-in behavior. |
-| `LYRICS_SYNC_OFFSET_MS` | `-450` | Shared lyric timing offset in milliseconds. The default compensates for Discord voice delivery so synced lines do not lead the audio. |
+| `LYRICS_SYNC_OFFSET_MS` | `-350` | Shared lyric timing offset in milliseconds. The default compensates for Discord voice delivery so synced lines do not lead the audio. |
 | `LOUDNESS_NORMALIZATION` | `true` | Enables source-aware playback gain compensation. |
 | `LOUDNESS_<SOURCE>_DB` | provider default | Optional gain offset for a provider, e.g. `LOUDNESS_SOUNDCLOUD_DB=-3`. |
 | `PLAYER_RECOVERY_MAX_AGE_MS` | `7200000` | How long an unexpected-disconnect snapshot is eligible for restoration after a user explicitly resumes playback. |

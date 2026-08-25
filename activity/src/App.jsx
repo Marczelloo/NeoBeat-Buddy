@@ -2,6 +2,7 @@ import { forwardRef, lazy, Suspense, useCallback, useEffect, useMemo, useRef, us
 import { createPortal } from "react-dom";
 import {
   ArrowBendUpRight,
+  Bell,
   CaretRight,
   Check,
   Cloud,
@@ -54,6 +55,9 @@ const SOURCE_NAMES = ["auto", "youtube", "soundcloud", "deezer", "spotify"];
 // data or search results, even if someone appends ?mock=1 to the URL.
 const MOCK_PREVIEW = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("mock");
 const MOCK_IDLE_PREVIEW = MOCK_PREVIEW && new URLSearchParams(window.location.search).has("idle");
+// Lets us verify the Discord minimized composition at a fixed desktop viewport.
+// This is intentionally gated by both DEV and ?mock=1.
+const MOCK_COMPACT_PREVIEW = MOCK_PREVIEW && new URLSearchParams(window.location.search).has("compact");
 const COMPACT_STATUS_FALLBACKS = [
   "neon ears engaged",
   "the bassline has been peer reviewed",
@@ -572,6 +576,35 @@ function PanelTitle({ icon, title, description, action }) {
   );
 }
 
+function formatActivityEventTime(timestamp) {
+  const delta = Math.max(0, Date.now() - Number(timestamp || 0));
+  if (delta < 10_000) return "now";
+  if (delta < 60_000) return `${Math.floor(delta / 1_000)}s ago`;
+  if (delta < 3_600_000) return `${Math.floor(delta / 60_000)}m ago`;
+  return `${Math.floor(delta / 3_600_000)}h ago`;
+}
+
+function ActivityFeedPanel({ events = [], active = false }) {
+  if (!events.length) {
+    return <div className="activity-feed-empty"><Bell size={26} weight="duotone" aria-hidden="true" /><strong>Room is quiet</strong><span>Actions and playback issues will appear here.</span></div>;
+  }
+
+  return (
+    <ol className="activity-feed-list" aria-label="Recent room activity">
+      {events.map((event) => (
+        <li key={event.id} className={`activity-feed-event is-${event.level || "info"}`}>
+          <span className="activity-feed-marker" aria-hidden="true" />
+          <div className="activity-feed-copy">
+            <div><strong>{event.actor || event.title}</strong><time dateTime={new Date(Number(event.timestamp) || Date.now()).toISOString()}>{formatActivityEventTime(event.timestamp)}</time></div>
+            <p>{event.actor ? event.detail : [event.title, event.detail].filter(Boolean).join(" · ")}</p>
+          </div>
+        </li>
+      ))}
+      <li className="activity-feed-status"><span className={active ? "is-live" : ""} aria-hidden="true" />{active ? "Activity connected" : "Activity reconnecting"}</li>
+    </ol>
+  );
+}
+
 function HomePanelFallback() {
   return <section className="home-panel home-panel-loading panel-surface" aria-busy="true" aria-label="Loading Activity view"><div className="home-orbit" aria-hidden="true"><span /><span /><span /></div><div className="home-loading-copy"><span /><strong /><strong /><i /><i /><div><b /><b /></div></div><div className="home-signal" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div></section>;
 }
@@ -750,7 +783,17 @@ function CompactPlayer({ state }) {
   const previousLyric = lines[currentLyricIndex - 1]?.line;
   const upcomingLyric = lines[currentLyricIndex + 1]?.line;
   const hasLyrics = Boolean(activeLyric);
-  const statusSeed = `${track?.id || "mewbit"}`.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+
+  if (!track) {
+    return (
+      <section className="compact-player compact-idle" aria-label="MewBit compact player idle">
+        <strong>Nothing is playing</strong>
+        <span>Start a track in MewBit.</span>
+      </section>
+    );
+  }
+
+  const statusSeed = `${track.id || "mewbit"}`.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const statusLine = state.botStatus || COMPACT_STATUS_FALLBACKS[statusSeed % COMPACT_STATUS_FALLBACKS.length];
 
   if (hasLyrics) {
@@ -779,11 +822,10 @@ function CompactPlayer({ state }) {
       <div className="compact-progress" role="progressbar" aria-label="Track progress" aria-valuemin="0" aria-valuemax={duration} aria-valuenow={progress}>
         <span style={{ "--compact-progress": `${(progress / duration) * 100}%` }} />
       </div>
-      <div className="compact-flags" aria-label="Player modes">
-        <span className={player.autoplay ? "is-on" : ""}>Autoplay {player.autoplay ? "on" : "off"}</span>
-        <span className={player.loop !== "NONE" ? "is-on" : ""}>Loop {player.loop !== "NONE" ? player.loop.toLowerCase() : "off"}</span>
-        <span className={player.shuffleActive ? "is-on" : ""}>Shuffle {player.shuffleActive ? "on" : "off"}</span>
-      </div>
+      {player.autoplay || player.loop !== "NONE" ? <div className="compact-flags" aria-label="Player modes">
+        {player.autoplay ? <span className="is-on">Autoplay on</span> : null}
+        {player.loop !== "NONE" ? <span className="is-on">Loop {player.loop.toLowerCase()}</span> : null}
+      </div> : null}
       <p className="compact-presence">{statusLine}</p>
     </section>
   );
@@ -1354,8 +1396,13 @@ function App() {
   const pendingActionCounts = useRef(new Map());
   const localUndoSnapshots = useRef(new Map());
   const stateRef = useRef(state);
-  const isCompact = useCompactViewport();
+  const seenActivityEventIds = useRef(new Set());
+  const activityFeedReady = useRef(false);
+  const isCompactViewport = useCompactViewport();
+  const isCompact = MOCK_COMPACT_PREVIEW || isCompactViewport;
   const isDrawerViewport = useMediaQuery("(max-width: 900px)");
+  const activityEvents = state.activity?.events || [];
+  const hasActivityErrors = activityEvents.some((event) => event.level === "error" || event.level === "warning");
   const appShellRef = useRef(null);
 
   useEffect(() => {
@@ -1397,6 +1444,20 @@ function App() {
     window.clearTimeout(showToast.timer);
     showToast.timer = window.setTimeout(() => setToast(null), 3200);
   }, []);
+
+  useEffect(() => {
+    const events = state.activity?.events || [];
+    if (!activityFeedReady.current) {
+      events.forEach((event) => seenActivityEventIds.current.add(event.id));
+      activityFeedReady.current = true;
+      return;
+    }
+
+    const incoming = events.filter((event) => !seenActivityEventIds.current.has(event.id));
+    incoming.forEach((event) => seenActivityEventIds.current.add(event.id));
+    const latestIssue = incoming.find((event) => event.level === "error" || event.level === "warning");
+    if (latestIssue) showToast([latestIssue.title, latestIssue.detail].filter(Boolean).join(": "), latestIssue.level === "error" ? "error" : "info");
+  }, [state.activity?.events, showToast]);
 
   const applyState = useCallback((nextState) => {
     if (!nextState) return;
@@ -1793,6 +1854,7 @@ function App() {
                   <IconButton label="Sound settings" className={activeTab === "filters" ? "is-active" : ""} onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /></IconButton>
                 </div>
                 <div className="stage-actions" aria-label="Player tools">
+                  <IconButton label="Room activity" className={`${activeTab === "activity" ? "is-active" : ""} ${hasActivityErrors ? "has-issues" : ""}`} onClick={() => goToView("activity")}><Bell size={17} weight={activeTab === "activity" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                   <IconButton label="Toggle queue" className={rightSidebarOpen ? "is-active" : ""} aria-pressed={rightSidebarOpen} onClick={() => { if (window.matchMedia("(max-width: 900px)").matches) setLeftSidebarOpen(false); setRightSidebarOpen((value) => !value); }}><Queue size={17} weight={rightSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                 </div>
               </div>
@@ -1802,6 +1864,7 @@ function App() {
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
               {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading sound controls</span></div>}><LazyFiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} onAction={onAction} isActionPending={isActionPending} /></Suspense></section> : null}
               {activeTab === "lyrics" ? <section className="content-panel panel-surface"><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading lyrics</span></div>}><LazyLiveLyricsPanel player={state.player} onAction={onAction} /></Suspense></section> : null}
+              {activeTab === "activity" ? <section className="content-panel panel-surface activity-feed-panel"><PanelTitle icon={<Bell size={18} aria-hidden="true" />} title="Room activity" description="Live actions and playback issues from this listening room" /><ActivityFeedPanel events={activityEvents} active={state.activity?.active} /></section> : null}
               {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} likedTrackIds={state.likedTrackIds || []} selectedPlaylist={selectedPlaylistDetail?.name || selectedPlaylist} playlistDetail={selectedPlaylistDetail} composerOpen={playlistComposerOpen} onComposerClose={closePlaylistComposer} onAction={onAction} /></section> : null}
             </div>
           </section>

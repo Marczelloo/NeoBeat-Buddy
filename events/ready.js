@@ -5,6 +5,7 @@ const { buildControlRows } = require("../helpers/buttons");
 const { playerEmbed } = require("../helpers/embeds");
 const { getGuildState, updateGuildState } = require("../helpers/guildState.js");
 const { getDisplayTrackMetadata } = require("../helpers/lavalink/displayMetadata");
+const { hasActiveActivitySession } = require("../helpers/activity/sessions");
 const { createPoru } = require("../helpers/lavalink/index");
 const Log = require("../helpers/logs/log");
 const { formatDuration } = require("../helpers/utils");
@@ -41,6 +42,14 @@ module.exports = {
           }
 
           const state = getGuildState(player.guildId) ?? {};
+          if (hasActiveActivitySession(player.guildId)) {
+            if (state.nowPlayingMessage) {
+              const staleChannel = await client.channels.fetch(state.nowPlayingChannel).catch(() => null);
+              await staleChannel?.messages.delete(state.nowPlayingMessage).catch(() => null);
+            }
+            updateGuildState(player.guildId, { nowPlayingMessage: null });
+            return;
+          }
           const channelId = state.playerChannel ?? state.nowPlayingChannel ?? player.textChannel;
           if (!channelId) return;
 

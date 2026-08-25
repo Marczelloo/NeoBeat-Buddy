@@ -4,6 +4,7 @@ const djStore = require("../../helpers/dj/store");
 const { buildProposalAnnouncement, buildProposalComponents, buildProposalEmbed } = require("../../helpers/dj/ui");
 const { errorEmbed, successEmbed, playlistEmbed, songEmbed } = require("../../helpers/embeds");
 const { getGuildState, updateGuildState } = require("../../helpers/guildState.js");
+const { hasActiveActivitySession } = require("../../helpers/activity/sessions");
 const { recordSearch } = require("../../helpers/history/searchHistory");
 const { beginAutocompleteRequest, isLatestAutocompleteRequest } = require("../../helpers/interactions/autocompleteGuard");
 const { buildTrackAutocompleteValue } = require("../../helpers/lavalink/autocompleteTrack");
@@ -161,7 +162,8 @@ module.exports = {
       `id=${interaction.guild.id}`
     );
 
-    await interaction.deferReply();
+    const activityActive = hasActiveActivitySession(interaction.guildId);
+    await interaction.deferReply({ ephemeral: activityActive });
 
     const query = await interaction.options.getString("query");
     const voiceChannel = await interaction.member.voice.channel;
@@ -276,7 +278,9 @@ module.exports = {
         recordSearch(requester.id, interaction.guild.id, query, track);
       }
 
-      if (isPlaylist) {
+      if (activityActive) {
+        await interaction.editReply({ content: isPlaylist ? `Added ${playlistTrackCount} tracks to the MewBit Activity queue.` : "Added to MewBit Activity." });
+      } else if (isPlaylist) {
         statsStore.trackPlaylistAdded(interaction.guild.id, playlistTrackCount);
 
         await interaction.editReply({

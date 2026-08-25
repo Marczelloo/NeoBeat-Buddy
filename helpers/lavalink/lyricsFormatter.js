@@ -11,7 +11,7 @@ const UPDATE_INTERVAL = 250; // Check every 250ms for responsive updates
 // that stream a little later. A small negative offset prevents lyrics from
 // anticipating the line the room is actually hearing. It remains adjustable
 // for hosts whose voice path has materially different latency.
-const LYRICS_SYNC_OFFSET_MS = Math.max(-2_000, Math.min(2_000, Number(process.env.LYRICS_SYNC_OFFSET_MS ?? -450) || 0));
+const LYRICS_SYNC_OFFSET_MS = Math.max(-2_000, Math.min(2_000, Number(process.env.LYRICS_SYNC_OFFSET_MS ?? -350) || 0));
 
 /**
  * Get accurate interpolated position for the player
