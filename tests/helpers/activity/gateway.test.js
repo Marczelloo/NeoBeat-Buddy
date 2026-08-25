@@ -95,12 +95,14 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
     allowDev: process.env.ACTIVITY_ALLOW_DEV,
     port: process.env.ACTIVITY_PORT,
     devGuild: process.env.ACTIVITY_DEV_GUILD_ID,
+    nodeEnv: process.env.NODE_ENV,
   };
 
   process.env.ACTIVITY_ENABLED = "true";
   process.env.ACTIVITY_ALLOW_DEV = "true";
   process.env.ACTIVITY_PORT = "0";
   process.env.ACTIVITY_DEV_GUILD_ID = "activity-test-guild";
+  process.env.NODE_ENV = "test";
 
   const client = { guilds: { cache: new Map() } };
   const gateway = createActivityServer(client);
@@ -108,7 +110,13 @@ test("Activity gateway exposes authenticated local state over HTTP and WebSocket
   t.after(() => {
     gateway.stop();
     for (const [key, value] of Object.entries(previous)) {
-      const envKey = { enabled: "ACTIVITY_ENABLED", allowDev: "ACTIVITY_ALLOW_DEV", port: "ACTIVITY_PORT", devGuild: "ACTIVITY_DEV_GUILD_ID" }[key];
+      const envKey = {
+        enabled: "ACTIVITY_ENABLED",
+        allowDev: "ACTIVITY_ALLOW_DEV",
+        port: "ACTIVITY_PORT",
+        devGuild: "ACTIVITY_DEV_GUILD_ID",
+        nodeEnv: "NODE_ENV",
+      }[key];
       if (value === undefined) delete process.env[envKey];
       else process.env[envKey] = value;
     }
