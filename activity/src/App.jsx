@@ -229,6 +229,7 @@ function getActionFeedback(action, payload = {}, result = null, state = null) {
       const loop = state?.player?.loop || "NONE";
       return loop === "TRACK" ? "Looping this track" : loop === "QUEUE" ? "Looping the queue" : "Loop off";
     }
+    case "toggle_mute": return result?.muted ? "Player muted" : `Volume restored to ${result?.volume ?? state?.player?.volume ?? 0}`;
     case "toggle_like": return result?.liked ? "Saved to Liked Songs" : "Removed from Liked Songs";
     case "add_to_playlist": return payload.name ? `Added to ${payload.name}` : "Added to playlist";
     case "create_playlist": return payload.name ? `Created ${payload.name}` : "Playlist created";
@@ -763,14 +764,18 @@ function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onA
       </div>
       <div className="deck-side deck-right">
         <IconButton label="Open lyrics" onClick={() => onTab("lyrics")} disabled={!player.currentTrack}><MusicNotes size={19} weight="regular" aria-hidden="true" /></IconButton>
-        <div className="deck-volume">
-          <IconButton label={volumeOpen ? "Close volume" : (volumeSlider.value === 0 ? "Unmute" : "Mute")} className={`volume-toggle ${volumeOpen ? "is-active" : ""}`} loading={isActionPending("volume")} aria-expanded={volumeOpen} aria-haspopup="true" onClick={() => setVolumeOpen((value) => !value)}>
-            {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight={volumeOpen ? "fill" : "regular"} aria-hidden="true" />}
+        <div className="deck-volume" ref={volumeWrapRef}>
+          <IconButton label={volumeSlider.value === 0 ? "Unmute player" : "Mute player"} className="volume-toggle" loading={isActionPending("toggle_mute")} onClick={() => onAction("toggle_mute")}>
+            {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
           </IconButton>
-          <input className="range range-volume vol-inline" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
+          <div className="volume-inline-control">
+            <output className="volume-readout" aria-live="polite"><span>Volume</span><strong>{Math.round(volumeSlider.value)}</strong></output>
+            <input className="range range-volume vol-inline" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
+          </div>
+          <button className="volume-mobile-trigger" type="button" onClick={() => setVolumeOpen((value) => !value)} aria-expanded={volumeOpen} aria-haspopup="true"><span>Volume</span><strong>{Math.round(volumeSlider.value)}</strong></button>
           <div className={`volume-popover vol-pop-mobile ${volumeOpen ? "is-open" : ""}`} role="group" aria-label="Volume control">
             <input className="range range-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={(event) => { event.stopPropagation(); volumeSlider.begin(); }} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => event.stopPropagation()} />
-            <span className="volume-number">{Math.round(volumeSlider.value)}</span>
+            <output className="volume-number" aria-live="polite">{Math.round(volumeSlider.value)}</output>
           </div>
           </div>
       </div>
@@ -1524,8 +1529,11 @@ function PlayerBar({ state, onAction, onView, onOpenExternalLink, isActionPendin
       </div>
       <div className="player-bar-actions">
         <IconButton label="Open lyrics" onClick={() => onView("lyrics")} disabled={!track}><Subtitles size={17} weight="regular" aria-hidden="true" /></IconButton>
-        <IconButton label={volumeSlider.value === 0 ? "Unmute" : "Mute"} loading={isActionPending("volume")} onClick={() => onAction("volume", { volume: volumeSlider.value === 0 ? 52 : 0 })}><SpeakerHigh size={17} weight={volumeSlider.value === 0 ? "regular" : "fill"} aria-hidden="true" /></IconButton>
-        <input className="range range-volume bar-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
+        <IconButton label={volumeSlider.value === 0 ? "Unmute player" : "Mute player"} loading={isActionPending("toggle_mute")} onClick={() => onAction("toggle_mute")}>{volumeSlider.value === 0 ? <SpeakerSlash size={17} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={17} weight="fill" aria-hidden="true" />}</IconButton>
+        <div className="bar-volume-control">
+          <output className="volume-readout" aria-live="polite"><span>Volume</span><strong>{Math.round(volumeSlider.value)}</strong></output>
+          <input className="range range-volume bar-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
+        </div>
       </div>
       <SmartMenu open={Boolean(titleMenu)} position={titleMenu || { top: 0, left: 0 }} rootRef={titleRef} menuRef={titleMenuRef} label={`Actions for ${track?.title || "track"}`}>
         <>
@@ -1806,8 +1814,22 @@ function App() {
       if (action === "pause") next.player.playing = false, next.player.paused = true;
       if (action === "resume") next.player.playing = true, next.player.paused = false;
       if (action === "stop") { next.player.currentTrack = null; next.player.queue = []; next.player.playing = false; next.player.paused = true; next.player.positionMs = 0; }
-      if (action === "volume") next.player.volume = payload.volume;
-      if (action === "volume-preview") next.player.volume = payload.volume;
+      if (action === "volume" || action === "volume-preview") {
+        next.player.volume = payload.volume;
+        next.player.muted = Number(payload.volume) === 0;
+        if (Number(payload.volume) > 0) next.player.lastAudibleVolume = Number(payload.volume);
+      }
+      if (action === "toggle_mute") {
+        const currentVolume = clamp(Number(next.player.volume) || 0, 0, 100);
+        if (currentVolume > 0) {
+          next.player.lastAudibleVolume = currentVolume;
+          next.player.volume = 0;
+          next.player.muted = true;
+        } else {
+          next.player.volume = clamp(Number(next.player.lastAudibleVolume) || 52, 1, 100);
+          next.player.muted = false;
+        }
+      }
       if (action === "seek") next.player.positionMs = payload.positionMs;
       if (action === "autoplay") next.player.autoplay = payload.enabled;
       if (action === "loop") next.player.loop = next.player.loop === "NONE" ? "TRACK" : next.player.loop === "TRACK" ? "QUEUE" : "NONE";

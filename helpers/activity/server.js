@@ -25,6 +25,7 @@ const {
   lavalinkResetEffects,
   lavalinkSetFilterPreset,
   lavalinkSetVolume,
+  lavalinkToggleMute,
   lavalinkShuffle,
   lavalinkSkip,
   lavalinkStop,
@@ -303,6 +304,7 @@ function assertControlPermission(guildId, identity, action) {
     "undo_queue",
     "shuffle",
     "volume",
+    "toggle_mute",
     "seek",
     "filter",
     "equalizer",
@@ -353,7 +355,7 @@ function assertPlayerVoiceAccess(player, identity, action) {
   if (identity.dev || !player?.voiceChannel) return;
   const guardedActions = new Set([
     "pause", "resume", "toggle", "skip", "previous", "stop", "remove_queue", "play_next",
-    "move_queue", "clear_queue", "undo_queue", "shuffle", "volume", "seek", "filter",
+    "move_queue", "clear_queue", "undo_queue", "shuffle", "volume", "toggle_mute", "seek", "filter",
     "equalizer", "equalizer_preset", "loop", "autoplay", "play", "surprise_me", "play_playlist",
   ]);
   if (!guardedActions.has(action)) return;
@@ -477,6 +479,7 @@ function buildActivityState(client, guildId, userId) {
       lyricsDefaultSyncOffsetMs: LYRICS_SYNC_OFFSET_MS,
       durationMs: playback.durationMs || currentTrack?.durationMs || 0,
       volume: getUserVolume(player),
+      muted: Boolean(player?.isMuted) || getUserVolume(player) === 0,
       loop: player?.loop || "NONE",
       shuffleActive: Boolean(player?.shuffleActive),
       autoplay: Boolean(settings?.autoplay),
@@ -697,6 +700,8 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       return lavalinkSeekTo(guildId, Math.max(0, Number(payload.positionMs) || 0));
     case "volume":
       return lavalinkSetVolume(guildId, Math.max(0, Math.min(100, Number(payload.volume) || 0)));
+    case "toggle_mute":
+      return lavalinkToggleMute(guildId);
     case "loop":
       return lavalinkToggleLoop(guildId, payload.mode);
     case "shuffle":
