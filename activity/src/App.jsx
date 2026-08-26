@@ -237,6 +237,7 @@ function getActionFeedback(action, payload = {}, result = null, state = null) {
     case "filter": return String(payload.preset || "").toLowerCase() === "off" ? "Effects reset" : `Applied ${payload.preset} effect`;
     case "equalizer_preset": return `EQ preset: ${payload.preset}`;
     case "refresh_lyrics": return result?.lines?.length || result?.text ? "Lyrics refreshed" : "No lyrics found for this track";
+    case "set_lyrics_offset": return "Lyrics timing saved";
     case "update_playlist": return "Playlist changes saved";
     default: return null;
   }
@@ -500,14 +501,13 @@ function TrackMenuActions({ track, playlists = [], likedTrackIds = [], onAction,
   );
 }
 
-function TrackContextMenu({ track, playlists = [], likedTrackIds = [], onAction, isActionPending = () => false, open, position, onOpen, onClose }) {
+function TrackContextMenu({ track, playlists = [], likedTrackIds = [], onAction, open, position, onOpen, onClose }) {
   const rootRef = useRef(null);
   const menuRef = useRef(null);
   const { clearCloseTimer, scheduleClose } = useSmartMenuGuards(open, rootRef, menuRef, onClose);
   const closeMenu = () => { clearCloseTimer(); onClose(); };
 
   if (!track) return null;
-  const isLiked = likedTrackIds.includes(track.id) || likedTrackIds.includes(getTrackLikeKey(track));
   const playQuery = track.playQuery || track.uri || `${track.title} ${track.author}`;
 
   return (
@@ -547,9 +547,6 @@ function TrackContextMenu({ track, playlists = [], likedTrackIds = [], onAction,
             <Plus size={15} weight="bold" aria-hidden="true" /><span>Add to queue</span>
           </button>
           <span className="row-menu-divider" aria-hidden="true" />
-          <button type="button" role="menuitem" className={`row-menu-item ${isLiked ? "is-liked" : ""}`} onClick={() => { onAction("toggle_like", { track }); closeMenu(); }}>
-            <Heart size={15} weight={isLiked ? "fill" : "regular"} aria-hidden="true" /><span>{isLiked ? "Remove from liked songs" : "Add to liked songs"}</span>
-          </button>
           <TrackMenuActions track={track} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} onClose={closeMenu} />
         </>
       </SmartMenu>
@@ -659,9 +656,9 @@ function HomePanelFallback() {
   return <section className="home-panel home-panel-loading panel-surface" aria-busy="true" aria-label="Loading Activity view"><div className="home-orbit" aria-hidden="true"><span /><span /><span /></div><div className="home-loading-copy"><span /><strong /><strong /><i /><i /><div><b /><b /></div></div><div className="home-signal" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div></section>;
 }
 
-function LazyLiveLyricsPanel({ player, onAction }) {
+function LazyLiveLyricsPanel({ player, onAction, isActionPending }) {
   const position = usePlayerPosition(player, player.lyricsSyncOffsetMs);
-  return <LazyLyricsPanel lyrics={player.lyrics} position={position} onAction={onAction} PanelTitle={PanelTitle} />;
+  return <LazyLyricsPanel lyrics={player.lyrics} position={position} syncOffsetMs={player.lyricsSyncOffsetMs} defaultSyncOffsetMs={player.lyricsDefaultSyncOffsetMs} onAction={onAction} isActionPending={isActionPending} PanelTitle={PanelTitle} />;
 }
 
 function ExternalLinkConfirmDialog({ request, onCancel, onConfirm }) {
@@ -1532,9 +1529,6 @@ function PlayerBar({ state, onAction, onView, onOpenExternalLink, isActionPendin
       </div>
       <SmartMenu open={Boolean(titleMenu)} position={titleMenu || { top: 0, left: 0 }} rootRef={titleRef} menuRef={titleMenuRef} label={`Actions for ${track?.title || "track"}`}>
         <>
-          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("toggle_like", { track }); closeTitleMenu(); }}>
-            <Heart size={15} weight={isLiked ? "fill" : "regular"} aria-hidden="true" /><span>{isLiked ? "Remove from liked songs" : "Add to liked songs"}</span>
-          </button>
           <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds} onAction={onAction} onClose={closeTitleMenu} />
         </>
       </SmartMenu>
@@ -1850,12 +1844,13 @@ function App() {
         }
       }
       if (action === "filter") next.player.filters.effectPreset = payload.preset;
-      if (action === "equalizer") { next.player.filters.equalizer = payload.bands; next.player.filters.preset = "custom"; }
+      if (action === "equalizer") { next.player.filters.equalizer = payload.bands; next.player.filters.preset = payload.bands?.length ? "custom" : "flat"; }
       if (action === "equalizer_preset") {
         const preset = next.equalizerPresets?.find((item) => item.name === payload.preset);
         next.player.filters.equalizer = preset?.bands || [];
         next.player.filters.preset = payload.preset;
       }
+      if (action === "set_lyrics_offset") next.player.lyricsSyncOffsetMs = Number(payload.offsetMs) || 0;
       if (action === "surprise_me") {
         const result = mockSearchResults.find((track) => track.id === "search-afterglow") || mockSearchResults[0];
         if (result) {
@@ -2069,8 +2064,8 @@ function App() {
             <div className={`main-content main-view-${activeTab}`}>
               {activeTab === "home" ? (isHydrating ? <Suspense fallback={<HomePanelFallback />}><LazyHomePanel loading /></Suspense> : state.player.currentTrack ? <NowPlaying className="now-playing-stage" state={state} onTab={goToView} onAction={onAction} onOpenExternalLink={requestExternalLink} isActionPending={isActionPending} /> : <Suspense fallback={<HomePanelFallback />}><LazyHomePanel onView={goToView} onAction={onAction} isActionPending={isActionPending} /></Suspense>) : null}
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
-              {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading sound controls</span></div>}><LazyFiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} onAction={onAction} isActionPending={isActionPending} /></Suspense></section> : null}
-              {activeTab === "lyrics" ? <section className="content-panel panel-surface"><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading lyrics</span></div>}><LazyLiveLyricsPanel player={state.player} onAction={onAction} /></Suspense></section> : null}
+              {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading sound controls</span></div>}><LazyFiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} canAdjust={Boolean(state.player.currentTrack)} onAction={onAction} isActionPending={isActionPending} /></Suspense></section> : null}
+              {activeTab === "lyrics" ? <section className="content-panel panel-surface"><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading lyrics</span></div>}><LazyLiveLyricsPanel player={state.player} onAction={onAction} isActionPending={isActionPending} /></Suspense></section> : null}
               {activeTab === "activity" ? <section className="content-panel panel-surface activity-feed-panel"><PanelTitle icon={<Bell size={18} aria-hidden="true" />} title="Room activity" description="Live actions and playback issues from this listening room" /><ActivityFeedPanel events={activityEvents} active={state.activity?.active} /></section> : null}
               {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} likedTrackIds={state.likedTrackIds || []} selectedPlaylist={selectedPlaylistDetail?.name || selectedPlaylist} playlistDetail={selectedPlaylistDetail} composerOpen={playlistComposerOpen} onComposerClose={closePlaylistComposer} onAction={onAction} /></section> : null}
             </div>

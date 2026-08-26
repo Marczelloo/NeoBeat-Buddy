@@ -45,6 +45,7 @@ const { importPlaylistFromUrl } = require("../playlists/import");
 const playlistStore = require("../playlists/store");
 const { consumeRateLimit } = require("../security/rateLimit");
 const statsStore = require("../stats/store");
+const userPreferences = require("../users/preferences");
 const { serializeFilters, serializeLyrics, serializePlaylist, serializePlaylistDetails, serializeTrack, normalizeSource } = require("./state");
 const { activityStateEvents, getActivityStateRevision, markActivityStateChanged } = require("./sync");
 const { getActivityEvents, recordActivityAction, reportActivityIssue } = require("./feed");
@@ -58,6 +59,8 @@ const MAX_IDENTITY_CACHE_ENTRIES = 1_000;
 const MAX_ACTIVITY_SOCKETS = 200;
 const QUEUE_UNDO_TTL_MS = 15_000;
 const ACTIVITY_STATE_HEARTBEAT_MS = Math.max(1_000, Number(process.env.ACTIVITY_STATE_HEARTBEAT_MS) || 2_000);
+const MIN_LYRICS_SYNC_OFFSET_MS = -2_000;
+const MAX_LYRICS_SYNC_OFFSET_MS = 2_000;
 const ARTWORK_HOSTS = Object.freeze([
   "dzcdn.net",
   "sndcdn.com",
@@ -365,6 +368,12 @@ function getSerializedQueue(player, client) {
   ));
 }
 
+function assertActivePlayback(player, action) {
+  if (!player?.currentTrack) {
+    throw Object.assign(new Error(`Start a track before changing ${action === "filter" ? "effects" : "the equalizer"}.`), { statusCode: 409 });
+  }
+}
+
 function getSerializedPlaybackHistory(history, client) {
   return Array.from(history || [])
     .slice()
@@ -442,6 +451,8 @@ function buildActivityState(client, guildId, userId) {
   const botStatus = client?.user?.presence?.activities?.find((activity) => activity.type === 2)?.name || null;
 
   const generatedAt = Date.now();
+  const userLyricsOffset = userPreferences.getUserPreferences(userId)?.lyricsSyncOffsetMs;
+  const lyricsSyncOffsetMs = clampLyricsSyncOffset(userLyricsOffset ?? LYRICS_SYNC_OFFSET_MS);
 
   return {
     revision: getActivityStateRevision(guildId),
@@ -462,7 +473,8 @@ function buildActivityState(client, guildId, userId) {
       paused,
       playing,
       positionMs: Math.max(0, Math.round(position)),
-      lyricsSyncOffsetMs: LYRICS_SYNC_OFFSET_MS,
+      lyricsSyncOffsetMs,
+      lyricsDefaultSyncOffsetMs: LYRICS_SYNC_OFFSET_MS,
       durationMs: playback.durationMs || currentTrack?.durationMs || 0,
       volume: getUserVolume(player),
       loop: player?.loop || "NONE",
@@ -509,6 +521,12 @@ function getActivityPosition(player, state, durationMs, now = Date.now()) {
 
 function limitText(value, max = 200) {
   return String(value || "").trim().slice(0, max);
+}
+
+function clampLyricsSyncOffset(value) {
+  const offset = Number(value);
+  if (!Number.isFinite(offset)) return LYRICS_SYNC_OFFSET_MS;
+  return Math.round(Math.max(MIN_LYRICS_SYNC_OFFSET_MS, Math.min(MAX_LYRICS_SYNC_OFFSET_MS, offset)));
 }
 
 function toSource(value) {
@@ -718,12 +736,15 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       return moveQueueTrackWithinOrigin(player.queue, from, to);
     }
     case "filter":
+      assertActivePlayback(player, "filter");
       if (String(payload.preset || "").toLowerCase() === "off") return lavalinkResetEffects(guildId);
       if (!getFilterPreset(payload.preset)) throw Object.assign(new Error("Unknown filter preset."), { statusCode: 400 });
       return lavalinkSetFilterPreset(guildId, payload.preset);
     case "equalizer":
+      assertActivePlayback(player, "equalizer");
       return lavalinkSetEqualizer(guildId, Array.isArray(payload.bands) ? payload.bands : []);
     case "equalizer_preset": {
+      assertActivePlayback(player, "equalizer");
       const presetName = limitText(payload.preset, 80).toLowerCase();
       const customPresets = getUserPresets(identity.id) || {};
       const customKey = Object.keys(customPresets).find((key) => key.toLowerCase() === presetName);
@@ -740,6 +761,11 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       const lyrics = await fetchLyrics(player, player.currentTrack.info).catch(() => null);
       setLyricsState(guildId, lyrics);
       return lyrics;
+    }
+    case "set_lyrics_offset": {
+      const offset = clampLyricsSyncOffset(payload.offsetMs);
+      userPreferences.setUserPreference(identity.id, "lyricsSyncOffsetMs", offset);
+      return { lyricsSyncOffsetMs: offset };
     }
     case "get_playlist": {
       const playlist = playlistStore.getPlaylist(identity.id, guildId, limitText(payload.name, 80));
@@ -1085,6 +1111,7 @@ function createActivityServer(client) {
 module.exports = {
   createActivityServer,
   buildActivityState,
+  clampLyricsSyncOffset,
   getActivityPosition,
   resolveActivityPlayback,
   withAutoplayRequesterLabel,

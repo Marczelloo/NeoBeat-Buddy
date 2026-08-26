@@ -23,7 +23,7 @@ const { parseSearchIdentifier } = require("./searchIdentifier");
 const { buildSearchQueries } = require("./searchQueryVariants");
 const { filterPlayableSearchResults, rankSearchResults } = require("./searchRanking");
 const { getFallbackSources, getSearchPrefix } = require("./searchSources");
-const { cloneTrack, playbackState, ensurePlaybackState, clearLyricsState } = require("./state");
+const { cloneTrack, playbackState, ensurePlaybackState, endActivePlayback, clearLyricsState } = require("./state");
 const {
   clearInactivityTimer,
   clearProgressInterval,
@@ -390,7 +390,9 @@ async function lavalinkStop(guildId) {
   clearProgressInterval(guildId);
   clearLyricsState(guildId);
   await stopLyricsSession(guildId);
-  playbackState.delete(guildId);
+  // Keep room history available in the Activity after a manual stop. The
+  // player is gone, but history and its session filters remain meaningful.
+  endActivePlayback(guildId);
   skipVotes.clear(guildId);
   djProposals.clearGuild(guildId);
   deletePanelState(guildId);

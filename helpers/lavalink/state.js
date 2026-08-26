@@ -81,6 +81,20 @@ const pushTrackHistory = (guildId, track) => {
   }
 };
 
+// Playback history belongs to the listening room, not to a live Poru player.
+// A stop or an inactivity disconnect destroys that player, but the Activity
+// must still be able to show what was played in the room afterwards.
+const endActivePlayback = (guildId) => {
+  const state = ensurePlaybackState(guildId);
+  state.currentTrack = null;
+  state.lastEndedTrack = null;
+  state.lastPosition = 0;
+  state.lastTimestamp = Date.now();
+  state.paused = true;
+  playbackState.set(guildId, state);
+  return state;
+};
+
 const setLyricsState = (guildId, payload) => {
   if (payload) lyricsState.set(guildId, payload);
   else lyricsState.delete(guildId);
@@ -97,6 +111,7 @@ module.exports = {
   cloneTrack,
   resolveEndedTrack,
   pushTrackHistory,
+  endActivePlayback,
   rememberAutoplayTrack,
   setLyricsState,
   getLyricsState,

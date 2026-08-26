@@ -77,7 +77,7 @@ async function lavalinkSetEqualizer(guildId, presetOrBands) {
   if (!player) return { status: "no_player" };
 
   const isBandArray = Array.isArray(presetOrBands);
-  const presetName = isBandArray ? "custom" : String(presetOrBands || "flat").trim().toLowerCase();
+  const presetName = isBandArray && presetOrBands.length ? "custom" : String(presetOrBands || "flat").trim().toLowerCase();
   const bands = isBandArray
     ? normalizeEqualizerBands(presetOrBands)
     : normalizeEqualizerBands(EQUALIZER_PRESETS[presetName] ?? []);

@@ -2,7 +2,8 @@ const { inspect } = require("util");
 const Log = require("../logs/log");
 const { INACTIVITY_TIMEOUT_MS, PROGRESS_UPDATE_INTERVAL_MS } = require("./constants");
 const { clearRecoverySnapshot } = require("./recovery");
-const { playbackState, inactivityTimers } = require("./state");
+const { playbackState, inactivityTimers, endActivePlayback } = require("./state");
+const { markActivityStateChanged } = require("../activity/sync");
 
 let refreshNowPlayingMessageCached = null;
 
@@ -60,7 +61,10 @@ const { restoreVoiceChannelStatus } = require("../discord/voiceChannelStatus");
       }
 
       await current.destroy();
-      playbackState.delete(player.guildId);
+      // An idle disconnect is a transport cleanup, not a request to erase the
+      // room's playback history.
+      endActivePlayback(player.guildId);
+      markActivityStateChanged(player.guildId, "inactivityDisconnect");
       await clearRecoverySnapshot(player.guildId);
     } catch (error) {
       const summary = error instanceof Error ? error.message : inspect(error, { depth: 1 });

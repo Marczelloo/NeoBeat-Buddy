@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { serializeFilters, serializeLyrics, serializePlaylistDetails, serializeTrack } = require("../../../helpers/activity/state");
+const { clampLyricsSyncOffset } = require("../../../helpers/activity/server");
 
 test.describe("Activity state serialization", () => {
   test("exposes safe track metadata and preserves provider identity", () => {
@@ -73,6 +74,12 @@ test.describe("Activity state serialization", () => {
       serializeFilters({ preset: "rnb", filterPreset: "vaporwave", equalizer: [{ band: 3, gain: 0.22 }] }),
       { preset: "rnb", effectPreset: "vaporwave", equalizer: [{ band: 3, gain: 0.22 }] }
     );
+  });
+
+  test("bounds a listener-specific lyrics offset without changing the shared default", () => {
+    assert.equal(clampLyricsSyncOffset(-450), -450);
+    assert.equal(clampLyricsSyncOffset(-9_999), -2_000);
+    assert.equal(clampLyricsSyncOffset(9_999), 2_000);
   });
 
   test("serializes editable playlist tracks with artwork and source metadata", () => {
