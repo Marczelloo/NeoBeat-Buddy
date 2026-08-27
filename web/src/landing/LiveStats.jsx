@@ -1,26 +1,22 @@
 import { useEffect, useState } from "react";
 import { getPublicStats } from "../api.js";
 
-const DASH = "—";
-
 function formatCount(value) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-function formatHours(ms) {
+function formatDuration(ms) {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 90) return `${minutes} min`;
   const hours = ms / 3_600_000;
-  if (hours < 1) return `${Math.round(ms / 60_000)} min`;
   return `${formatCount(Math.round(hours))} h`;
 }
 
-function formatUptime(ms) {
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h ${minutes % 60} min`;
-  return `${Math.floor(hours / 24)} d ${hours % 24} h`;
-}
-
+/**
+ * One hairline data line, not a row of metric tiles. These are the numbers of
+ * a single deployment and are labelled as such; presenting them as a stat
+ * board would argue for a scale that does not exist.
+ */
 export default function LiveStats() {
   const [state, setState] = useState({ status: "loading", data: null });
 
@@ -42,34 +38,31 @@ export default function LiveStats() {
 
   if (state.status === "down") {
     return (
-      <section className="stats" aria-label="Instance statistics">
-        <p className="stats-down">Instance stats are unavailable right now.</p>
+      <section className="statline" aria-label="Instance statistics">
+        <p className="statline-text">Instance stats are unavailable right now.</p>
       </section>
     );
   }
 
-  const loading = state.status === "loading";
-  const data = state.data;
+  if (state.status === "loading") {
+    return (
+      <section className="statline" aria-label="Instance statistics">
+        <p className="statline-text mono">Reading this instance…</p>
+      </section>
+    );
+  }
 
-  const figures = [
-    { label: "Servers", value: loading ? DASH : formatCount(data.servers) },
-    { label: "Tracks played", value: loading ? DASH : formatCount(data.songsPlayed) },
-    { label: "Listening time", value: loading ? DASH : formatHours(data.msPlayed) },
-    { label: "Uptime", value: loading ? DASH : formatUptime(data.uptimeMs) },
-    { label: "Version", value: loading ? DASH : `v${data.version}` },
-  ];
+  const { servers, songsPlayed, msPlayed, version } = state.data;
 
   return (
-    <section className="stats" aria-label="Instance statistics">
-      <dl className="stats-grid">
-        {figures.map((figure) => (
-          <div className="stat" key={figure.label}>
-            <dt>{figure.label}</dt>
-            <dd className="mono">{figure.value}</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="stats-caption">
+    <section className="statline" aria-label="Instance statistics">
+      <p className="statline-text mono">
+        <span>{formatCount(servers)} servers</span>
+        <span>{formatCount(songsPlayed)} tracks played</span>
+        <span>{formatDuration(msPlayed)} listened</span>
+        <span>v{version}</span>
+      </p>
+      <p className="statline-note">
         Live from this instance — the deployment serving this page, not a network total.
       </p>
     </section>

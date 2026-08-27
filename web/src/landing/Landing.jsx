@@ -51,48 +51,48 @@ export default function Landing() {
           </nav>
         </header>
 
-        <section className="hero">
-          <h1>
-            A Discord music bot <em>you</em> run yourself.
-          </h1>
-          <p>
-            Multi-source search across Deezer, Spotify, SoundCloud and YouTube. FLAC playback, DJ
-            controls, a real equalizer, synced lyrics and playlists — on your own hardware, with no
-            tier that takes any of it away.
-          </p>
-          <div className="hero-facts">
-            <span>Self-hosted</span>
-            <span>Lavalink</span>
-            <span>Discord Activity included</span>
-            <span>Educational &amp; research licence</span>
-          </div>
-        </section>
+        {/* The offer in one line, then straight into the palette — the page's
+            thesis is the command line, so nothing stacks above it. */}
+        <h1 className="lede">
+          A Discord music bot <em>you</em> run yourself.
+        </h1>
 
         <CommandLine query={query} onQueryChange={setQuery} onRun={run} onNudge={nudge} />
 
         <ResponseCanvas commandId={activeId} />
 
         <section className="index" aria-label="MewBit commands">
-          {visible.map((command) => (
-            <button
-              type="button"
-              key={command.id}
-              className={[
-                "index-row",
-                command.id === activeId ? "is-active" : "",
-                command.cta ? "is-cta" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => setActiveId(command.id)}
-              onMouseEnter={() => setActiveId(command.id)}
-              aria-pressed={command.id === activeId}
-            >
-              <span className="index-sig">{command.signature}</span>
-              <span className="index-blurb">{command.blurb}</span>
-              <span className="index-go">show</span>
-            </button>
-          ))}
+          {visible.map((command) =>
+            command.cta ? (
+              <a
+                key={command.id}
+                className="index-row is-cta"
+                href={repoUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                onMouseEnter={() => setActiveId(command.id)}
+                onFocus={() => setActiveId(command.id)}
+              >
+                <span className="index-sig">{command.signature}</span>
+                <span className="index-blurb">{command.blurb}</span>
+                <span className="index-go">open the repository →</span>
+              </a>
+            ) : (
+              <button
+                type="button"
+                key={command.id}
+                className={command.id === activeId ? "index-row is-active" : "index-row"}
+                onClick={() => setActiveId(command.id)}
+                onMouseEnter={() => setActiveId(command.id)}
+                onFocus={() => setActiveId(command.id)}
+                aria-pressed={command.id === activeId}
+              >
+                <span className="index-sig">{command.signature}</span>
+                <span className="index-blurb">{command.blurb}</span>
+                <span className="index-go">show</span>
+              </button>
+            )
+          )}
 
           {visible.length === 0 ? (
             <p className="index-empty">
@@ -104,6 +104,12 @@ export default function Landing() {
             </p>
           ) : null}
         </section>
+
+        <p className="pitch">
+          Multi-source search across Deezer, Spotify, SoundCloud and YouTube. FLAC playback, DJ
+          controls, a real equalizer, synced lyrics and playlists — on your own hardware, with no
+          tier that takes any of it away.
+        </p>
 
         <LiveStats />
         <FeatureLedger />

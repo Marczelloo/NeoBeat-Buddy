@@ -25,6 +25,20 @@ export default function CommandLine({ query, onQueryChange, onRun, onNudge }) {
     return () => clearInterval(timer);
   }, [cycling]);
 
+  // "/" focuses the palette from anywhere, the way a command surface behaves.
+  useEffect(() => {
+    function onKey(event) {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      event.preventDefault();
+      inputRef.current?.focus();
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   function handleKeyDown(event) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -34,6 +48,7 @@ export default function CommandLine({ query, onQueryChange, onRun, onNudge }) {
     if (event.key === "Escape") {
       event.preventDefault();
       onQueryChange("");
+      inputRef.current?.blur();
       return;
     }
     if (event.key === "ArrowDown") {
@@ -77,8 +92,8 @@ export default function CommandLine({ query, onQueryChange, onRun, onNudge }) {
         </span>
 
         <span className="cmdline-enter" aria-hidden="true">
-          <span className="key">↵</span>
-          run
+          <span className="key">{focused || query ? "↵" : "/"}</span>
+          <span className="enter-word">{focused || query ? "run" : "to focus"}</span>
         </span>
       </div>
     </div>

@@ -3,10 +3,10 @@ const LEDGER = [
   {
     group: "Playback",
     items: [
-      ["Sources", "Deezer, Spotify, SoundCloud, YouTube"],
+      ["Sources", "Deezer, Spotify, SoundCloud and YouTube, searched together"],
       ["Quality", "FLAC through Deezer"],
-      ["Engine", "Lavalink via Poru"],
-      ["Always on", "24/7 radio mode per server"],
+      ["Engine", "Lavalink, driven through Poru"],
+      ["Always on", "24/7 radio mode, per server"],
     ],
   },
   {
@@ -21,18 +21,18 @@ const LEDGER = [
   {
     group: "Control",
     items: [
-      ["DJ mode", "Role gating, vote skip, strict mode"],
-      ["Equalizer", "22 presets, custom presets per user"],
-      ["Filters", "Preset filter chains on top of the EQ"],
-      ["Lyrics", "Synced, with per-user timing offset"],
+      ["DJ mode", "Role gating, vote skipping, strict mode"],
+      ["Equalizer", "22 presets across ten bands, plus custom presets per user"],
+      ["Filters", "Preset filter chains stacked on top of the EQ"],
+      ["Lyrics", "Synced, with a per-user timing offset"],
     ],
   },
   {
     group: "Surfaces",
     items: [
-      ["Discord Activity", "A shared visual player in the voice channel"],
+      ["Discord Activity", "A shared visual player inside the voice channel"],
       ["Player embed", "Full transport in the text channel"],
-      ["Dashboard", "This web surface, for server settings"],
+      ["Dashboard", "This web surface, for per-server settings"],
       ["Statistics", "Per-guild and per-user listening stats"],
     ],
   },
@@ -47,21 +47,19 @@ export default function FeatureLedger() {
         does.
       </p>
 
-      <div className="ledger-grid">
+      <dl className="ledger-rows">
         {LEDGER.map((group) => (
-          <div className="ledger-group" key={group.group}>
+          <div className="ledger-block" key={group.group}>
             <h3>{group.group}</h3>
-            <dl>
-              {group.items.map(([term, detail]) => (
-                <div className="ledger-row" key={term}>
-                  <dt>{term}</dt>
-                  <dd>{detail}</dd>
-                </div>
-              ))}
-            </dl>
+            {group.items.map(([term, detail]) => (
+              <div className="ledger-row" key={term}>
+                <dt>{term}</dt>
+                <dd>{detail}</dd>
+              </div>
+            ))}
           </div>
         ))}
-      </div>
+      </dl>
     </section>
   );
 }

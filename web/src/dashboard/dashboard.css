@@ -200,7 +200,7 @@
 
 .section-link small {
   font-size: 11px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .section-link:hover {
@@ -297,10 +297,14 @@
   }
 
   .sections {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(140px, max-content);
-    overflow-x: auto;
-    padding-bottom: 2px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .section-link small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .panel-scroll {
@@ -358,7 +362,7 @@
   max-width: 62ch;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .field-note.is-danger {
@@ -548,6 +552,17 @@
   font-size: 12.5px;
   font-weight: 600;
   color: var(--muted-strong);
+}
+
+.savebar.is-resting {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.savebar-guild {
+  margin-left: auto;
+  font: 500 11px var(--mono);
+  color: var(--muted);
 }
 
 .spin {

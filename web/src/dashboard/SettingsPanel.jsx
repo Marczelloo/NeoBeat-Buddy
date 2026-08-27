@@ -36,7 +36,7 @@ const SECTION_COPY = {
   },
 };
 
-export default function SettingsPanel({ guildId, section, sectionLabel }) {
+export default function SettingsPanel({ guildId, section, sectionLabel, guildName }) {
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState(null);
   const [saveState, setSaveState] = useState("idle");
@@ -324,7 +324,7 @@ export default function SettingsPanel({ guildId, section, sectionLabel }) {
         ) : null}
       </div>
 
-      <SaveState state={saveState} />
+      <SaveState state={saveState} guildName={guildName} />
     </section>
   );
 }

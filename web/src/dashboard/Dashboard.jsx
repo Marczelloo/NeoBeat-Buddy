@@ -95,7 +95,7 @@ export default function Dashboard() {
           <h1 className="dash-guild" title={activeGuild.name}>
             {activeGuild.name}
           </h1>
-          <SectionList guildId={activeGuild.id} activeSection={activeSection} />
+          <SectionList guildId={activeGuild.id} />
         </div>
 
         <SettingsPanel
@@ -103,6 +103,7 @@ export default function Dashboard() {
           guildId={activeGuild.id}
           section={activeSection}
           sectionLabel={SECTIONS.find((entry) => entry.id === activeSection).label}
+          guildName={activeGuild.name}
         />
       </div>
     </div>

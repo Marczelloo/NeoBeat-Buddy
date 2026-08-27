@@ -1,8 +1,11 @@
+import { motion } from "motion/react";
+import CoverArt from "../CoverArt.jsx";
+
 const QUEUE = [
-  { art: "T", title: "Tamagotchi", artist: "TACONAFIDE", by: "queued by Neko", time: "3:25", playing: true },
-  { art: "R", title: "Rezerwacja", artist: "Taco Hemingway", by: "queued by Neko", time: "3:58" },
-  { art: "M", title: "Midnight City", artist: "M83", by: "queued by juno", time: "4:03" },
-  { art: "O", title: "Outrun", artist: "Kavinsky", by: "picked by autoplay", time: "4:40", auto: true },
+  { art: "tamagotchi", title: "Tamagotchi", artist: "TACONAFIDE", by: "queued by Neko", time: "3:25", playing: true },
+  { art: "signallost", title: "Signal Lost", artist: "Kavinsky", by: "queued by Neko", time: "5:03" },
+  { art: "nightdrive", title: "Night Drive", artist: "Chiasm", by: "queued by juno", time: "4:12" },
+  { art: "nightdrive", title: "Outrun", artist: "Kavinsky", by: "picked by autoplay", time: "4:40", auto: true },
 ];
 
 export default function QueueResponse() {
@@ -13,26 +16,24 @@ export default function QueueResponse() {
         started.
       </p>
 
-      {QUEUE.map((track) => (
-        <div className="qrow" key={track.title}>
-          <span className="qart" aria-hidden="true">
-            {track.art}
-          </span>
+      {QUEUE.map((track, index) => (
+        <motion.div
+          className="qrow"
+          key={track.title}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, delay: 0.06 + index * 0.05, ease: [0.32, 0.72, 0, 1] }}
+        >
+          <CoverArt art={track.art} title={track.title} />
           <span className="qmeta">
             <b>{track.title}</b>
             <small>
               {track.artist} · {track.by}
             </small>
-            {track.auto ? (
-              <span className="qsub">
-                <span className="autotag">Autoplay next</span>
-                <span className="qtime">{track.time}</span>
-              </span>
-            ) : (
-              <span className="qsub">
-                <span className="qtime">{track.time}</span>
-              </span>
-            )}
+            <span className="qsub">
+              {track.auto ? <span className="autotag">Autoplay next</span> : null}
+              <span className="qtime">{track.time}</span>
+            </span>
           </span>
           {track.playing ? (
             <span className="eqchip" aria-label="Now playing">
@@ -41,10 +42,8 @@ export default function QueueResponse() {
               <i />
               <i />
             </span>
-          ) : (
-            <span className="qtime" aria-hidden="true" />
-          )}
-        </div>
+          ) : null}
+        </motion.div>
       ))}
     </div>
   );
