@@ -1,0 +1,162 @@
+:root {
+  color-scheme: dark;
+
+  /* Obsidian Motion — source of truth: activity/redesigns/obsidian-brandboard.html */
+  --bg: #050608;
+  --surface: #0c0e12;
+  --raised: #111318;
+  --high: #161920;
+  --line: rgba(255, 255, 255, 0.06);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --text: #f4f6f9;
+  --muted-strong: #c3cbd7;
+  --muted: #9ba4b2;
+  --faint: #667081;
+  --accent: #67e3f4;
+  --live: #ff6ec7;
+  --auto: #a78bfa;
+  --danger: #ff8098;
+  --white-btn: #f4f6f9;
+  --on-white: #0a0c10;
+
+  --disp: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --panel-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 2px 4px rgba(0, 0, 0, 0.35),
+    0 20px 56px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 14px/1.55 var(--disp);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-feature-settings: "tnum";
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Primary CTA — white, never cyan. Brandboard §04. */
+.btn-white {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--white-btn);
+  color: var(--on-white);
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  transition: background 0.15s var(--ease), transform 0.15s var(--ease);
+}
+
+.btn-white:hover {
+  background: #fff;
+}
+
+.btn-white:active {
+  transform: scale(0.98);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 33px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--muted-strong);
+  font-weight: 600;
+  font-size: 12.5px;
+  transition: color 0.15s var(--ease), background 0.15s var(--ease);
+}
+
+.btn-ghost:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

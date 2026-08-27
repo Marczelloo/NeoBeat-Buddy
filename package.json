@@ -26,7 +26,10 @@
     "test:autoplay": "node --test tests/helpers/lavalink/autoplayV3.test.js",
     "activity:dev": "pnpm --dir activity dev",
     "activity:build": "pnpm --dir activity build",
-    "activity:lint": "eslint activity/src --ext .js,.jsx"
+    "activity:lint": "eslint activity/src --ext .js,.jsx",
+    "web:dev": "pnpm --dir web dev",
+    "web:build": "pnpm --dir web build",
+    "web:lint": "eslint web/src --ext .js,.jsx"
   },
   "repository": {
     "type": "git",

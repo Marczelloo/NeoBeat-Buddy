@@ -14,3 +14,4 @@ helpers/data/*
 !helpers/data/.gitkeep
 *.sh
 *.ps1
+web/dist

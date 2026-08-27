@@ -7,7 +7,7 @@ import globals from "globals";
 
 export default defineConfig([
   {
-    ignores: ["activity/dist/**"],
+    ignores: ["activity/dist/**", "web/dist/**"],
   },
   js.configs.recommended,
   {
@@ -54,6 +54,25 @@ export default defineConfig([
       "n/no-missing-require": "off",
       "import/no-unresolved": "off",
       "import/named": "off",
+      "no-unused-vars": "off",
+      "unused-imports/no-unused-imports": "off",
+    },
+  },
+  {
+    files: ["web/**/*.{js,jsx}"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: globals.browser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    rules: {
+      "n/no-missing-import": "off",
+      "n/no-missing-require": "off",
+      "import/no-unresolved": "off",
+      "import/named": "off",
+      // JSX-referenced identifiers read as unused without eslint-plugin-react;
+      // same allowance the activity/ block makes.
       "no-unused-vars": "off",
       "unused-imports/no-unused-imports": "off",
     },
