@@ -1,5 +1,3 @@
-import Reveal from "./Reveal.jsx";
-
 /* Every entry here is verifiable in the repository. No metrics attached. */
 const LEDGER = [
   {
@@ -50,8 +48,8 @@ export default function FeatureLedger() {
       </p>
 
       <div className="ledger-grid">
-        {LEDGER.map((group, index) => (
-          <Reveal className="ledger-group" key={group.group} delay={index * 0.04}>
+        {LEDGER.map((group) => (
+          <div className="ledger-group" key={group.group}>
             <h3>{group.group}</h3>
             <dl>
               {group.items.map(([term, detail]) => (
@@ -61,7 +59,7 @@ export default function FeatureLedger() {
                 </div>
               ))}
             </dl>
-          </Reveal>
+          </div>
         ))}
       </div>
     </section>

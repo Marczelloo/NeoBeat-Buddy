@@ -123,13 +123,15 @@
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--muted);
-  overflow: hidden;
-  transition: color 0.15s var(--ease), outline-color 0.15s var(--ease);
+  transition: color 0.15s var(--ease), outline-color 0.15s var(--ease), background 0.15s var(--ease);
 }
 
+/* The icon is clipped on the image itself; the item must not clip, or it
+   would swallow the active marker that sits outside its left edge. */
 .rail-item img {
   width: 100%;
   height: 100%;
+  border-radius: 12px;
   object-fit: cover;
 }
 
@@ -142,6 +144,7 @@
 .rail-item.is-active {
   color: var(--text);
   outline-color: var(--line-strong);
+  background: var(--high);
 }
 
 .rail-item.is-active::after {

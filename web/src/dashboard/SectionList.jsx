@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { NavLink } from "react-router-dom";
 
 export const SECTIONS = [
@@ -13,9 +14,19 @@ export function isSection(value) {
   return SECTIONS.some((section) => section.id === value);
 }
 
-export default function SectionList({ guildId }) {
+export default function SectionList({ guildId, activeSection }) {
+  const navRef = useRef(null);
+
+  // Below 900px the list is a horizontal scroller; the active section can
+  // start out past the right edge.
+  useEffect(() => {
+    const active = navRef.current?.querySelector(".section-link.is-active");
+    if (!active || navRef.current.scrollWidth <= navRef.current.clientWidth) return;
+    active.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [activeSection]);
+
   return (
-    <nav className="sections" aria-label="Settings sections">
+    <nav className="sections" aria-label="Settings sections" ref={navRef}>
       {SECTIONS.map((section) => (
         <NavLink
           key={section.id}

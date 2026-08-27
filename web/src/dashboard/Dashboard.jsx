@@ -95,7 +95,7 @@ export default function Dashboard() {
           <h1 className="dash-guild" title={activeGuild.name}>
             {activeGuild.name}
           </h1>
-          <SectionList guildId={activeGuild.id} />
+          <SectionList guildId={activeGuild.id} activeSection={activeSection} />
         </div>
 
         <SettingsPanel
