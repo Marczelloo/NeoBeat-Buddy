@@ -686,7 +686,6 @@
   width: 100%;
   border-radius: 99px;
   background: var(--white-btn);
-  transition: height 0.4s var(--ease);
 }
 
 .eq-zero {
