@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoUrl } from "../api.js";
 import CommandLine from "./CommandLine.jsx";
+import FeatureLedger from "./FeatureLedger.jsx";
+import LiveStats from "./LiveStats.jsx";
 import ResponseCanvas from "./ResponseCanvas.jsx";
+import SiteFooter from "./SiteFooter.jsx";
 import { COMMANDS, DEFAULT_COMMAND_ID, filterCommands } from "./commands.js";
 import "./landing.css";
 
@@ -58,10 +61,10 @@ export default function Landing() {
             tier that takes any of it away.
           </p>
           <div className="hero-facts">
-            <span>Open source</span>
             <span>Self-hosted</span>
             <span>Lavalink</span>
             <span>Discord Activity included</span>
+            <span>Educational &amp; research licence</span>
           </div>
         </section>
 
@@ -101,6 +104,10 @@ export default function Landing() {
             </p>
           ) : null}
         </section>
+
+        <LiveStats />
+        <FeatureLedger />
+        <SiteFooter />
       </div>
     </main>
   );

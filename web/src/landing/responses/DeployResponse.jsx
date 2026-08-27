@@ -9,6 +9,11 @@ export default function DeployResponse() {
         nodes — there is no hosted tier to be rate-limited by and no paywall over audio quality.
       </p>
 
+      <p className="resp-note">
+        Licensed for private and educational use. Running it on a public Discord server, commercially,
+        or as a service is outside the licence.
+      </p>
+
       <pre className="codeblock">
         <code>
           <span className="p">$ </span>git clone https://github.com/Marczelloo/NeoBeat-Buddy.git{"\n"}
