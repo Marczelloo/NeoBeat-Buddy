@@ -77,14 +77,13 @@ module.exports = {
       `${ICONS.autoplay} ${bold("Autoplay", autoplay ? "On" : "Off")}`,
     ].join("\n");
 
-    return new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setColor(COLORS.player)
       .setAuthor({
         name: `${ICONS.nowPlaying} Now Playing`,
         iconURL: "https://cdn.discordapp.com/emojis/741605543046807626.gif",
       })
       .setTitle(title)
-      .setURL(url)
       .setThumbnail(image ?? "https://i.imgur.com/3g7nmJC.png")
       .setDescription(position && duration ? `\`${position}\` / \`${duration}\`` : null)
       .addFields({ name: "\u200b", value: infoLeft, inline: true }, { name: "\u200b", value: infoRight, inline: true })
@@ -92,6 +91,13 @@ module.exports = {
         text: `Requested by ${requesterTag ?? "Unknown"}`,
         iconURL: requesterAvatar ?? undefined,
       });
+
+    // Providers occasionally omit a canonical page URL. Passing null or an
+    // invalid value to discord.js' EmbedBuilder triggers an AggregateError
+    // and aborts the whole trackStartUI handler, even though the track itself
+    // is perfectly playable.
+    if (/^https?:\/\//i.test(String(url || ""))) embed.setURL(url);
+    return embed;
   },
   successEmbed: function (title, description) {
     return new EmbedBuilder()

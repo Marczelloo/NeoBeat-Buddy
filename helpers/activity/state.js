@@ -29,6 +29,21 @@ function serializeTrack(track, index = null) {
   const source = normalizeSource(info.sourceName || info.source || info.uri);
   const artwork = getArtworkUrls(getTrackArtworkSource(track));
 
+  const aiDJ = track?.userData?.aiDJ || null;
+  const recommendation = aiDJ
+    ? {
+      source: "ai_dj",
+      lane: aiDJ.lane || null,
+      fit: Number.isFinite(Number(aiDJ.fit)) ? Number(aiDJ.fit) : null,
+      mood: aiDJ.mood || null,
+      energy: aiDJ.energy || null,
+      reason: String(aiDJ.proposalReason || aiDJ.reasons?.[0] || "").trim().slice(0, 180) || null,
+      anchor: track?.userData?.autoplayAnchor || null,
+    }
+    : track?.userData?.surpriseMe
+      ? { source: "surprise", reason: track.userData.surpriseMe === "freestyle" ? "A verified pick from the current chart." : "Chosen from your recent listening." }
+      : null;
+
   return {
     id: getTrackId(track),
     index,
@@ -44,6 +59,7 @@ function serializeTrack(track, index = null) {
     explicit: Boolean(info.isExplicit ?? info.explicit ?? track.pluginInfo?.isExplicit ?? track.pluginInfo?.explicit),
     requester: info.requesterTag || info.requester || null,
     autoplay: Boolean(track.userData?.autoplay || info.autoplayed),
+    recommendation,
   };
 }
 

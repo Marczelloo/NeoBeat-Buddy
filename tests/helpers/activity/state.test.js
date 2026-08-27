@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { serializeFilters, serializeLyrics, serializePlaylistDetails, serializeTrack } = require("../../../helpers/activity/state");
 const { clampLyricsSyncOffset } = require("../../../helpers/activity/server");
+const { serializeFilters, serializeLyrics, serializePlaylistDetails, serializeTrack } = require("../../../helpers/activity/state");
 
 test.describe("Activity state serialization", () => {
   test("exposes safe track metadata and preserves provider identity", () => {
@@ -56,6 +56,23 @@ test.describe("Activity state serialization", () => {
     });
 
     assert.equal(track.explicit, true);
+  });
+
+  test("serializes a concise explanation for an AI or Surprise recommendation", () => {
+    const aiTrack = serializeTrack({
+      info: { identifier: "ai-id", title: "Follow Through", author: "Artist", sourceName: "youtube" },
+      userData: { aiDJ: { lane: "bridge", fit: 88, mood: "warm", energy: "mid", proposalReason: "Keeps the synth-pop lift." } },
+    });
+    const surpriseTrack = serializeTrack({
+      info: { identifier: "surprise-id", title: "Fresh Start", author: "Artist", sourceName: "deezer" },
+      userData: { surpriseMe: "freestyle" },
+    });
+
+    assert.deepEqual(aiTrack.recommendation, {
+      source: "ai_dj", lane: "bridge", fit: 88, mood: "warm", energy: "mid",
+      reason: "Keeps the synth-pop lift.", anchor: null,
+    });
+    assert.equal(surpriseTrack.recommendation.reason, "A verified pick from the current chart.");
   });
 
   test("normalizes synced and static lyrics into an Activity payload", () => {

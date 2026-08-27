@@ -10,9 +10,11 @@ const {
   stringifyJson,
   withAutoplayRequesterLabel,
   getSerializedPlaybackHistory,
+  getSerializedQueue,
+  findQueueItemIndex,
 } = require("../../../helpers/activity/server");
-const { getActivityStateRevision, markActivityStateChanged, resetActivityStateRevision } = require("../../../helpers/activity/sync");
 const { resetActivitySessions } = require("../../../helpers/activity/sessions");
+const { getActivityStateRevision, markActivityStateChanged, resetActivityStateRevision } = require("../../../helpers/activity/sync");
 
 test("Activity state revisions only move forward for a guild", () => {
   const guildId = "activity-revision-test";
@@ -91,6 +93,17 @@ test("Activity always labels autoplay rows as MewBit even when a provider preser
   }, { user: { username: "MewBit" } });
 
   assert.equal(track.info.requesterTag, "MewBit");
+});
+
+test("Activity queue actions resolve a stable row identity after another client reordered the queue", () => {
+  const first = { info: { identifier: "first", title: "First", author: "Artist" }, userData: {} };
+  const second = { info: { identifier: "second", title: "Second", author: "Artist" }, userData: {} };
+  const queue = [first, second];
+  const serialized = getSerializedQueue({ queue }, { user: { username: "MewBit" } });
+
+  queue.reverse();
+  assert.equal(findQueueItemIndex(queue, serialized[0].queueItemId, 0), 1);
+  assert.equal(findQueueItemIndex(queue, "missing-row", 0), -1);
 });
 
 test("Activity serializes playback history newest first with a played timestamp", () => {

@@ -38,7 +38,7 @@ function actionDetail(action, payload, beforeTrack, result) {
   const trackTitle = text(resultTrack?.title || beforeTrack?.title || payload?.track?.title || payload?.query, 100);
   switch (action) {
     case "play": return payload?.playNow ? (trackTitle ? `started ${trackTitle}` : "started playback") : (trackTitle ? `queued ${trackTitle}` : "added a track to the queue");
-    case "surprise_me": return trackTitle ? `picked ${trackTitle} from today’s chart` : "picked a verified chart track";
+    case "surprise_me": return trackTitle ? `picked ${trackTitle}${result?.surpriseIntent && result.surpriseIntent !== "freestyle" ? " from the room’s taste" : " from today’s chart"}` : "picked a verified surprise track";
     case "pause": return "paused playback";
     case "resume": return "resumed playback";
     case "stop": return "stopped playback and cleared the queue";
@@ -56,6 +56,8 @@ function actionDetail(action, payload, beforeTrack, result) {
     case "filter": return text(payload?.preset, 40).toLowerCase() === "off" ? "reset the audio effects" : `applied the ${text(payload?.preset, 40)} effect`;
     case "equalizer_preset": return `changed the EQ preset to ${text(payload?.preset, 40)}`;
     case "play_playlist": return payload?.shuffle ? "started a playlist in shuffle" : "started a playlist";
+    case "change_source": return `switched the current track to ${text(payload?.source, 30) || "another"}`;
+    case "track_feedback": return payload?.sentiment === "more" ? "asked for more tracks like this" : "asked MewBit to avoid this direction";
     default: return null;
   }
 }

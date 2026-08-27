@@ -914,43 +914,75 @@
 .lyrics-timing-reset { min-height: 34px; }
 @media (max-width: 680px) { .lyrics-timing { grid-template-columns: 1fr auto; gap: 10px; } .range-lyrics-timing { grid-column: 1 / -1; grid-row: 2; } }
 
-/* Volume feedback stays visible above the control without crowding transport actions. */
+/* The value surfaces only while the listener is actively adjusting volume. */
 .deck-volume { position: relative; }
 .volume-inline-control,
-.bar-volume-control { display: grid; min-width: 0; gap: 2px; }
+.bar-volume-control { position: relative; min-width: 0; }
 .volume-inline-control { width: clamp(90px, 12vw, 170px); }
 .volume-inline-control .range-volume { width: 100%; }
 .bar-volume-control { width: 90px; flex: 0 1 90px; }
 .bar-volume { width: 100%; }
-.volume-readout {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  min-width: 0;
-  color: var(--faint);
-  font: 700 8px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.volume-readout strong {
+.volume-slider .range-volume { width: 100%; }
+.volume-bubble {
+  position: absolute;
+  z-index: 3;
+  left: clamp(15px, var(--volume-bubble-left), calc(100% - 15px));
+  bottom: calc(100% + 6px);
+  display: grid;
+  min-width: 30px;
+  min-height: 22px;
+  padding: 4px 6px;
+  border: 1px solid rgb(103 227 244 / 0.26);
+  border-radius: 7px;
   color: var(--cyan-soft);
-  font-size: 10px;
+  background: rgb(17 21 29 / 0.98);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 7px 18px rgb(0 0 0 / 0.36);
+  font: 800 10px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   font-variant-numeric: tabular-nums;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 4px) scale(0.9);
+  transition-property: opacity, transform;
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+.volume-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 7px;
+  height: 7px;
+  border-right: 1px solid rgb(103 227 244 / 0.22);
+  border-bottom: 1px solid rgb(103 227 244 / 0.22);
+  background: rgb(17 21 29 / 0.98);
+  transform: translateX(-50%) rotate(45deg);
+}
+.volume-slider.is-adjusting .volume-bubble {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
 }
 .volume-mobile-trigger {
   display: none;
-  border: 0;
-  padding: 0;
-  color: var(--muted-strong);
-  background: transparent;
-  font: 700 9px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
 }
-.volume-mobile-trigger strong { margin-left: 5px; color: var(--cyan-soft); font-size: 10px; }
 @media (max-width: 680px) {
   .deck-volume .volume-inline-control,
   .deck-volume .volume-number { display: none; }
-  .volume-mobile-trigger { display: inline-flex; }
-  .bar-volume-control .volume-readout { display: none; }
+  .volume-mobile-trigger { display: inline-grid; }
 }
+
+/* Activity resilience and queue controls. The same controls serve hover,
+   keyboard focus and coarse touch input; no long-press-only operations. */
+.connection-health { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--faint); font: 700 9px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
+.connection-health i { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 999px; background: var(--faint); box-shadow: 0 0 0 3px rgb(255 255 255 / 0.025); }
+.connection-health.is-live { color: var(--cyan-soft); }.connection-health.is-live i { background: var(--cyan); }.connection-health.is-reconnecting { color: #f3c878; }.connection-health.is-reconnecting i { background: #f3c878; animation: connection-pulse 1s ease-in-out infinite; }.connection-health.is-error i, .connection-health.is-preview i { background: var(--danger); }
+@keyframes connection-pulse { 50% { opacity: 0.32; transform: scale(0.72); } }
+.queue-row:focus-visible { outline: 2px solid rgb(103 227 244 / 0.62); outline-offset: 2px; }
+.queue-track-copy > span { font-variant-numeric: tabular-nums; }
+.row-menu-explainer { display: grid; gap: 4px; margin: 4px 8px 7px; padding: 9px 10px; border: 1px solid rgb(103 227 244 / 0.18); border-radius: 9px; color: var(--muted); background: rgb(103 227 244 / 0.045); font-size: 11px; line-height: 1.35; }
+.row-menu-explainer strong { color: var(--cyan-soft); font-size: 10px; }
+.row-menu-source-switch { display: grid; gap: 7px; margin: 6px 8px; padding: 9px 10px; border-top: 1px solid var(--line); color: var(--faint); font: 700 9px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
+.row-menu-source-switch > div { display: flex; flex-wrap: wrap; gap: 5px; }.row-menu-source-switch button { min-height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted-strong); background: var(--surface-raised); font: 600 10px/1 "Hanken Grotesk", "Segoe UI", sans-serif; text-transform: none; }.row-menu-source-switch button:hover { color: var(--text); border-color: var(--line-strong); background: var(--surface-soft); }
+@media (pointer: coarse) { .queue-side-btns { display: inline-flex; } .queue-row { min-height: 58px; } .queue-play-next, .queue-remove { width: 36px; height: 36px; } }
+@media (max-width: 760px) { .connection-health > span { display: none; }.connection-health { min-width: 18px; justify-content: center; }.row-menu-source-switch button { min-height: 36px; } }

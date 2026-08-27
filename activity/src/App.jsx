@@ -125,6 +125,50 @@ function useBufferedSlider(externalValue, { acknowledgementTolerance = 0, optimi
   return { value, begin, update, commit };
 }
 
+function formatQueueEta(queue = [], index = 0) {
+  const waitMs = queue.slice(0, Math.max(0, index)).reduce((total, track) => total + Math.max(0, Number(track?.durationMs) || 0), 0);
+  return waitMs > 0 ? `In ${formatTime(waitMs)}` : "Up next";
+}
+
+function VolumeSlider({ slider, onPreview, onCommit, className = "" }) {
+  const [isAdjusting, setIsAdjusting] = useState(false);
+  const value = Math.round(slider.value);
+  const startAdjusting = () => {
+    slider.begin();
+    setIsAdjusting(true);
+  };
+  const finishAdjusting = (nextValue) => {
+    onCommit(nextValue);
+    setIsAdjusting(false);
+  };
+
+  return (
+    <div className={`volume-slider ${className} ${isAdjusting ? "is-adjusting" : ""}`} style={{ "--volume-bubble-left": `${value}%` }}>
+      <output className="volume-bubble" aria-live="polite">{value}</output>
+      <input
+        className="range range-volume"
+        type="range"
+        min="0"
+        max="100"
+        value={slider.value}
+        aria-label="Player volume"
+        style={{ "--range-progress": `${value}%` }}
+        onPointerDown={startAdjusting}
+        onPointerCancel={(event) => finishAdjusting(event.currentTarget.value)}
+        onChange={(event) => onPreview(event.target.value)}
+        onPointerUp={(event) => finishAdjusting(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") startAdjusting();
+        }}
+        onKeyUp={(event) => {
+          if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") finishAdjusting(event.currentTarget.value);
+        }}
+        onBlur={() => setIsAdjusting(false)}
+      />
+    </div>
+  );
+}
+
 
 function useCompactViewport() {
   const query = "(max-height: 360px), (max-width: 620px) and (max-height: 420px)";
@@ -189,7 +233,10 @@ function moveQueueTrackForDisplay(queue = [], from, to) {
 }
 
 function getActionPendingKey(action, payload = {}) {
-  if (action === "remove_queue" || action === "play_next") return `${action}:${Number(payload.position)}`;
+  if (action === "remove_queue" || action === "play_next") return `${action}:${payload.queueItemId || Number(payload.position)}`;
+  if (action === "move_queue") return `${action}:${payload.fromQueueItemId || Number(payload.from)}`;
+  if (action === "play") return `${action}:${payload.trackId || payload.query || "unknown"}`;
+  if (action === "toggle_like" || action === "track_feedback") return `${action}:${payload.track?.id || payload.trackId || "current"}`;
   return action;
 }
 
@@ -218,7 +265,7 @@ function getActionFeedback(action, payload = {}, result = null, state = null) {
   const track = trackFeedbackLabel(currentTrack);
   switch (action) {
     case "play": return payload.playNow ? (track ? `Playing now: ${track}` : "Playing now") : (track ? `Added to queue: ${track}` : "Added to queue");
-    case "surprise_me": return track ? `Picked from today’s chart: ${track}` : "Picked a verified chart track";
+    case "surprise_me": return track ? `Picked ${result?.surpriseIntent && result.surpriseIntent !== "freestyle" ? "for this room" : "from today’s chart"}: ${track}` : "Picked a verified surprise track";
     case "stop": return "Playback stopped and queue cleared";
     case "skip": return "Skipped to the next track";
     case "previous": return "Restarted the current track";
@@ -239,6 +286,8 @@ function getActionFeedback(action, payload = {}, result = null, state = null) {
     case "equalizer_preset": return `EQ preset: ${payload.preset}`;
     case "refresh_lyrics": return result?.lines?.length || result?.text ? "Lyrics refreshed" : "No lyrics found for this track";
     case "set_lyrics_offset": return "Lyrics timing saved";
+    case "change_source": return `Trying the ${sourceLabel(payload.source)} version`;
+    case "track_feedback": return payload.sentiment === "more" ? "MewBit will lean closer to this sound" : "MewBit will avoid this direction";
     case "update_playlist": return "Playlist changes saved";
     default: return null;
   }
@@ -356,7 +405,7 @@ function TrackSaveActions({ track, playlists = [], likedTrackIds = [], onAction,
   const isLiked = likedTrackIds.includes(track.id) || likedTrackIds.includes(getTrackLikeKey(track));
   return (
     <div className={`track-save-actions ${className}`}>
-      <IconButton label={isLiked ? "Remove from liked songs" : "Add to liked songs"} className={`like-button ${isLiked ? "is-liked" : ""}`} loading={isActionPending("toggle_like")} onClick={() => onAction("toggle_like", { track })} aria-pressed={isLiked}>
+      <IconButton label={isLiked ? "Remove from liked songs" : "Add to liked songs"} className={`like-button ${isLiked ? "is-liked" : ""}`} loading={isActionPending(`toggle_like:${track.id}`)} onClick={() => onAction("toggle_like", { track })} aria-pressed={isLiked}>
         <Heart size={16} weight={isLiked ? "fill" : "regular"} aria-hidden="true" />
       </IconButton>
       <PlaylistMenu track={track} playlists={playlists} onAction={onAction} />
@@ -480,7 +529,7 @@ function PlaylistSubmenuItem({ track, playlists = [], onAction, onClose }) {
   );
 }
 
-function TrackMenuActions({ track, playlists = [], likedTrackIds = [], onAction, onClose }) {
+function TrackMenuActions({ track, playlists = [], likedTrackIds = [], onAction, onClose, allowSourceChange = false }) {
   const isLiked = likedTrackIds.includes(track.id) || likedTrackIds.includes(getTrackLikeKey(track));
   const linkUrl = [track.uri, track.playQuery].find((value) => typeof value === "string" && /^https?:\/\//i.test(value));
   return (
@@ -489,6 +538,16 @@ function TrackMenuActions({ track, playlists = [], likedTrackIds = [], onAction,
         <Heart size={15} weight={isLiked ? "fill" : "regular"} aria-hidden="true" /><span>{isLiked ? "Remove from liked songs" : "Add to liked songs"}</span>
       </button>
       <PlaylistSubmenuItem track={track} playlists={playlists} onAction={onAction} onClose={onClose} />
+      {track.recommendation?.reason ? <p className="row-menu-explainer"><strong>Why MewBit picked this</strong>{track.recommendation.reason}</p> : null}
+      {track.autoplay ? <>
+        <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("track_feedback", { track, sentiment: "more" }); onClose(); }}>
+          <Sparkle size={15} weight="fill" aria-hidden="true" /><span>More like this</span>
+        </button>
+        <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("track_feedback", { track, sentiment: "less" }); onClose(); }}>
+          <WarningCircle size={15} aria-hidden="true" /><span>Not this direction</span>
+        </button>
+      </> : null}
+      {allowSourceChange ? <div className="row-menu-source-switch" role="group" aria-label="Try another source"><span>Try another source</span><div>{SOURCE_NAMES.filter((source) => source !== "auto" && source !== track.source).map((source) => <button type="button" key={source} onClick={() => { onAction("change_source", { source, expectedTrackId: track.id }); onClose(); }}>{sourceLabel(source)}</button>)}</div></div> : null}
       {linkUrl ? (
         <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(linkUrl).catch(() => {}); onClose(); }}>
           <CopySimple size={15} aria-hidden="true" /><span>Copy link</span>
@@ -768,14 +827,10 @@ function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onA
           <IconButton label={volumeSlider.value === 0 ? "Unmute player" : "Mute player"} className="volume-toggle" loading={isActionPending("toggle_mute")} onClick={() => onAction("toggle_mute")}>
             {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
           </IconButton>
-          <div className="volume-inline-control">
-            <output className="volume-readout" aria-live="polite"><span>Volume</span><strong>{Math.round(volumeSlider.value)}</strong></output>
-            <input className="range range-volume vol-inline" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
-          </div>
-          <button className="volume-mobile-trigger" type="button" onClick={() => setVolumeOpen((value) => !value)} aria-expanded={volumeOpen} aria-haspopup="true"><span>Volume</span><strong>{Math.round(volumeSlider.value)}</strong></button>
+          <VolumeSlider className="volume-inline-control" slider={volumeSlider} onPreview={previewVolume} onCommit={commitVolume} />
+          <IconButton label={volumeOpen ? "Close volume controls" : "Adjust volume"} className={`volume-mobile-trigger ${volumeOpen ? "is-active" : ""}`} onClick={() => setVolumeOpen((value) => !value)} aria-expanded={volumeOpen} aria-haspopup="true"><Faders size={17} weight="regular" aria-hidden="true" /></IconButton>
           <div className={`volume-popover vol-pop-mobile ${volumeOpen ? "is-open" : ""}`} role="group" aria-label="Volume control">
-            <input className="range range-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={(event) => { event.stopPropagation(); volumeSlider.begin(); }} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => event.stopPropagation()} />
-            <output className="volume-number" aria-live="polite">{Math.round(volumeSlider.value)}</output>
+            <VolumeSlider slider={volumeSlider} onPreview={previewVolume} onCommit={commitVolume} />
           </div>
           </div>
       </div>
@@ -835,7 +890,7 @@ function NowPlaying({ state, onTab, onAction, onOpenExternalLink, isActionPendin
               </h1>
               <p className="track-author">{track?.author || "Pick a track from search to start the room"}</p>
             </div>
-            <IconButton label={state.likedTrackIds.includes(track?.id) ? "Remove from liked songs" : "Add to liked songs"} className={`like-button ${state.likedTrackIds.includes(track?.id) ? "is-liked" : ""}`} onClick={() => onAction("toggle_like", { track })} aria-pressed={state.likedTrackIds.includes(track?.id)}>
+            <IconButton label={state.likedTrackIds.includes(track?.id) ? "Remove from liked songs" : "Add to liked songs"} className={`like-button ${state.likedTrackIds.includes(track?.id) ? "is-liked" : ""}`} loading={isActionPending(`toggle_like:${track?.id}`)} onClick={() => onAction("toggle_like", { track })} aria-pressed={state.likedTrackIds.includes(track?.id)}>
               <Heart size={20} aria-hidden="true" />
             </IconButton>
           </div>
@@ -869,7 +924,7 @@ function NowPlaying({ state, onTab, onAction, onOpenExternalLink, isActionPendin
         <div className="time-row"><span>{formatTime(seekSlider.value)}</span><span>{formatTime(duration)}</span></div>
       </div>
       <SmartMenu open={Boolean(titleMenu)} position={titleMenu || { top: 0, left: 0 }} rootRef={titleRef} menuRef={titleMenuRef} label={`Actions for ${track?.title || "track"}`}>
-        {track ? <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onAction={onAction} onClose={closeTitleMenu} /> : null}
+        {track ? <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onAction={onAction} onClose={closeTitleMenu} allowSourceChange /> : null}
       </SmartMenu>
     </section>
   );
@@ -937,12 +992,23 @@ function CompactPlayer({ state }) {
 }
 
 function QueuePanel({ queue, playlists = [], likedTrackIds = [], onAction, isActionPending = () => false }) {
-  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [draggedQueueItemId, setDraggedQueueItemId] = useState(null);
   const [menu, setMenu] = useState(null);
   const menuRef = useRef(null);
   const guards = useSmartMenuGuards(Boolean(menu), null, menuRef, () => setMenu(null));
   const closeMenu = () => { guards.clearCloseTimer(); setMenu(null); };
-  const menuTrack = menu ? queue[menu.index] : null;
+  const menuTrack = menu ? queue.find((track) => track.queueItemId === menu.queueItemId) : null;
+  const menuIndex = menuTrack ? queue.indexOf(menuTrack) : -1;
+  const moveTrack = (track, index, targetIndex) => {
+    const target = queue[targetIndex];
+    if (!track || !target || track.queueItemId === target.queueItemId) return;
+    onAction("move_queue", {
+      from: index,
+      to: targetIndex,
+      fromQueueItemId: track.queueItemId,
+      toQueueItemId: target.queueItemId,
+    });
+  };
 
   return (
     <div className="queue-list" onDragOver={(event) => event.preventDefault()}>
@@ -950,41 +1016,49 @@ function QueuePanel({ queue, playlists = [], likedTrackIds = [], onAction, isAct
         <div className="empty-state compact"><Queue size={30} weight="duotone" aria-hidden="true" /><strong>Queue is clear</strong><span>Search for a track to keep the room moving.</span></div>
       ) : <>
         <div className="queue-group-kicker">From the room</div>
-        {queue.map((track, index) => <div key={`${track.id}-${index}`}>
+        {queue.map((track, index) => <div key={track.queueItemId || `${track.id}-${index}`}>
           {track.autoplay && index > 0 && !queue[index - 1]?.autoplay ? <div className="queue-group-kicker" role="separator">MewBit autoplay</div> : null}
           <div
-            className={`queue-row ${draggedIndex === index ? "is-dragged" : ""}`}
+            className={`queue-row ${draggedQueueItemId === track.queueItemId ? "is-dragged" : ""}`}
             draggable
-            onDragStart={() => setDraggedIndex(index)}
-            onDragEnd={() => setDraggedIndex(null)}
+            tabIndex={0}
+            onDragStart={() => setDraggedQueueItemId(track.queueItemId)}
+            onDragEnd={() => setDraggedQueueItemId(null)}
+            onKeyDown={(event) => {
+              if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+              event.preventDefault();
+              moveTrack(track, index, event.key === "ArrowUp" ? index - 1 : index + 1);
+            }}
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              setDraggedIndex(null);
+              setDraggedQueueItemId(null);
               setMenu({
-                index,
+                queueItemId: track.queueItemId,
                 top: Math.max(10, Math.min(event.clientY + 4, window.innerHeight - 300)),
                 left: Math.max(10, Math.min(event.clientX + 4, window.innerWidth - 246)),
               });
             }}
             onDrop={() => {
-              if (draggedIndex !== null && draggedIndex !== index) onAction("move_queue", { from: draggedIndex, to: index });
-              setDraggedIndex(null);
+              const draggedIndex = queue.findIndex((item) => item.queueItemId === draggedQueueItemId);
+              const draggedTrack = queue[draggedIndex];
+              if (draggedTrack && draggedIndex !== index) moveTrack(draggedTrack, draggedIndex, index);
+              setDraggedQueueItemId(null);
             }}
           >
             <span className="queue-num" aria-hidden="true">{index + 1}</span>
             <Artwork track={track} size="small" />
             <div className="queue-track-copy">
               <strong>{track.title}</strong>
-              <span>{track.author} · {sourceLabel(track.source)}</span>
+              <span>{track.author} · {sourceLabel(track.source)} · {formatQueueEta(queue, index)}</span>
             </div>
             <div className="queue-side">
               {track.autoplay ? <span className="auto-pill" title="Added by MewBit autoplay">AUTO</span> : null}
               <div className="queue-side-btns">
-                <IconButton label={`Play ${track.title} next`} className="queue-play-next" loading={isActionPending(`play_next:${index}`)} onClick={() => onAction("play_next", { position: index })}>
+                <IconButton label={`Play ${track.title} next`} className="queue-play-next" loading={isActionPending(`play_next:${track.queueItemId}`)} onClick={() => onAction("play_next", { position: index, queueItemId: track.queueItemId })}>
                   <ArrowBendUpRight size={15} aria-hidden="true" />
                 </IconButton>
-                <IconButton label={`Remove ${track.title} from queue`} className="queue-remove" loading={isActionPending(`remove_queue:${index}`)} onClick={() => onAction("remove_queue", { position: index })}>
+                <IconButton label={`Remove ${track.title} from queue`} className="queue-remove" loading={isActionPending(`remove_queue:${track.queueItemId}`)} onClick={() => onAction("remove_queue", { position: index, queueItemId: track.queueItemId })}>
                   <Trash size={15} aria-hidden="true" />
                 </IconButton>
               </div>
@@ -995,14 +1069,20 @@ function QueuePanel({ queue, playlists = [], likedTrackIds = [], onAction, isAct
       </>}
       {(menuTrack ? (<SmartMenu open position={menu} rootRef={null} menuRef={menuRef} label={`Actions for ${menuTrack.title}`}>
         <>
-          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("play_next", { position: menu.index }); closeMenu(); }}>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("play_next", { position: menuIndex, queueItemId: menuTrack.queueItemId }); closeMenu(); }}>
             <Play size={15} weight="fill" aria-hidden="true" /><span>Play next</span>
           </button>
-          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("move_queue", { from: menu.index, to: 0 }); closeMenu(); }} disabled={menu.index === 0}>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { moveTrack(menuTrack, menuIndex, 0); closeMenu(); }} disabled={menuIndex === 0}>
             <ArrowBendUpRight size={15} aria-hidden="true" /><span>Move to top</span>
           </button>
-          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("remove_queue", { position: menu.index }); closeMenu(); }}>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("remove_queue", { position: menuIndex, queueItemId: menuTrack.queueItemId }); closeMenu(); }}>
             <Trash size={15} aria-hidden="true" /><span>Remove from queue</span>
+          </button>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { moveTrack(menuTrack, menuIndex, menuIndex - 1); closeMenu(); }} disabled={menuIndex <= 0}>
+            <ArrowBendUpRight size={15} aria-hidden="true" /><span>Move up</span>
+          </button>
+          <button type="button" role="menuitem" className="row-menu-item" onClick={() => { moveTrack(menuTrack, menuIndex, menuIndex + 1); closeMenu(); }} disabled={menuIndex < 0 || menuIndex >= queue.length - 1}>
+            <ArrowBendUpRight size={15} aria-hidden="true" /><span>Move down</span>
           </button>
           <span className="row-menu-divider" aria-hidden="true" />
           <QueueRowLikeMenuItem track={menuTrack} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} onClose={closeMenu} />
@@ -1114,8 +1194,8 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
           <code title={directLink.url}>{directLink.url}</code>
         </div>
         <div className="direct-link-actions">
-          <button className="result-action" type="button" onClick={() => onAction("play", { query: directLink.url, source: directSource, playNow: true })} disabled={isActionPending("play")} aria-busy={isActionPending("play") || undefined}>{isActionPending("play") ? <SpinnerGap className="button-spinner" size={16} aria-hidden="true" /> : <Play size={16} weight="fill" aria-hidden="true" />} Play now</button>
-          <button className="secondary-button" type="button" onClick={() => onAction("play", { query: directLink.url, source: directSource })} disabled={isActionPending("play")} aria-busy={isActionPending("play") || undefined}>{isActionPending("play") ? <SpinnerGap className="button-spinner" size={16} aria-hidden="true" /> : <Plus size={16} weight="bold" aria-hidden="true" />} Add to queue</button>
+          <button className="result-action" type="button" onClick={() => onAction("play", { query: directLink.url, source: directSource, playNow: true, trackId: directLink.url })} disabled={isActionPending(`play:${directLink.url}`)} aria-busy={isActionPending(`play:${directLink.url}`) || undefined}>{isActionPending(`play:${directLink.url}`) ? <SpinnerGap className="button-spinner" size={16} aria-hidden="true" /> : <Play size={16} weight="fill" aria-hidden="true" />} Play now</button>
+          <button className="secondary-button" type="button" onClick={() => onAction("play", { query: directLink.url, source: directSource, trackId: directLink.url })} disabled={isActionPending(`play:${directLink.url}`)} aria-busy={isActionPending(`play:${directLink.url}`) || undefined}>{isActionPending(`play:${directLink.url}`) ? <SpinnerGap className="button-spinner" size={16} aria-hidden="true" /> : <Plus size={16} weight="bold" aria-hidden="true" />} Add to queue</button>
         </div>
       </section> : null}
       {!directLink && status === "empty" ? <div className="empty-state compact"><MagnifyingGlass size={30} weight="duotone" aria-hidden="true" /><strong>No close matches</strong><span>Try the artist name, a direct URL, or another source.</span></div> : null}
@@ -1140,10 +1220,10 @@ function SearchPanel({ query, setQuery, source, setSource, results, status, onSe
           </div>
           <span className="result-duration">{formatTime(track.durationMs)}</span>
           <div className="result-actions">
-            <button className="row-play" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source, playNow: true })} disabled={isActionPending("play", track.id)} aria-label="Play">
+            <button className="row-play" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source, playNow: true, trackId: track.id })} disabled={isActionPending(`play:${track.id}`)} aria-label="Play">
               <Play size={14} weight="fill" aria-hidden="true" />
             </button>
-            <button className="row-add" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source })} disabled={isActionPending("play", track.id)} aria-label="Add to queue">
+            <button className="row-add" type="button" onClick={() => onAction("play", { query: track.playQuery || track.uri || `${track.title} ${track.author}`, source: track.source, trackId: track.id })} disabled={isActionPending(`play:${track.id}`)} aria-label="Add to queue">
               <Plus size={14} aria-hidden="true" />
             </button>
             <TrackContextMenu
@@ -1503,7 +1583,7 @@ function PlayerBar({ state, onAction, onView, onOpenExternalLink, isActionPendin
           </span>
         </div>
         {track ? (
-          <IconButton label={isLiked ? "Remove from liked songs" : "Add to liked songs"} className={`like-button ${isLiked ? "is-liked" : ""}`} loading={isActionPending("toggle_like")} onClick={() => onAction("toggle_like", { track })} aria-pressed={isLiked}>
+          <IconButton label={isLiked ? "Remove from liked songs" : "Add to liked songs"} className={`like-button ${isLiked ? "is-liked" : ""}`} loading={isActionPending(`toggle_like:${track?.id}`)} onClick={() => onAction("toggle_like", { track })} aria-pressed={isLiked}>
             <Heart size={16} weight={isLiked ? "fill" : "regular"} aria-hidden="true" />
           </IconButton>
         ) : null}
@@ -1530,14 +1610,11 @@ function PlayerBar({ state, onAction, onView, onOpenExternalLink, isActionPendin
       <div className="player-bar-actions">
         <IconButton label="Open lyrics" onClick={() => onView("lyrics")} disabled={!track}><Subtitles size={17} weight="regular" aria-hidden="true" /></IconButton>
         <IconButton label={volumeSlider.value === 0 ? "Unmute player" : "Mute player"} loading={isActionPending("toggle_mute")} onClick={() => onAction("toggle_mute")}>{volumeSlider.value === 0 ? <SpeakerSlash size={17} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={17} weight="fill" aria-hidden="true" />}</IconButton>
-        <div className="bar-volume-control">
-          <output className="volume-readout" aria-live="polite"><span>Volume</span><strong>{Math.round(volumeSlider.value)}</strong></output>
-          <input className="range range-volume bar-volume" type="range" min="0" max="100" value={volumeSlider.value} aria-label="Player volume" style={{ "--range-progress": `${volumeSlider.value}%` }} onPointerDown={volumeSlider.begin} onPointerCancel={(event) => commitVolume(event.currentTarget.value)} onChange={(event) => previewVolume(event.target.value)} onPointerUp={(event) => commitVolume(event.currentTarget.value)} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") volumeSlider.begin(); }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitVolume(event.currentTarget.value); }} />
-        </div>
+        <VolumeSlider className="bar-volume-control" slider={volumeSlider} onPreview={previewVolume} onCommit={commitVolume} />
       </div>
       <SmartMenu open={Boolean(titleMenu)} position={titleMenu || { top: 0, left: 0 }} rootRef={titleRef} menuRef={titleMenuRef} label={`Actions for ${track?.title || "track"}`}>
         <>
-          <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds} onAction={onAction} onClose={closeTitleMenu} />
+          <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds} onAction={onAction} onClose={closeTitleMenu} allowSourceChange />
         </>
       </SmartMenu>
     </footer>
@@ -1579,6 +1656,7 @@ function App() {
   const stateRef = useRef(state);
   const seenActivityEventIds = useRef(new Set());
   const activityFeedReady = useRef(false);
+  const lastRealtimeActivityAt = useRef(0);
   const isCompactViewport = useCompactViewport();
   const isCompact = MOCK_COMPACT_PREVIEW || isCompactViewport;
   const isDrawerViewport = useMediaQuery("(max-width: 900px)");
@@ -1721,7 +1799,7 @@ function App() {
 
   useEffect(() => {
     let stopSocket = null;
-    let reconcileTimer = null;
+    let healthWatchTimer = null;
     let reconciliationInFlight = false;
     let alive = true;
 
@@ -1737,9 +1815,30 @@ function App() {
           return;
         }
 
+        const reconcile = async ({ quiet = true } = {}) => {
+          if (!alive || reconciliationInFlight) return false;
+          reconciliationInFlight = true;
+          try {
+            const response = await fetchActivityState(nextContext);
+            if (alive && response.state) {
+              applyState(response.state);
+              lastRealtimeActivityAt.current = Date.now();
+              setConnection({ status: "live", message: "Realtime gateway connected" });
+              return true;
+            }
+          } catch (error) {
+            if (!quiet && alive && nextContext.mode === "discord") {
+              setConnection({ status: "reconnecting", message: "State sync failed — waiting for realtime recovery" });
+            }
+          } finally {
+            reconciliationInFlight = false;
+          }
+          return false;
+        };
+
         try {
           const response = await fetchActivityState(nextContext);
-          if (alive && response.state) applyState(response.state);
+          if (alive && response.state) { applyState(response.state); lastRealtimeActivityAt.current = Date.now(); }
           if (alive) setConnection({ status: "live", message: "Realtime gateway connected" });
         } catch (error) {
           if (alive) {
@@ -1756,31 +1855,28 @@ function App() {
 
         stopSocket = connectActivitySocket({
           ...nextContext,
-          onState: (nextState) => { if (alive) { applyState(nextState); setConnection({ status: "live", message: "Realtime gateway connected" }); finishHydration(); } },
-          onReady: () => { if (alive) setConnection({ status: "live", message: "Realtime gateway connected" }); },
-          onError: (error) => { if (alive && nextContext.mode === "discord") setConnection({ status: "preview", message: error.message }); },
+          onState: (nextState) => { if (alive) { lastRealtimeActivityAt.current = Date.now(); applyState(nextState); setConnection({ status: "live", message: "Realtime gateway connected" }); finishHydration(); } },
+          onReady: () => { if (alive) { lastRealtimeActivityAt.current = Date.now(); setConnection({ status: "live", message: "Realtime gateway connected" }); } },
+          onHeartbeat: () => { if (alive) lastRealtimeActivityAt.current = Date.now(); },
+          onConnection: (nextConnection) => { if (alive && nextContext.mode === "discord") setConnection(nextConnection); },
+          onError: (error) => { if (alive && nextContext.mode === "discord") setConnection({ status: "reconnecting", message: error.message }); },
         });
 
-        // WebSocket events are the fast path. This small reconciliation loop
-        // deliberately makes the player resilient to an iframe/proxy socket
-        // that remains open but stops delivering messages while the Activity
-        // is hidden or a panel is remounted.
-        reconcileTimer = window.setInterval(async () => {
-          if (!alive || reconciliationInFlight) return;
-          reconciliationInFlight = true;
-          try {
-            const response = await fetchActivityState(nextContext);
-            if (alive && response.state) {
-              applyState(response.state);
-              setConnection({ status: "live", message: "Realtime gateway connected" });
-            }
-          } catch {
-            // The socket can still be healthy; avoid turning a transient
-            // reconciliation failure into a noisy user-facing error.
-          } finally {
-            reconciliationInFlight = false;
-          }
-        }, 2_000);
+        // Socket messages are the state path. HTTP only repairs a socket that
+        // became silent (Discord iframe/proxy edge case), on return to the
+        // foreground, or after an explicit reconnect — never every 2 seconds.
+        const resyncIfStale = () => {
+          if (Date.now() - lastRealtimeActivityAt.current >= 10_000) void reconcile({ quiet: true });
+        };
+        healthWatchTimer = window.setInterval(resyncIfStale, 3_000);
+        const onVisibilityChange = () => {
+          if (document.visibilityState === "visible") void reconcile({ quiet: false });
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        stopSocket = (() => {
+          const closeSocket = stopSocket;
+          return () => { document.removeEventListener("visibilitychange", onVisibilityChange); closeSocket?.(); };
+        })();
       })
       .catch((error) => {
         if (alive) {
@@ -1793,7 +1889,7 @@ function App() {
     return () => {
       alive = false;
       stopSocket?.();
-      window.clearInterval(reconcileTimer);
+      window.clearInterval(healthWatchTimer);
       window.clearTimeout(hydrationTimer.current);
     };
   }, [applyState, finishHydration, showToast]);
@@ -1854,10 +1950,10 @@ function App() {
         next.player.queue = [...manual, ...autoplay];
         next.player.shuffleActive = true;
       }
-      if (action === "remove_queue") { next.player.queue.splice(payload.position, 1); next.player.queue = partitionQueueForDisplay(next.player.queue); }
+      if (action === "remove_queue") { const index = next.player.queue.findIndex((track) => track.queueItemId === payload.queueItemId); next.player.queue.splice(index >= 0 ? index : payload.position, 1); next.player.queue = partitionQueueForDisplay(next.player.queue); }
       if (action === "clear_queue") next.player.queue = [];
-      if (action === "play_next") { const [track] = next.player.queue.splice(payload.position, 1); if (track) { track.autoplay = false; next.player.queue.unshift(track); } next.player.queue = partitionQueueForDisplay(next.player.queue); }
-      if (action === "move_queue") next.player.queue = moveQueueTrackForDisplay(next.player.queue, payload.from, payload.to);
+      if (action === "play_next") { const index = next.player.queue.findIndex((track) => track.queueItemId === payload.queueItemId); const [track] = next.player.queue.splice(index >= 0 ? index : payload.position, 1); if (track) { track.autoplay = false; next.player.queue.unshift(track); } next.player.queue = partitionQueueForDisplay(next.player.queue); }
+      if (action === "move_queue") { const from = next.player.queue.findIndex((track) => track.queueItemId === payload.fromQueueItemId); const to = next.player.queue.findIndex((track) => track.queueItemId === payload.toQueueItemId); next.player.queue = moveQueueTrackForDisplay(next.player.queue, from >= 0 ? from : payload.from, to >= 0 ? to : payload.to); }
       if (action === "undo_queue") {
         const snapshot = localUndoSnapshots.current.get(payload.token);
         if (snapshot) {
@@ -2044,6 +2140,32 @@ function App() {
 
   const closePlaylistComposer = useCallback(() => setPlaylistComposerOpen(false), []);
 
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const target = event.target;
+      const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable;
+      if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        goToView("search");
+        window.requestAnimationFrame(() => document.querySelector('.global-search input, .search-input-wrap input')?.focus());
+        return;
+      }
+      if (event.key.toLowerCase() === "q") {
+        event.preventDefault();
+        setRightSidebarOpen((value) => !value);
+        return;
+      }
+      if (!state.player.currentTrack) return;
+      if (event.key === " ") { event.preventDefault(); onAction("toggle"); }
+      if (event.key.toLowerCase() === "n") { event.preventDefault(); onAction("skip", { expectedTrackId: state.player.currentTrack.id }); }
+      if (event.key.toLowerCase() === "p") { event.preventDefault(); onAction("previous"); }
+      if (event.key.toLowerCase() === "l") { event.preventDefault(); goToView("lyrics"); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [goToView, onAction, state.player.currentTrack]);
+
   return (
     <main className={`activity-app ${isCompact ? "is-compact" : ""} ${isHydrating ? "is-hydrating" : ""}`}>
       {showLoader ? <ActivityLoader message={connection.message} leaving={!isHydrating} /> : null}
@@ -2078,6 +2200,7 @@ function App() {
                   <IconButton label="Sound settings" className={activeTab === "filters" ? "is-active" : ""} onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /></IconButton>
                 </div>
                 <div className="stage-actions" aria-label="Player tools">
+                  <span className={`connection-health is-${connection.status}`} role="status" title={connection.message}><i aria-hidden="true" /> <span>{connection.status === "live" ? "Live" : connection.status === "reconnecting" ? "Resyncing" : "Offline"}</span></span>
                   <IconButton label="Room activity" className={`${activeTab === "activity" ? "is-active" : ""} ${hasActivityErrors ? "has-issues" : ""}`} onClick={() => goToView("activity")}><Bell size={17} weight={activeTab === "activity" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                   <IconButton label="Toggle queue" className={rightSidebarOpen ? "is-active" : ""} aria-pressed={rightSidebarOpen} onClick={() => { if (window.matchMedia("(max-width: 900px)").matches) setLeftSidebarOpen(false); setRightSidebarOpen((value) => !value); }}><Queue size={17} weight={rightSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                 </div>

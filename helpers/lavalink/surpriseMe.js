@@ -80,7 +80,15 @@ function addSeed(pool, track, source, score, frequency = 1) {
   pool.set(key, existing);
 }
 
-function buildSurpriseSeedPool({ currentTrack, roomHistory = [], userHistory = [], likedTracks = [], topTracks = [] } = {}) {
+function buildSurpriseSeedPool({
+  currentTrack,
+  roomHistory = [],
+  userHistory = [],
+  likedTracks = [],
+  topTracks = [],
+  feedbackTracks = [],
+  avoidTracks = [],
+} = {}) {
   const pool = new Map();
   if (currentTrack) addSeed(pool, currentTrack, "current", 54, 2);
 
@@ -93,6 +101,12 @@ function buildSurpriseSeedPool({ currentTrack, roomHistory = [], userHistory = [
   likedTracks.slice(-50).reverse().forEach((track, index) => {
     addSeed(pool, track, "liked", Math.max(10, 26 - index * 0.25), 1);
   });
+  // Explicit listener feedback is a stronger intent signal than a passive
+  // play. It is deliberately additive: a single thumbs-up should not erase
+  // the room's current direction, only make it easier to return to that lane.
+  feedbackTracks.slice(-40).reverse().forEach((track, index) => {
+    addSeed(pool, track, "feedback", Math.max(18, 42 - index * 0.7), 2);
+  });
 
   const topCounts = new Map(topTracks.map((entry) => [normalize(entry.track), Number(entry.count) || 0]));
   for (const seed of pool.values()) {
@@ -104,7 +118,12 @@ function buildSurpriseSeedPool({ currentTrack, roomHistory = [], userHistory = [
     }
   }
 
-  return [...pool.values()].map((seed) => ({ ...seed, sources: [...seed.sources] }));
+  // "Not this direction" is actionable feedback: exclude equivalent copies
+  // from every provider while retaining the listener's other taste signals.
+  const avoidedKeys = new Set(avoidTracks.map(getTrackKey).filter(Boolean));
+  return [...pool.values()]
+    .filter((seed) => !avoidedKeys.has(seed.key))
+    .map((seed) => ({ ...seed, sources: [...seed.sources] }));
 }
 
 function weightedPick(items, getWeight, random = Math.random) {
@@ -138,7 +157,7 @@ function seedWeight(seed, intent) {
   let weight = Math.max(seed.score, 1);
   const sources = new Set(seed.sources);
   if (intent === "flow") weight *= sources.has("current") ? 2.4 : sources.has("room") ? 1.55 : 0.75;
-  if (intent === "familiar") weight *= sources.has("top") ? 2.1 : sources.has("liked") ? 1.7 : sources.has("history") ? 1.35 : 0.7;
+  if (intent === "familiar") weight *= sources.has("feedback") ? 2.5 : sources.has("top") ? 2.1 : sources.has("liked") ? 1.7 : sources.has("history") ? 1.35 : 0.7;
   if (intent === "popular") weight *= 1 + Math.min(seed.frequency, 12) * 0.16;
   if (intent === "discovery") weight *= sources.has("liked") || sources.has("history") ? 1.25 : 0.85;
   return weight;

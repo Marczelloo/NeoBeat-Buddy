@@ -47,10 +47,10 @@ const playlistStore = require("../playlists/store");
 const { consumeRateLimit } = require("../security/rateLimit");
 const statsStore = require("../stats/store");
 const userPreferences = require("../users/preferences");
-const { serializeFilters, serializeLyrics, serializePlaylist, serializePlaylistDetails, serializeTrack, normalizeSource } = require("./state");
-const { activityStateEvents, getActivityStateRevision, markActivityStateChanged } = require("./sync");
 const { getActivityEvents, recordActivityAction, reportActivityIssue } = require("./feed");
 const { registerActivitySession, unregisterActivitySession, hasActiveActivitySession } = require("./sessions");
+const { serializeFilters, serializeLyrics, serializePlaylist, serializePlaylistDetails, serializeTrack, normalizeSource } = require("./state");
+const { activityStateEvents, getActivityStateRevision, markActivityStateChanged } = require("./sync");
 
 const DEFAULT_PORT = 8787;
 const MAX_BODY_SIZE = 64 * 1024;
@@ -59,9 +59,13 @@ const CLIENT_CACHE_TTL = 5 * 60 * 1000;
 const MAX_IDENTITY_CACHE_ENTRIES = 1_000;
 const MAX_ACTIVITY_SOCKETS = 200;
 const QUEUE_UNDO_TTL_MS = 15_000;
-const ACTIVITY_STATE_HEARTBEAT_MS = Math.max(1_000, Number(process.env.ACTIVITY_STATE_HEARTBEAT_MS) || 2_000);
+// Player events are emitted at most once a second, so this is only a
+// safety-net for iframe/proxy connections which stayed open but stopped
+// delivering events. It must not become the primary state transport.
+const ACTIVITY_STATE_HEARTBEAT_MS = Math.max(2_000, Number(process.env.ACTIVITY_STATE_HEARTBEAT_MS) || 5_000);
 const MIN_LYRICS_SYNC_OFFSET_MS = -2_000;
 const MAX_LYRICS_SYNC_OFFSET_MS = 2_000;
+const ARTWORK_FAILURE_TTL_MS = 5 * 60_000;
 const ARTWORK_HOSTS = Object.freeze([
   "dzcdn.net",
   "sndcdn.com",
@@ -79,6 +83,7 @@ const ARTWORK_HOSTS = Object.freeze([
 const identityCache = new Map();
 const sockets = new Set();
 const queueUndoSnapshots = new Map();
+const artworkFailureCache = new Map();
 
 function isTrue(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").toLowerCase());
@@ -151,42 +156,49 @@ async function sendArtwork(response, sourceUrl) {
     throw Object.assign(new Error("That artwork host is not allowed."), { statusCode: 400 });
   }
 
+  const cachedFailure = artworkFailureCache.get(sourceUrl);
+  if (cachedFailure && cachedFailure.expiresAt > Date.now()) {
+    response.writeHead(204, { "Cache-Control": "public, max-age=60" });
+    response.end();
+    return;
+  }
+  artworkFailureCache.delete(sourceUrl);
+
   let currentUrl = sourceUrl;
   let artworkResponse = null;
 
-  for (let redirect = 0; redirect < 4; redirect += 1) {
-    artworkResponse = await fetch(currentUrl, {
-      redirect: "manual",
-      signal: AbortSignal.timeout(10000),
-      headers: {
-        Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8",
-        "User-Agent": "MewBit-Activity/1.1",
-      },
-    });
+  try {
+    for (let redirect = 0; redirect < 4; redirect += 1) {
+      artworkResponse = await fetch(currentUrl, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(10000),
+        headers: {
+          Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8",
+          "User-Agent": "MewBit-Activity/1.1",
+        },
+      });
 
-    if (artworkResponse.status < 300 || artworkResponse.status >= 400) break;
-    const location = artworkResponse.headers.get("location");
-    if (!location) break;
-    currentUrl = new URL(location, currentUrl).toString();
-    if (!isAllowedArtworkUrl(currentUrl)) {
-      throw Object.assign(new Error("Artwork redirect host is not allowed."), { statusCode: 400 });
+      if (artworkResponse.status < 300 || artworkResponse.status >= 400) break;
+      const location = artworkResponse.headers.get("location");
+      if (!location) break;
+      currentUrl = new URL(location, currentUrl).toString();
+      if (!isAllowedArtworkUrl(currentUrl)) {
+        throw Object.assign(new Error("Artwork redirect host is not allowed."), { statusCode: 400 });
+      }
     }
+  } catch (error) {
+    if (Number(error?.statusCode) === 400) throw error;
+    return cacheArtworkFailure(response, sourceUrl);
   }
 
-  if (!artworkResponse?.ok) {
-    throw Object.assign(new Error("Artwork provider did not return an image."), { statusCode: 502 });
-  }
+  if (!artworkResponse?.ok) return cacheArtworkFailure(response, sourceUrl);
 
   const contentType = String(artworkResponse.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   const contentLength = Number(artworkResponse.headers.get("content-length") || 0);
-  if (!contentType.startsWith("image/") || contentLength > MAX_ARTWORK_SIZE) {
-    throw Object.assign(new Error("Artwork response is invalid or too large."), { statusCode: 502 });
-  }
+  if (!contentType.startsWith("image/") || contentLength > MAX_ARTWORK_SIZE) return cacheArtworkFailure(response, sourceUrl);
 
   const body = Buffer.from(await artworkResponse.arrayBuffer());
-  if (body.length > MAX_ARTWORK_SIZE) {
-    throw Object.assign(new Error("Artwork response is too large."), { statusCode: 502 });
-  }
+  if (body.length > MAX_ARTWORK_SIZE) return cacheArtworkFailure(response, sourceUrl);
 
   response.writeHead(200, {
     "Content-Type": contentType,
@@ -195,6 +207,16 @@ async function sendArtwork(response, sourceUrl) {
     "X-Content-Type-Options": "nosniff",
   });
   response.end(body);
+}
+
+function cacheArtworkFailure(response, sourceUrl) {
+  artworkFailureCache.set(sourceUrl, { expiresAt: Date.now() + ARTWORK_FAILURE_TTL_MS });
+  while (artworkFailureCache.size > 1_000) artworkFailureCache.delete(artworkFailureCache.keys().next().value);
+  // An unavailable provider image is a normal media fallback, not a gateway
+  // fault. Returning an empty successful response lets the client advance to
+  // its original/placeholder artwork without generating noisy 502 logs.
+  response.writeHead(204, { "Cache-Control": "public, max-age=60" });
+  response.end();
 }
 
 function readJson(request) {
@@ -313,6 +335,7 @@ function assertControlPermission(guildId, identity, action) {
     "autoplay",
     "play",
     "surprise_me",
+    "change_source",
     "play_playlist",
   ]);
 
@@ -357,6 +380,7 @@ function assertPlayerVoiceAccess(player, identity, action) {
     "pause", "resume", "toggle", "skip", "previous", "stop", "remove_queue", "play_next",
     "move_queue", "clear_queue", "undo_queue", "shuffle", "volume", "toggle_mute", "seek", "filter",
     "equalizer", "equalizer_preset", "loop", "autoplay", "play", "surprise_me", "play_playlist",
+    "change_source",
   ]);
   if (!guardedActions.has(action)) return;
   if (identity.member?.voice?.channelId !== player.voiceChannel) {
@@ -364,10 +388,34 @@ function assertPlayerVoiceAccess(player, identity, action) {
   }
 }
 
+function getQueueItemId(track) {
+  if (!track) return null;
+  track.userData = track.userData || {};
+  if (!track.userData.activityQueueId) track.userData.activityQueueId = randomUUID();
+  return track.userData.activityQueueId;
+}
+
 function getSerializedQueue(player, client) {
-  return Array.from(player?.queue || []).map((track, index) => (
-    serializeTrack(withAutoplayRequesterLabel(track, client), index)
-  ));
+  return Array.from(player?.queue || []).map((track, index) => ({
+    ...serializeTrack(withAutoplayRequesterLabel(track, client), index),
+    queueItemId: getQueueItemId(track),
+  }));
+}
+
+function findQueueItemIndex(queue, expectedQueueItemId, fallbackPosition) {
+  const tracks = Array.from(queue || []);
+  const expected = String(expectedQueueItemId || "").trim();
+  if (expected) return tracks.findIndex((track) => String(getQueueItemId(track)) === expected);
+  const position = Number(fallbackPosition);
+  return Number.isInteger(position) ? position : -1;
+}
+
+function assertCurrentQueueItem(queue, expectedQueueItemId, fallbackPosition) {
+  const index = findQueueItemIndex(queue, expectedQueueItemId, fallbackPosition);
+  if (index < 0) {
+    throw Object.assign(new Error("That queue item changed before MewBit could update it. Synced the latest queue."), { statusCode: 409, stale: true });
+  }
+  return index;
 }
 
 function assertActivePlayback(player, action) {
@@ -526,6 +574,39 @@ function limitText(value, max = 200) {
   return String(value || "").trim().slice(0, max);
 }
 
+function activityTrackFeedbackKey(track) {
+  const title = limitText(track?.title || track?.info?.title, 180).normalize("NFKC").toLowerCase();
+  const author = limitText(track?.author || track?.info?.author, 180).normalize("NFKC").toLowerCase();
+  return title && author ? `${author} - ${title}` : "";
+}
+
+function saveActivityTrackFeedback(userId, track, sentiment) {
+  const key = activityTrackFeedbackKey(track);
+  if (!key) throw Object.assign(new Error("MewBit needs a valid track before saving feedback."), { statusCode: 400 });
+  const value = sentiment === "more" ? "more" : sentiment === "less" ? "less" : null;
+  if (!value) throw Object.assign(new Error("Unknown listening feedback."), { statusCode: 400 });
+
+  const preferences = userPreferences.getUserPreferences(userId);
+  const entries = Array.isArray(preferences.activityTrackFeedback) ? preferences.activityTrackFeedback : [];
+  const next = [
+    ...entries.filter((entry) => entry?.key !== key),
+    {
+      key,
+      sentiment: value,
+      updatedAt: Date.now(),
+      track: {
+        title: limitText(track?.title || track?.info?.title, 180),
+        author: limitText(track?.author || track?.info?.author, 180),
+        source: toSource(track?.source || track?.info?.sourceName),
+        uri: limitText(track?.uri || track?.info?.uri, 500) || null,
+        durationMs: Math.max(0, Number(track?.durationMs || track?.info?.length) || 0),
+      },
+    },
+  ].slice(-80);
+  userPreferences.setUserPreference(userId, "activityTrackFeedback", next);
+  return { success: true, sentiment: value, key };
+}
+
 function clampLyricsSyncOffset(value) {
   const offset = Number(value);
   if (!Number.isFinite(offset)) return LYRICS_SYNC_OFFSET_MS;
@@ -602,22 +683,34 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       if (!textId) throw Object.assign(new Error("Set the player channel first with /setup player channel."), { statusCode: 400 });
 
       const liveState = playbackState.get(guildId) || {};
+      const preferences = userPreferences.getUserPreferences(identity.id);
+      const feedbackEntries = Array.isArray(preferences.activityTrackFeedback) ? preferences.activityTrackFeedback : [];
       const surpriseTaste = {
         currentTrack: liveState.currentTrack || player?.currentTrack || null,
         roomHistory: liveState.history || [],
         userHistory: getHistory(identity.id, null, 50),
         likedTracks: playlistStore.getLikedSongs(identity.id)?.tracks || [],
         topTracks: statsStore.getTopTracks(identity.id, 25),
+        feedbackTracks: feedbackEntries.filter((entry) => entry?.sentiment === "more").map((entry) => entry.track),
+        avoidTracks: feedbackEntries.filter((entry) => entry?.sentiment === "less").map((entry) => entry.track),
       };
       const surpriseMemoryKey = `${guildId}:${identity.id}`;
       let selection = null;
       let recommendation = null;
       const attemptedSeeds = new Set();
 
-      if (!surpriseTaste.currentTrack && !surpriseTaste.roomHistory.length) {
+      const hasTasteSignal = Boolean(
+        surpriseTaste.currentTrack
+        || surpriseTaste.roomHistory.length
+        || surpriseTaste.userHistory.length
+        || surpriseTaste.likedTracks.length
+        || surpriseTaste.topTracks.length
+      );
+
+      if (!hasTasteSignal) {
         selection = {
           seed: null,
-          intent: { mode: "freestyle", goal: "Start a fresh room with a current, verified track.", preferredLanes: ["explore"] },
+          intent: { mode: "freestyle", goal: "Start a fresh room with a current, broadly loved, verified track.", preferredLanes: ["continuation", "bridge"] },
         };
         recommendation = await fetchFreestyleSurpriseTrack(guildId, { memoryKey: surpriseMemoryKey });
       } else {
@@ -673,6 +766,34 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       });
       return { ...result, surpriseIntent: selection.intent.mode };
     }
+    case "change_source": {
+      const liveTrack = resolveActivityPlayback(playbackState.get(guildId)?.currentTrack, player?.currentTrack).track;
+      const expectedTrackId = limitText(payload.expectedTrackId, 300);
+      if (!liveTrack || !expectedTrackId || serializeTrack(liveTrack).id !== expectedTrackId) {
+        return { success: false, stale: true, error: "The player changed before the source could be switched. Synced the latest track instead." };
+      }
+      const source = toSource(payload.source);
+      if (source === "auto") throw Object.assign(new Error("Choose a music source to switch this track."), { statusCode: 400 });
+      const settings = guildState.getGuildState(guildId);
+      const voiceId = player?.voiceChannel || identity.member?.voice?.channelId;
+      const textId = settings?.playerChannel || player?.textChannel || null;
+      if (!voiceId || !textId) throw Object.assign(new Error("Join the active room before switching sources."), { statusCode: 400 });
+      const query = `${liveTrack.info?.title || ""} ${liveTrack.info?.author || ""}`.trim();
+      if (!query) throw Object.assign(new Error("This track has no usable title for another source."), { statusCode: 409 });
+      return lavalinkPlay({
+        guildId,
+        voiceId,
+        textId,
+        query,
+        source,
+        playNow: true,
+        requester: { id: identity.id, tag: identity.tag || identity.username, avatar: identity.avatar },
+      });
+    }
+    case "track_feedback": {
+      const track = payload.track || resolveActivityPlayback(playbackState.get(guildId)?.currentTrack, player?.currentTrack).track;
+      return saveActivityTrackFeedback(identity.id, track, payload.sentiment);
+    }
     case "pause":
       return lavalinkPause(guildId);
     case "resume":
@@ -712,17 +833,16 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       return { success: Boolean(cleared), undoToken };
     }
     case "remove_queue": {
+      if (!player?.queue) return { success: false, error: "The queue is unavailable." };
+      const position = assertCurrentQueueItem(player.queue, payload.queueItemId, payload.position);
       const undoToken = createQueueUndoSnapshot(guildId, player);
-      const removed = await lavalinkRemoveFromQueue(guildId, { position: Number(payload.position) + 1 });
+      const removed = await lavalinkRemoveFromQueue(guildId, { position: position + 1 });
       normalizeQueueAutoplayPartition(player?.queue);
       return { success: removed?.status === "removed", undoToken: removed?.status === "removed" ? undoToken : null, ...removed };
     }
     case "play_next": {
       if (!player?.queue) return { success: false, error: "The queue is unavailable." };
-      const position = Number(payload.position);
-      if (!Number.isInteger(position) || position < 0 || position >= player.queue.length) {
-        throw Object.assign(new Error("That queue position is no longer available."), { statusCode: 409 });
-      }
+      const position = assertCurrentQueueItem(player.queue, payload.queueItemId, payload.position);
       const [track] = player.queue.splice(position, 1);
       markManualTrack(track);
       player.queue.unshift(track);
@@ -733,11 +853,8 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       return restoreQueueUndoSnapshot(guildId, payload.token);
     case "move_queue": {
       if (!player?.queue) return false;
-      const from = Number(payload.from);
-      const to = Number(payload.to);
-      if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= player.queue.length || to >= player.queue.length) {
-        throw Object.assign(new Error("That queue position is no longer available."), { statusCode: 409 });
-      }
+      const from = assertCurrentQueueItem(player.queue, payload.fromQueueItemId, payload.from);
+      const to = assertCurrentQueueItem(player.queue, payload.toQueueItemId, payload.to);
       return moveQueueTrackWithinOrigin(player.queue, from, to);
     }
     case "filter":
@@ -1121,6 +1238,9 @@ module.exports = {
   resolveActivityPlayback,
   withAutoplayRequesterLabel,
   getSerializedPlaybackHistory,
+  getSerializedQueue,
+  getQueueItemId,
+  findQueueItemIndex,
   isAllowedArtworkUrl,
   runActivityAction,
   searchActivityTracks,

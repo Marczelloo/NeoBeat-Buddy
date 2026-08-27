@@ -46,6 +46,18 @@ describe("Surprise me selector", () => {
     assert.equal(selectSurpriseSeed({}, { memoryKey: "empty" }), null);
   });
 
+  test("uses positive feedback as a taste signal and excludes a rejected equivalent", () => {
+    const pool = buildSurpriseSeedPool({
+      feedbackTracks: [track("Keep This Feeling", "Artist A")],
+      avoidTracks: [track("Skip This Direction", "Artist B")],
+      roomHistory: [track("Skip This Direction", "Artist B")],
+    });
+
+    assert.equal(pool.length, 1);
+    assert.equal(pool[0].key, "artist a - keep this feeling");
+    assert.ok(pool[0].sources.includes("feedback"));
+  });
+
   test("keeps empty-room freestyle inside a fresh, high-quality chart window", () => {
     const candidates = [
       { artist: "Chart One", title: "Top Signal", chartPosition: 1, popularity: 100 },

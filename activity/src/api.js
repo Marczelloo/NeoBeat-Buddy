@@ -63,7 +63,7 @@ export function sendActivityAction({ guildId, accessToken, action, payload }) {
   );
 }
 
-export function connectActivitySocket({ guildId, accessToken, onState, onReady, onError }) {
+export function connectActivitySocket({ guildId, accessToken, onState, onReady, onHeartbeat, onConnection, onError }) {
   let socket = null;
   let reconnectTimer = null;
   let heartbeatTimer = null;
@@ -75,6 +75,7 @@ export function connectActivitySocket({ guildId, accessToken, onState, onReady, 
     socket = new WebSocket(websocketUrl("/api/activity/ws"));
     socket.addEventListener("open", () => {
       retryCount = 0;
+      onConnection?.({ status: "connecting", message: "Authorizing realtime connection" });
       socket.send(JSON.stringify({ type: "auth", guildId, token: accessToken }));
       window.clearInterval(heartbeatTimer);
       heartbeatTimer = window.setInterval(() => {
@@ -86,6 +87,7 @@ export function connectActivitySocket({ guildId, accessToken, onState, onReady, 
         const payload = JSON.parse(event.data);
         if (payload.type === "state") onState(payload.state);
         if (payload.type === "ready") onReady?.(payload.identity);
+        if (payload.type === "heartbeat") onHeartbeat?.(payload.time);
         if (payload.type === "error") onError?.(new Error(payload.error));
       } catch (error) {
         onError?.(error);
@@ -95,6 +97,7 @@ export function connectActivitySocket({ guildId, accessToken, onState, onReady, 
       window.clearInterval(heartbeatTimer);
       heartbeatTimer = null;
       if (stopped) return;
+      onConnection?.({ status: "reconnecting", message: "Realtime connection interrupted — reconnecting" });
       const baseDelay = Math.min(5000, 600 * (2 ** Math.min(retryCount, 3)));
       const delay = Math.round(baseDelay * (0.75 + Math.random() * 0.5));
       retryCount += 1;
