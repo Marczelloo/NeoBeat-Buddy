@@ -1288,6 +1288,22 @@ function createActivityServer(client) {
           if (!dashboard.clientId || !dashboard.clientSecret) {
             Log.warning("Dashboard OAuth credentials are missing", "set CLIENT_ID and DISCORD_CLIENT_SECRET");
           }
+          // The session cookie takes its Secure flag from this scheme. Terminating
+          // TLS at a proxy while leaving the public URL on http:// therefore ships
+          // the session id over plaintext, and nothing else would say so.
+          if (!dashboard.secure && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(dashboard.publicUrl)) {
+            Log.warning(
+              "Dashboard session cookies are being sent without the Secure flag",
+              `DASHBOARD_PUBLIC_URL is ${dashboard.publicUrl}`,
+              "set it to the https:// origin browsers actually use, even when TLS ends at a proxy"
+            );
+          }
+          if (!Number(process.env.DASHBOARD_TRUST_PROXY) && dashboard.secure) {
+            Log.warning(
+              "Dashboard rate limits will bucket every visitor together",
+              "this deployment looks proxied — set DASHBOARD_TRUST_PROXY to the number of proxies in front"
+            );
+          }
         }
       });
       if (!listeningForPlayerChanges) {

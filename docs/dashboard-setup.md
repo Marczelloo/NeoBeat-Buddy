@@ -47,7 +47,12 @@ Add to your `.env` (see `.env-example`):
 DASHBOARD_ENABLED=true
 DASHBOARD_PUBLIC_URL=http://localhost:5174
 DASHBOARD_SESSION_TTL_MS=604800000
+DASHBOARD_TRUST_PROXY=0
 ```
+
+In production set `DASHBOARD_TRUST_PROXY` to the number of proxies in front of
+the gateway — `1` behind a single Cloudflare tunnel. See **Access control**
+below for why.
 
 `DASHBOARD_OAUTH_REDIRECT_URI` is intentionally absent: it derives from
 `DASHBOARD_PUBLIC_URL`. Local and production then differ by that one
@@ -225,10 +230,51 @@ save.
 ## Access control
 
 A visitor sees a server only when both are true: they hold **Administrator**
-on it, and the bot is in it. The server list comes from the OAuth `guilds`
-scope, but that list only renders the rail — every read and write of a
-guild's settings re-verifies the member against the live Discord client on the
-server side. A permission claim from the browser is never trusted.
+on it, and the bot is in it.
+
+The OAuth `guilds` scope only decides what the server rail renders. Every read
+and every write of a guild's settings independently re-verifies the member
+against the live Discord client — `assertGuildAdmin` fetches the member and
+checks owner-or-Administrator on each request. A permission claim from the
+browser is never trusted, and the guild list captured at login is never
+sufficient on its own. An admin demoted after signing in is refused on their
+next request, because the bot runs with the `GuildMembers` intent and Discord
+pushes role changes into the member cache.
+
+### What this means in practice
+
+**Administrator is the whole gate.** Anyone who holds it on a server can change
+every setting on this page. That is the same authority `/setup`, `/dj` and
+`/logs` already require in Discord, so the dashboard grants nothing new — but
+if a server hands Administrator out widely, it has handed out the dashboard
+too. There is currently no owner-only mode and no per-section restriction.
+
+**Nothing records who changed what.** The Activity keeps an action feed; the
+dashboard does not. With several administrators there is no way to attribute a
+change after the fact.
+
+Both are deliberate omissions rather than oversights, and both are cheap to add
+if a server needs them.
+
+### Request hardening
+
+| Concern | How it is handled |
+|---|---|
+| Session theft | Session id is 32 random bytes from `randomBytes`, held in an `httpOnly`, `SameSite=Lax` cookie. Discord access tokens never reach the browser. |
+| `Secure` flag | Derived from the scheme of `DASHBOARD_PUBLIC_URL`. Terminating TLS at a proxy while leaving that on `http://` would ship the session id in clear, so the gateway warns about exactly that at startup. |
+| OAuth CSRF | A single-use `state` cookie, compared on the callback. |
+| Write CSRF | `SameSite=Lax` keeps the cookie off cross-site writes, and `PATCH` additionally requires an `Origin` matching `DASHBOARD_PUBLIC_URL`. No state-changing `GET` exists, which is what `Lax` would otherwise allow. |
+| Request flooding | Per-address buckets: 20/min on login and callback, 240/min on authenticated reads, 60/min on writes, 120/min on the public stats endpoint. |
+| Address spoofing | `X-Forwarded-For` is read **only** when `DASHBOARD_TRUST_PROXY` says how many proxies are in front; otherwise the socket peer is used. Left at `0` behind a proxy, every visitor shares one bucket and any one of them can lock out the rest — the gateway warns when the deployment looks proxied. Trusting the header unconditionally would let anyone rotate it and never be limited at all. |
+| Body size | Request bodies are capped at 32 KB. |
+
+### What the public endpoint exposes
+
+`/api/dashboard/public/stats` needs no session — the landing page reads it. It
+returns aggregates only: server count, tracks played, listening time, unique
+listener *count*, session totals, uptime and version. No user, server or track
+identifiers. If a deployment would rather not publish even that, set
+`DASHBOARD_ENABLED=false`, which disables the whole surface including sign-in.
 
 ## Sessions
 

@@ -68,3 +68,23 @@ test("an insecure deployment omits the Secure attribute", () => {
 test("the clear cookie expires immediately", () => {
   assert.match(serializeClearCookie({ secure: true }), /Max-Age=0/);
 });
+
+test("a malformed cookie is not a 500 — it simply matches no session", () => {
+  // Anyone can set `mewbit_dash=%` on their own browser; decodeURIComponent
+  // throws URIError on it, which used to propagate out of requireSession.
+  const cookies = parseCookies("mewbit_dash=%; other=%E0%A4%A; fine=ok");
+  assert.equal(cookies.fine, "ok");
+  assert.equal(cookies.mewbit_dash, "%");
+  assert.equal(getSession(cookies.mewbit_dash), null);
+});
+
+test("the session cap evicts dead sessions before live ones", () => {
+  resetSessions();
+
+  // Oldest by insertion order, and still valid. Evicting purely by insertion
+  // order would sign this admin out to make room for sessions already dead.
+  const veteran = createSession({ userId: "veteran" });
+  for (let i = 0; i < 5000; i += 1) createSession({ userId: `dead-${i}` }, { ttlMs: 0 });
+
+  assert.equal(getSession(veteran)?.userId, "veteran");
+});

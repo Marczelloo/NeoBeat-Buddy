@@ -16,6 +16,17 @@ function createSession(data, { ttlMs } = {}) {
   const id = randomBytes(32).toString("hex");
   const lifetime = Number.isFinite(ttlMs) ? ttlMs : defaultTtlMs();
   sessions.set(id, { ...data, createdAt: Date.now(), expiresAt: Date.now() + lifetime });
+
+  // Expired entries are otherwise only dropped when someone happens to present
+  // them, so they can occupy the cap indefinitely. Clear those first; evicting
+  // by insertion order alone would sign out the longest-running admin to make
+  // room for a session that is already dead.
+  if (sessions.size > MAX_SESSIONS) {
+    const now = Date.now();
+    for (const [key, session] of sessions) {
+      if (session.expiresAt <= now) sessions.delete(key);
+    }
+  }
   while (sessions.size > MAX_SESSIONS) sessions.delete(sessions.keys().next().value);
   return id;
 }
@@ -46,7 +57,16 @@ function parseCookies(header) {
     const index = part.indexOf("=");
     if (index === -1) continue;
     const key = part.slice(0, index).trim();
-    if (key) out[key] = decodeURIComponent(part.slice(index + 1).trim());
+    if (!key) continue;
+    const raw = part.slice(index + 1).trim();
+    try {
+      out[key] = decodeURIComponent(raw);
+    } catch {
+      // A cookie like `mewbit_dash=%` is a URIError, and anyone can set one on
+      // their own browser. Keep the raw value: it will simply not match a
+      // session, which is a clean 401 rather than a logged 500.
+      out[key] = raw;
+    }
   }
   return out;
 }

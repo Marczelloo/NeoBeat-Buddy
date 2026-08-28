@@ -72,8 +72,30 @@ function readJsonBody(request) {
   });
 }
 
+/**
+ * The client address the rate limiter buckets on.
+ *
+ * `socket.remoteAddress` is the *peer*, which behind a reverse proxy is the
+ * proxy — so in production every visitor collapsed into one bucket and any
+ * single person could lock out everyone else. The old `||` fallback to
+ * X-Forwarded-For was dead code: the socket address is always truthy.
+ *
+ * X-Forwarded-For is attacker-controlled unless something trusted rewrote it,
+ * so it is read only when the deployment declares how many proxies sit in
+ * front. With N trusted hops the client is N from the right-hand end: one
+ * proxy appends only the client, two appends the client and the first proxy.
+ */
 function requestAddress(request) {
-  return request.socket?.remoteAddress || request.headers["x-forwarded-for"] || "unknown";
+  const hops = Math.max(0, Math.trunc(Number(process.env.DASHBOARD_TRUST_PROXY) || 0));
+  if (hops > 0) {
+    const chain = String(request.headers["x-forwarded-for"] || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const candidate = chain[chain.length - hops];
+    if (candidate) return candidate;
+  }
+  return request.socket?.remoteAddress || "unknown";
 }
 
 function enforceRateLimit(request, bucket, limit, windowMs) {
@@ -157,6 +179,7 @@ function createDashboardRouter(client) {
     }
 
     if (request.method === "GET" && url.pathname === `${PREFIX}/me`) {
+      enforceRateLimit(request, "read", 240, 60_000);
       const session = requireSession(request);
       return sendJson(response, 200, {
         ok: true,
@@ -211,6 +234,9 @@ function createDashboardRouter(client) {
       await assertGuildAdmin(client, guildId, session.userId);
 
       if (request.method === "GET") {
+        // Authenticated, but not free: this reads five stores and enumerates
+        // the guild's channels and roles on every call.
+        enforceRateLimit(request, "read", 240, 60_000);
         return sendJson(response, 200, { ok: true, settings: readGuildSettings(client, guildId) });
       }
 

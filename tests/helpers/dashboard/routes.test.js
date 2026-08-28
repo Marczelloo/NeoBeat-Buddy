@@ -37,11 +37,24 @@ function fakeResponse() {
   };
 }
 
-function request({ method = "GET", cookie = "", origin = "https://mewbit.test", body = null } = {}) {
+function request({
+  method = "GET",
+  cookie = "",
+  origin = "https://mewbit.test",
+  body = null,
+  peer = `1.2.3.${Math.floor(Math.random() * 250) + 1}`,
+  forwardedFor = null,
+} = {}) {
   return {
     method,
-    headers: { cookie, origin, host: "mewbit.test", "content-type": "application/json" },
-    socket: { remoteAddress: `1.2.3.${Math.floor(Math.random() * 250) + 1}` },
+    headers: {
+      cookie,
+      origin,
+      host: "mewbit.test",
+      "content-type": "application/json",
+      ...(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
+    },
+    socket: { remoteAddress: peer },
     on(event, handler) {
       if (event === "data" && body) handler(Buffer.from(body));
       if (event === "end") handler();
@@ -212,4 +225,67 @@ test("public stats survive an unavailable stats store", async () => {
   await router.handle(request(), response, url("/api/dashboard/public/stats"));
   assert.equal(response.statusCode, 200);
   assert.equal(JSON.parse(response.body).instance.servers, 0);
+});
+
+/* ------------------------------------------------------- rate limiting --- */
+
+async function stats(router, options) {
+  const response = fakeResponse();
+  await router.handle(request(options), response, url("/api/dashboard/public/stats"));
+  return response.statusCode;
+}
+
+test("behind a proxy, two visitors do not share one rate-limit bucket", async () => {
+  // Every request arrives from the proxy, so socket.remoteAddress is identical.
+  // Without DASHBOARD_TRUST_PROXY the limiter buckets them together and one
+  // visitor can lock out everyone else.
+  process.env.DASHBOARD_TRUST_PROXY = "1";
+  const router = createDashboardRouter(fakeClient());
+  const proxy = "10.0.0.1";
+
+  let noisy = null;
+  for (let i = 0; i < 125; i += 1) {
+    noisy = await stats(router, { peer: proxy, forwardedFor: "203.0.113.10" });
+  }
+  const bystander = await stats(router, { peer: proxy, forwardedFor: "198.51.100.77" });
+
+  assert.equal(noisy, 429);
+  assert.equal(bystander, 200);
+  delete process.env.DASHBOARD_TRUST_PROXY;
+});
+
+test("X-Forwarded-For is ignored unless the deployment declares its proxies", async () => {
+  // Otherwise anyone could rotate the header and never be limited at all.
+  delete process.env.DASHBOARD_TRUST_PROXY;
+  const router = createDashboardRouter(fakeClient());
+  const proxy = "10.0.0.2";
+
+  let last = null;
+  for (let i = 0; i < 125; i += 1) {
+    last = await stats(router, { peer: proxy, forwardedFor: `203.0.113.${i % 200}` });
+  }
+
+  assert.equal(last, 429);
+});
+
+test("reading settings is rate limited, not just writing", async () => {
+  delete process.env.DASHBOARD_TRUST_PROXY;
+  resetSessions();
+  resetGuildState(GUILD);
+  const router = createDashboardRouter(fakeClient());
+  const id = createSession({ userId: "u1", username: "u", guilds: [{ id: GUILD }] });
+  const peer = "10.0.0.3";
+
+  let last = null;
+  for (let i = 0; i < 245; i += 1) {
+    const response = fakeResponse();
+    await router.handle(
+      request({ cookie: `${SESSION_COOKIE}=${id}`, peer }),
+      response,
+      url(`/api/dashboard/guilds/${GUILD}/settings`)
+    );
+    last = response.statusCode;
+  }
+
+  assert.equal(last, 429);
 });
