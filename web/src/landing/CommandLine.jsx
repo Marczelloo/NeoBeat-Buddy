@@ -1,29 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { COMMANDS } from "./commands.js";
 
-const GHOST_INTERVAL_MS = 2600;
-
-function prefersReducedMotion() {
-  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-export default function CommandLine({ query, onQueryChange, onRun, onNudge }) {
-  const [ghostIndex, setGhostIndex] = useState(0);
+export default function CommandLine({ query, onQueryChange, onRun, onNudge, ghost, typing, onInteract }) {
   const [focused, setFocused] = useState(false);
   const inputRef = useRef(null);
 
   const showGhost = query.length === 0;
-  const cycling = showGhost && !focused;
-
-  useEffect(() => {
-    if (!cycling || prefersReducedMotion()) return undefined;
-
-    const timer = setInterval(() => {
-      setGhostIndex((current) => (current + 1) % COMMANDS.length);
-    }, GHOST_INTERVAL_MS);
-
-    return () => clearInterval(timer);
-  }, [cycling]);
 
   // "/" focuses the palette from anywhere, the way a command surface behaves.
   useEffect(() => {
@@ -75,7 +56,10 @@ export default function CommandLine({ query, onQueryChange, onRun, onNudge }) {
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={handleKeyDown}
-            onFocus={() => setFocused(true)}
+            onFocus={() => {
+              setFocused(true);
+              onInteract();
+            }}
             onBlur={() => setFocused(false)}
             aria-label="Try a MewBit command"
             autoComplete="off"
@@ -85,8 +69,12 @@ export default function CommandLine({ query, onQueryChange, onRun, onNudge }) {
 
           {showGhost ? (
             <span className="cmdline-ghost" aria-hidden="true">
-              <span>{COMMANDS[ghostIndex].signature}</span>
-              {focused ? null : <span className="cmdline-caret" />}
+              <span>{ghost}</span>
+              {/* The caret holds steady while characters are moving and blinks
+                  on the finished line — the way a real one behaves. */}
+              {focused ? null : (
+                <span className={typing ? "cmdline-caret is-busy" : "cmdline-caret"} />
+              )}
             </span>
           ) : null}
         </span>

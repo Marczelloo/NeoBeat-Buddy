@@ -267,6 +267,13 @@
   animation: caret 1.05s steps(1) infinite;
 }
 
+/* A caret does not blink while characters are moving. Holding it solid during
+   the run is what makes the typing read as typing rather than as a marquee. */
+.cmdline-caret.is-busy {
+  animation: none;
+  opacity: 1;
+}
+
 @keyframes caret {
   0%,
   50% {
@@ -1179,7 +1186,77 @@
   width: 100%;
   height: 34px;
   margin: clamp(44px, 6vw, 70px) 0 0;
-  pointer-events: none;
+  /* An SVG root clips to its viewport by default, which would shear the tops
+     off the swollen bars. The rule sits inside a 44-70px margin, so it has the
+     room to grow into. */
+  overflow: visible;
+}
+
+/* The swell. Registering the radii as typed custom properties is what lets
+   them be transitioned at all — an unregistered var jumps. On enter the circle
+   opens from nothing, so the wave reads as spreading rather than switching on;
+   `--sr-x` then carries it along under the pointer. Where @property is not
+   supported the effect still works, it just snaps. */
+@property --sr-r {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sr-core {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+.secrule-lift {
+  opacity: 0.62;
+  transform: scaleY(3.1);
+  transform-box: fill-box;
+  transform-origin: center;
+  -webkit-mask-image: radial-gradient(
+    circle at var(--sr-x, 50%) 50%,
+    #000 0,
+    #000 var(--sr-core),
+    transparent var(--sr-r)
+  );
+  mask-image: radial-gradient(
+    circle at var(--sr-x, 50%) 50%,
+    #000 0,
+    #000 var(--sr-core),
+    transparent var(--sr-r)
+  );
+  transition: --sr-r 0.55s var(--ease), --sr-core 0.55s var(--ease);
+}
+
+.secrule:hover .secrule-lift {
+  --sr-r: 190px;
+  --sr-core: 34px;
+}
+
+/* ---------- scroll reveal ---------- */
+
+/* Applied by script, never by the stylesheet: a page whose content is hidden
+   by CSS and only shown by JS is a page that breaks when the JS does. */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.62s var(--ease), transform 0.62s var(--ease);
+}
+
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Paired frames arrive a beat apart, so a row reads as two things rather than
+   as one block sliding up. */
+.ex-panel.reveal:nth-of-type(odd) {
+  transition-delay: 0.06s;
+}
+
+.ex-panel.reveal:nth-of-type(even) {
+  transition-delay: 0.13s;
 }
 
 /* ---------- feature ledger ---------- */

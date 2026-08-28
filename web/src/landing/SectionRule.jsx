@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 /**
  * A section break drawn in the hero's own vocabulary — the same waveform, seen
  * from far enough away that it is nearly a rule. It stitches the lower page
@@ -38,9 +40,23 @@ const FIELDS = {
 
 export default function SectionRule({ seed = "a" }) {
   const bars = FIELDS[seed] || FIELDS.a;
+  const ref = useRef(null);
+
+  /* One style write per pointer move, on the parent. The lift is a second copy
+     of the bars revealed through a radial mask centred on the cursor, so the
+     swell follows the pointer without touching a single bar's own style —
+     animating 150 rects individually would be a frame budget, not a detail. */
+  function track(event) {
+    const svg = ref.current;
+    if (!svg) return;
+    const box = svg.getBoundingClientRect();
+    svg.style.setProperty("--sr-x", `${((event.clientX - box.left) / box.width) * 100}%`);
+  }
 
   return (
     <svg
+      ref={ref}
+      onPointerMove={track}
       className="secrule"
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
@@ -64,17 +80,32 @@ export default function SectionRule({ seed = "a" }) {
         </mask>
       </defs>
 
-      <g mask={`url(#sr-mask-${seed})`} opacity="0.32">
-        {bars.map((bar) => (
-          <rect
-            key={bar.index}
-            x={bar.x}
-            y={(H - bar.height) / 2}
-            width="1"
-            height={bar.height}
-            fill={`url(#sr-ink-${seed})`}
-          />
-        ))}
+      <g mask={`url(#sr-mask-${seed})`}>
+        <g opacity="0.32">
+          {bars.map((bar) => (
+            <rect
+              key={bar.index}
+              x={bar.x}
+              y={(H - bar.height) / 2}
+              width="1"
+              height={bar.height}
+              fill={`url(#sr-ink-${seed})`}
+            />
+          ))}
+        </g>
+
+        <g className="secrule-lift">
+          {bars.map((bar) => (
+            <rect
+              key={bar.index}
+              x={bar.x}
+              y={(H - bar.height) / 2}
+              width="1"
+              height={bar.height}
+              fill={`url(#sr-ink-${seed})`}
+            />
+          ))}
+        </g>
       </g>
     </svg>
   );

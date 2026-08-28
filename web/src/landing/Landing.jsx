@@ -10,7 +10,8 @@ import Mark from "./Mark.jsx";
 import ResponseCanvas from "./ResponseCanvas.jsx";
 import SectionRule from "./SectionRule.jsx";
 import SiteFooter from "./SiteFooter.jsx";
-import { COMMANDS, DEFAULT_COMMAND_ID, filterCommands } from "./commands.js";
+import useAutotype from "./autotype.js";
+import { COMMANDS, DEFAULT_COMMAND_ID, filterCommands, findCommand } from "./commands.js";
 import "./landing.css";
 
 export default function Landing() {
@@ -39,9 +40,70 @@ export default function Landing() {
       if (frame) cancelAnimationFrame(frame);
     };
   }, []);
+  // Sections settle in as they arrive. The hidden state is added by this
+  // effect rather than by the stylesheet, so if the script never runs the page
+  // is simply a page — nothing is hidden behind an observer that never fires.
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+
+    const targets = document.querySelectorAll(
+      ".showcase-head, .ex-lead, .ex-panel, .ex-close, .ledger-block, .foot-close, .foot-cols"
+    );
+    if (targets.length === 0) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-in");
+          // One-shot: replaying the entrance every time you scroll back up is
+          // motion for its own sake.
+          observer.unobserve(entry.target);
+        });
+      },
+      { rootMargin: "0px 0px -12% 0px", threshold: 0.05 }
+    );
+
+    targets.forEach((target) => {
+      /* Anything already at or above the fold is shown outright. A reload
+         restores the scroll position, and an observer never reports an element
+         that was already behind you — it would sit at opacity 0 until someone
+         scrolled up into a blank section. This also spares whatever is on
+         screen at load an entrance it did not need. */
+      if (target.getBoundingClientRect().top < window.innerHeight) {
+        target.classList.add("reveal", "is-in");
+        return;
+      }
+
+      target.classList.add("reveal");
+      observer.observe(target);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   const [activeId, setActiveId] = useState(DEFAULT_COMMAND_ID);
 
+  /* The palette demonstrates itself until someone reaches for it. The first
+     real interaction — a focus, a keystroke, a hover on the index — ends the
+     demo for good; a page that keeps typing over you is a page fighting you. */
+  const [live, setLive] = useState(true);
+  const demo = useAutotype(live);
+
+  useEffect(() => {
+    if (live) setActiveId(demo.id);
+  }, [live, demo.id]);
+
+  function takeOver() {
+    setLive(false);
+  }
+
   const visible = useMemo(() => filterCommands(query), [query]);
+
+  /* Once the demo stops — or never starts, under reduced motion — the field
+     falls back to naming the command the canvas is showing. An empty prompt
+     with a bare caret tells nobody what to type. */
+  const ghost = demo.running ? demo.text : findCommand(activeId).signature;
 
   function run() {
     if (visible.length === 0) return;
@@ -86,7 +148,18 @@ export default function Landing() {
           A Discord music bot <em>you</em> run yourself.
         </h1>
 
-        <CommandLine query={query} onQueryChange={setQuery} onRun={run} onNudge={nudge} />
+        <CommandLine
+          query={query}
+          onQueryChange={(value) => {
+            takeOver();
+            setQuery(value);
+          }}
+          onRun={run}
+          onNudge={nudge}
+          ghost={ghost}
+          typing={demo.typing}
+          onInteract={takeOver}
+        />
 
         <ResponseCanvas commandId={activeId} />
 
@@ -99,8 +172,14 @@ export default function Landing() {
                 href={repoUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                onMouseEnter={() => setActiveId(command.id)}
-                onFocus={() => setActiveId(command.id)}
+                onMouseEnter={() => {
+                  takeOver();
+                  setActiveId(command.id);
+                }}
+                onFocus={() => {
+                  takeOver();
+                  setActiveId(command.id);
+                }}
               >
                 <span className="index-sig">{command.signature}</span>
                 <span className="index-blurb">{command.blurb}</span>
@@ -111,9 +190,18 @@ export default function Landing() {
                 type="button"
                 key={command.id}
                 className={command.id === activeId ? "index-row is-active" : "index-row"}
-                onClick={() => setActiveId(command.id)}
-                onMouseEnter={() => setActiveId(command.id)}
-                onFocus={() => setActiveId(command.id)}
+                onClick={() => {
+                  takeOver();
+                  setActiveId(command.id);
+                }}
+                onMouseEnter={() => {
+                  takeOver();
+                  setActiveId(command.id);
+                }}
+                onFocus={() => {
+                  takeOver();
+                  setActiveId(command.id);
+                }}
                 aria-pressed={command.id === activeId}
               >
                 <span className="index-sig">{command.signature}</span>
