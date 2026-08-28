@@ -12,6 +12,11 @@
   position: absolute;
   inset: 0 0 auto;
   height: min(760px, 96vh);
+  /* Anchored to the right edge, not centred. The figure is a 2:1 frame on a
+     ~1.9:1 plate, so `cover` crops horizontally — centred, that crop eats the
+     cyan rim down her right side, which is the whole subject. Cropping from
+     the left costs nothing: that half is empty by construction. */
+  background: url("/art/hero-figure.webp") 100% 0 / cover no-repeat;
   pointer-events: none;
   transform: translate3d(0, var(--ground-shift, 0px), 0);
   will-change: transform;
@@ -22,6 +27,20 @@
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* The figure does not survive a narrow plate. Measured across every horizontal
+   crop, peak luminance in the band the lede occupies is 173-176/255 — the
+   headphone band runs the full width of the subject at exactly that height, so
+   there is no crop where white text clears it, and pushing her down only puts
+   her behind the command panel. Dimming the layer far enough to fix the
+   contrast erased her anyway: the source averages 18/255, so there is nothing
+   to give away. She is dropped below 860px and the waveform takes the plate
+   back at full width (see the mask swap in HeroField). */
+@media (max-width: 860px) {
+  .hero-plate {
+    background-image: none;
+  }
 }
 
 /* Only sixteen bars breathe, and the playhead is one node. The other eighty

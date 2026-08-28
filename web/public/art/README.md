@@ -2,28 +2,37 @@
 
 | File | Use | Notes |
 |---|---|---|
-| `operator.webp` | Landing close section | Cat-ear silhouette at a console, single cyan rim light. Measured YAVG 18/255, peak 21. |
+| `hero-figure.webp` | Landing hero plate, ≥861px | Cat-eared figure from behind, cyan rim right, magenta rim left, on black. 1774x887 (2:1), WebP q82, 36 KB. |
+| `operator.webp` | Landing close section | Cat-ear silhouette at a console, single cyan rim light. |
 
-Generated artwork. No third-party rights attach to this.
+Generated artwork. No third-party rights attach to these.
 
-## Why there is only one file
+## Measured luminance
 
-The hero used to be a photographic plate (`hero-ground.webp`, a near-black
-speaker cone). It has been replaced by `src/landing/HeroField.jsx`, which draws
-the avatar's own composition — a thin ring and a symmetric waveform — as
-deterministic SVG. Two reasons, in order of weight:
+Measured in true RGB, not `ffmpeg signalstats` — that filter reports
+limited-range luma where 16 is black, which reads as a lifted black level on an
+image that does not have one.
 
-1. It is about this product. The photograph was atmosphere that could have sat
-   behind any audio brand; the ring and the waveform are the Discord avatar.
-2. It is roughly 4 KB of markup against 21 KB of image, it scales without a
-   raster ceiling, and it can move.
+| Region | Peak luma | White text on it |
+|---|---|---|
+| `hero-figure` left half (behind the lede at ≥861px) | **1 / 255** | ~20:1 |
+| `hero-figure` lede band at the 375px crop | **196 / 255** | **1.6:1** |
 
-`src/landing/SectionRule.jsx` and `src/landing/RingField.jsx` extend the same
-vocabulary down the page, so the lower sections are held by drawn geometry
-rather than by more image files.
+The first number is why the figure works on desktop: the left half of the frame
+is empty by construction, so the headline sits on effectively pure black. The
+second is why it is dropped below 860px — see the media query in `landing.css`.
+Every horizontal crop measures 173-196 in that band, because the headphone band
+runs the full width of the subject at exactly the height the lede occupies.
 
-The original PNGs and the unused variants live in `docs/art-source/`, outside
-`public/`, because Vite copies everything under `public/` into the build — the
-variants were adding 14 MB to a landing page. `operator.webp` is WebP at
-quality 72; measured luminance is unchanged from the PNG original (YAVG 18,
-peak 21).
+## Why the plate is half drawn
+
+The hero is two layers. The figure is this image, anchored to the right edge.
+The waveform over it is `src/landing/HeroField.jsx`, drawn as deterministic SVG
+and masked to die at 58% so the two never cross — a photographic subject and a
+drawn motif overlapping in the one region where both carry detail is how a
+composition turns to noise. `src/landing/SectionRule.jsx` carries the same
+waveform down the page.
+
+`operator.webp` is the only other image on the landing. The original PNGs and
+unused variants live in `docs/art-source/`, outside `public/`, because Vite
+copies everything under `public/` into the build.

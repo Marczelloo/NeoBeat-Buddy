@@ -11,6 +11,8 @@
  * reshuffles on refresh is noise, not identity.
  */
 
+import { useEffect, useState } from "react";
+
 const VIEW_W = 1440;
 const VIEW_H = 620;
 const AXIS = 268;
@@ -43,7 +45,26 @@ const BARS = Array.from({ length: BAR_COUNT }, (_, index) => {
   };
 });
 
+/* The mask is an SVG attribute, and which one is right depends on whether the
+   figure behind the plate is showing. That is a media query, so it is read as
+   one rather than guessed from a breakpoint duplicated in JS. */
+function useNarrow() {
+  const [narrow, setNarrow] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 860px)");
+    const sync = () => setNarrow(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  return narrow;
+}
+
 export default function HeroField() {
+  const narrow = useNarrow();
+
   return (
     <svg
       className="herofield"
@@ -53,25 +74,43 @@ export default function HeroField() {
       focusable="false"
     >
       <defs>
-        {/* Magenta on the left, cyan on the right, white through the middle —
-            the avatar's own split, carried at hairline weight. */}
+        {/* Magenta into white into cyan — the avatar's own split. The whole
+            transition is pulled into the left 60%, because that is all of the
+            plate the waveform now occupies. */}
         <linearGradient id="hf-wave" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="var(--live)" />
-          <stop offset="34%" stopColor="var(--live)" />
-          <stop offset="50%" stopColor="#ffffff" />
-          <stop offset="66%" stopColor="var(--accent)" />
+          <stop offset="20%" stopColor="var(--live)" />
+          <stop offset="38%" stopColor="#ffffff" />
+          <stop offset="56%" stopColor="var(--accent)" />
           <stop offset="100%" stopColor="var(--accent)" />
         </linearGradient>
 
-        {/* Ends fade to nothing so the plate has no edge to notice. */}
+        {/* The waveform yields the right of the plate to the figure behind it
+            and dies before reaching her. Two motifs crossing in the one region
+            where both carry detail is how a composition turns to noise; each
+            gets its own territory instead. The left edge fades so the plate has
+            no edge to notice. */}
         <linearGradient id="hf-fade" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#000" />
+          <stop offset="13%" stopColor="#fff" />
+          <stop offset="34%" stopColor="#fff" />
+          <stop offset="58%" stopColor="#000" />
+          <stop offset="100%" stopColor="#000" />
+        </linearGradient>
+        <mask id="hf-mask">
+          <rect width={VIEW_W} height={VIEW_H} fill="url(#hf-fade)" />
+        </mask>
+
+        {/* Below 860px the figure is gone, so there is nothing to yield to and
+            the waveform takes the whole plate back. */}
+        <linearGradient id="hf-fade-wide" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#000" />
           <stop offset="14%" stopColor="#fff" />
           <stop offset="86%" stopColor="#fff" />
           <stop offset="100%" stopColor="#000" />
         </linearGradient>
-        <mask id="hf-mask">
-          <rect width={VIEW_W} height={VIEW_H} fill="url(#hf-fade)" />
+        <mask id="hf-mask-wide">
+          <rect width={VIEW_W} height={VIEW_H} fill="url(#hf-fade-wide)" />
         </mask>
 
         <linearGradient id="hf-head" x1="0" y1="0" x2="1" y2="0">
@@ -89,7 +128,7 @@ export default function HeroField() {
         </linearGradient>
       </defs>
 
-      <g mask="url(#hf-mask)">
+      <g mask={narrow ? "url(#hf-mask-wide)" : "url(#hf-mask)"}>
         <g className="hf-wave" opacity="0.45">
           {BARS.map((bar) => (
             <rect
