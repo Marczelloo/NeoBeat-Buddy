@@ -1,11 +1,11 @@
 const { Events } = require("discord.js");
+const { hasActiveActivitySession } = require("../helpers/activity/sessions");
 const announcer = require("../helpers/announcements/announcer");
 const { getHighResolutionArtworkUrl } = require("../helpers/artwork");
 const { buildControlRows } = require("../helpers/buttons");
 const { playerEmbed } = require("../helpers/embeds");
 const { getGuildState, updateGuildState } = require("../helpers/guildState.js");
 const { getDisplayTrackMetadata } = require("../helpers/lavalink/displayMetadata");
-const { hasActiveActivitySession } = require("../helpers/activity/sessions");
 const { createPoru } = require("../helpers/lavalink/index");
 const Log = require("../helpers/logs/log");
 const { formatDuration } = require("../helpers/utils");
@@ -55,6 +55,14 @@ module.exports = {
 
           const channel = await client.channels.fetch(channelId).catch(() => null);
           if (!channel) return;
+
+          // Re-check after the async channel lookup. An Activity action may
+          // have opened in this small window, and it owns the player UI.
+          if (hasActiveActivitySession(player.guildId)) {
+            if (state.nowPlayingMessage) await channel.messages.delete(state.nowPlayingMessage).catch(() => null);
+            updateGuildState(player.guildId, { nowPlayingMessage: null });
+            return;
+          }
 
           if (state.nowPlayingMessage) {
             await channel.messages.delete(state.nowPlayingMessage).catch((err) => {

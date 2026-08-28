@@ -1,6 +1,7 @@
 const assert = require("node:assert");
 const { describe, it } = require("node:test");
 
+const { lavalinkToggleMute } = require("../../../helpers/lavalink");
 const {
   DEFAULT_SOURCE_GAIN_DB,
   applyNormalizedVolume,
@@ -10,6 +11,10 @@ const {
 const { getRestoreVolume, setPlayerVolume } = require("../../../helpers/lavalink/volume");
 
 describe("Provider loudness normalization", () => {
+  it("exposes the Activity mute action through the Lavalink public API", () => {
+    assert.strictEqual(typeof lavalinkToggleMute, "function");
+  });
+
   it("keeps Deezer as the neutral reference and attenuates noisier providers", () => {
     assert.strictEqual(DEFAULT_SOURCE_GAIN_DB.deezer, 0);
     assert.strictEqual(getNormalizedVolume(100, "deezer"), 100);

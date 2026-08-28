@@ -44,6 +44,16 @@ const VERSION_PENALTIES = Object.freeze({
   remaster: 20,
 });
 
+// "YouTube first" is the Activity's default search mode. Spotify remains the
+// next strongest catalogue fallback, but neither provider can beat a clearly
+// better Deezer or SoundCloud match. These are tie-break-sized bonuses;
+// title/artist relevance remains the deciding signal.
+const SEARCH_PROVIDER_BONUSES = Object.freeze({
+  youtube: 30,
+  spotify: 22,
+});
+const MIN_PREFERRED_PROVIDER_SCORE = 260;
+
 const NON_MUSIC_SEARCH_PATTERNS = [
   /\b(?:tutorial|how to|lesson|tips?|tricks?|review|reaction|reacts?|analysis|explained)\b/i,
   /\b(?:interview|podcast|gameplay|walkthrough|speedrun|stream(?:ed)?\s+sniped|livestream)\b/i,
@@ -209,6 +219,47 @@ function getProviderConsensus(track, consensusMap) {
   return consensusMap.get(key)?.size ?? 0;
 }
 
+function getSearchProviderBonus(entry) {
+  if (!entry || entry.score < MIN_PREFERRED_PROVIDER_SCORE) return 0;
+  return SEARCH_PROVIDER_BONUSES[getProviderIdentity(entry.track)] || 0;
+}
+
+function compareRankedSearchResults(left, right) {
+  if (right.effectiveScore !== left.effectiveScore) return right.effectiveScore - left.effectiveScore;
+  if (right.score !== left.score) return right.score - left.score;
+  if (right.popularity !== left.popularity) return right.popularity - left.popularity;
+  return left.index - right.index;
+}
+
+function deduplicateRankedSearchResults(entries) {
+  const seen = new Set();
+  return entries.filter((entry) => {
+    // `getConsensusKey` is source-independent (normalised artist + base
+    // title), unlike a Lavalink encoded track/URI. Keep only the best result
+    // for the same recording instead of showing Spotify, YouTube, Deezer and
+    // SoundCloud copies side by side.
+    const key = getConsensusKey(entry.track);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function trimWeakSingleWordMatches(entries, query) {
+  const queryTokens = getUniqueTokens(query);
+  if (queryTokens.length !== 1 || entries.length < 2) return entries;
+
+  const bestScore = entries[0]?.score || 0;
+  // A one-word query is often a song title. Once an exact, high-confidence
+  // result exists, do not fill the top results with uploads whose only link
+  // is an uploader name or a single word buried in a much longer title.
+  if (bestScore < MIN_PREFERRED_PROVIDER_SCORE) return entries;
+
+  const minimumScore = bestScore - 120;
+  return entries.filter((entry) => entry.score >= minimumScore);
+}
+
 function scoreSearchResult(track, query, index = 0, { consensusMap } = {}) {
   const title = track?.info?.title || "";
   const author = track?.info?.author || "";
@@ -221,6 +272,7 @@ function scoreSearchResult(track, query, index = 0, { consensusMap } = {}) {
   const titleTokens = getUniqueTokens(title);
   const authorTokens = getUniqueTokens(author);
   const explicitQuery = splitExplicitQuery(query);
+  const isSingleWordQuery = queryTokens.length === 1;
   const popularity = getPopularity(track);
 
   let score = 0;
@@ -248,6 +300,19 @@ function scoreSearchResult(track, query, index = 0, { consensusMap } = {}) {
   ) {
     score += 180;
     reasons.push("exact artist/title");
+  }
+
+  if (
+    getProviderIdentity(track) === "youtube" &&
+    queryTokens.length >= 2 &&
+    normalizeText(`${cleanArtistName(author)} ${canonicalTitle}`).replace(/(\d)\s+(\p{L})/gu, "$1$2") === normalizedQuery &&
+    (canonicalTitle !== normalizedTitle || cleanArtistName(author) !== author)
+  ) {
+    // Topic/VEVO uploader suffixes and "Official Audio" are decoration, not
+    // a weaker recording match. Without this, an exact YouTube result loses
+    // to Spotify merely because its metadata is more verbose.
+    score += 245;
+    reasons.push("canonical artist/title");
   }
 
   if (normalizedQuery && candidateText.includes(normalizedQuery)) {
@@ -322,6 +387,18 @@ function scoreSearchResult(track, query, index = 0, { consensusMap } = {}) {
     reasons.push("unknown uploader");
   }
 
+  if (
+    isSingleWordQuery &&
+    normalizedAuthor === normalizedQuery &&
+    normalizedTitle !== normalizedQuery &&
+    canonicalTitle !== normalizedQuery
+  ) {
+    // Uploaders are frequently named after a song, album or label. Their
+    // arbitrary uploads must not compete with the actual track title.
+    score -= 220;
+    reasons.push("uploader-only single-word penalty");
+  }
+
   const consensusSources = getProviderConsensus(track, consensusMap);
   if (consensusSources > 1) {
     score += (consensusSources - 1) * 32;
@@ -387,7 +464,7 @@ function filterPlayableSearchResults(tracks, query) {
   );
 }
 
-function rankSearchResults(tracks, query, { limit, withScores = false } = {}) {
+function rankSearchResults(tracks, query, { limit, withScores = false, dedupe = true } = {}) {
   const sourceConsensus = new Map();
   for (const track of Array.isArray(tracks) ? tracks : []) {
     const key = getConsensusKey(track);
@@ -399,13 +476,14 @@ function rankSearchResults(tracks, query, { limit, withScores = false } = {}) {
 
   const ranked = (Array.isArray(tracks) ? tracks : [])
     .map((track, index) => scoreSearchResult(track, query, index, { consensusMap: sourceConsensus }))
-    .sort((left, right) => {
-      if (right.score !== left.score) return right.score - left.score;
-      if (right.popularity !== left.popularity) return right.popularity - left.popularity;
-      return left.index - right.index;
-    });
+    .map((entry) => ({ ...entry, providerBonus: getSearchProviderBonus(entry) }))
+    .map((entry) => ({ ...entry, effectiveScore: entry.score + entry.providerBonus }))
+    .sort(compareRankedSearchResults);
 
-  const selected = Number.isInteger(limit) ? ranked.slice(0, Math.max(0, limit)) : ranked;
+  const focusedRanked = trimWeakSingleWordMatches(ranked, query);
+  const uniqueRanked = dedupe ? deduplicateRankedSearchResults(focusedRanked) : focusedRanked;
+
+  const selected = Number.isInteger(limit) ? uniqueRanked.slice(0, Math.max(0, limit)) : uniqueRanked;
   return withScores ? selected : selected.map((entry) => entry.track);
 }
 
@@ -419,6 +497,8 @@ module.exports = {
   getPopularity,
   getProviderConsensus,
   getProviderIdentity,
+  getSearchProviderBonus,
+  trimWeakSingleWordMatches,
   isLikelyNonMusicSearchResult,
   isRelevantSearchResult,
   normalizeText,

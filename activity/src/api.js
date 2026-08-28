@@ -80,7 +80,7 @@ export function connectActivitySocket({ guildId, accessToken, onState, onReady, 
       window.clearInterval(heartbeatTimer);
       heartbeatTimer = window.setInterval(() => {
         if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "heartbeat" }));
-      }, 20_000);
+      }, 5_000);
     });
     socket.addEventListener("message", (event) => {
       try {

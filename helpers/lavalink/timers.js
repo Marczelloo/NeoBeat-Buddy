@@ -1,9 +1,9 @@
 const { inspect } = require("util");
+const { markActivityStateChanged } = require("../activity/sync");
 const Log = require("../logs/log");
 const { INACTIVITY_TIMEOUT_MS, PROGRESS_UPDATE_INTERVAL_MS } = require("./constants");
 const { clearRecoverySnapshot } = require("./recovery");
 const { playbackState, inactivityTimers, endActivePlayback } = require("./state");
-const { markActivityStateChanged } = require("../activity/sync");
 
 let refreshNowPlayingMessageCached = null;
 

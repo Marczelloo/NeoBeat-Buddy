@@ -244,7 +244,7 @@ The Activity gateway runs in the bot process and is responsible for authorizing 
 | `ACTIVITY_ENABLED` | `true` | Enables the Activity gateway. |
 | `ACTIVITY_HOST` | `127.0.0.1` | Bind host; use `0.0.0.0` behind a production proxy. |
 | `ACTIVITY_PORT` | `8787` | Gateway port. |
-| `ACTIVITY_STATE_HEARTBEAT_MS` | `5000` | Background player-state heartbeat in milliseconds; event updates remain immediate. |
+| `ACTIVITY_STATE_HEARTBEAT_MS` | `1500` | Background player-state safety heartbeat in milliseconds; event updates remain immediate. Lower values recover faster from a silent iframe/proxy at the cost of more snapshot work. |
 | `ACTIVITY_CLIENT_SECRET` | falls back to `DISCORD_CLIENT_SECRET` | Discord application client secret used for the OAuth token exchange. |
 | `ACTIVITY_REDIRECT_URI` | `https://127.0.0.1` | Exact OAuth redirect URI registered in the Developer Portal. |
 | `ACTIVITY_ALLOWED_ORIGINS` | `*` | Comma-separated allowed browser origins. Restrict this in production. |

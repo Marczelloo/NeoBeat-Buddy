@@ -1,9 +1,10 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags } = require("discord.js");
+const { hasActiveActivitySession } = require("./activity/sessions");
 const { getHighResolutionArtworkUrl } = require("./artwork");
 const skipVotes = require("./dj/skipVotes");
 const djStore = require("./dj/store");
 const { playerEmbed, errorEmbed } = require("./embeds");
-const { getGuildState } = require("./guildState");
+const { getGuildState, updateGuildState } = require("./guildState");
 const { getDisplayTrackMetadata } = require("./lavalink/displayMetadata");
 const {
   lavalinkPause,
@@ -399,6 +400,15 @@ async function refreshNowPlayingMessage(client, guildId, playerOverride = null, 
 
   if (!channelId || !messageId) {
     Log.info("refreshNowPlayingMessage missing channel/message", `guild=${guildId}`);
+    return;
+  }
+
+  // The Activity is the live player while listeners have it open. A delayed
+  // component interaction must not keep editing a stale text-channel embed.
+  if (hasActiveActivitySession(guildId)) {
+    const staleChannel = await client.channels.fetch(channelId).catch(() => null);
+    await staleChannel?.messages.delete(messageId).catch(() => null);
+    updateGuildState(guildId, { nowPlayingMessage: null });
     return;
   }
 

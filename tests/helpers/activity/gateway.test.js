@@ -76,6 +76,14 @@ test("Activity uses the event-backed state track during a transient player trans
   assert.equal(playback.usesPlayerTrack, false);
 });
 
+test("Activity keeps an explicit ended state instead of resurrecting Poru's track", () => {
+  const playback = resolveActivityPlayback(null, { track: "stale", info: { identifier: "stale", title: "Stale" } });
+
+  assert.equal(playback.track, null);
+  assert.equal(playback.usesPlayerTrack, false);
+  assert.equal(playback.durationMs, 0);
+});
+
 test("Activity progress follows the event-backed position anchor across view remounts", () => {
   const now = 1_000_000;
   const state = { lastPosition: 46_000, lastTimestamp: now - 3_000, paused: false };

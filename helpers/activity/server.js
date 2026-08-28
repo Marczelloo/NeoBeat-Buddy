@@ -3,11 +3,13 @@ const http = require("node:http");
 const { URL } = require("node:url");
 const { WebSocketServer } = require("ws");
 
+const { createDashboardRouter } = require("../dashboard/routes");
 const djStore = require("../dj/store");
 const { getUserPresets } = require("../equalizer/customPresets");
 const EQ_PRESET_NAMES = require("../equalizer/presets");
 const guildState = require("../guildState");
 const { getHistory } = require("../history/searchHistory");
+const { replaceQueuedAutoplayTrack } = require("../lavalink/autoplay");
 const { fetchAutoplayV3Track } = require("../lavalink/autoplayV3");
 const { EQUALIZER_PRESETS } = require("../lavalink/constants");
 const { getEqualizerState } = require("../lavalink/equalizerStore");
@@ -48,7 +50,13 @@ const { consumeRateLimit } = require("../security/rateLimit");
 const statsStore = require("../stats/store");
 const userPreferences = require("../users/preferences");
 const { getActivityEvents, recordActivityAction, reportActivityIssue } = require("./feed");
-const { registerActivitySession, unregisterActivitySession, hasActiveActivitySession } = require("./sessions");
+const {
+  registerActivitySession,
+  unregisterActivitySession,
+  touchActivitySession,
+  beginActivityAction,
+  hasActiveActivitySession,
+} = require("./sessions");
 const { serializeFilters, serializeLyrics, serializePlaylist, serializePlaylistDetails, serializeTrack, normalizeSource } = require("./state");
 const { activityStateEvents, getActivityStateRevision, markActivityStateChanged } = require("./sync");
 
@@ -61,8 +69,10 @@ const MAX_ACTIVITY_SOCKETS = 200;
 const QUEUE_UNDO_TTL_MS = 15_000;
 // Player events are emitted at most once a second, so this is only a
 // safety-net for iframe/proxy connections which stayed open but stopped
-// delivering events. It must not become the primary state transport.
-const ACTIVITY_STATE_HEARTBEAT_MS = Math.max(2_000, Number(process.env.ACTIVITY_STATE_HEARTBEAT_MS) || 5_000);
+// delivering events. It must not become the primary state transport. Keep
+// the fallback short enough that a missed transition cannot leave Activity
+// stale for several seconds, while still avoiding a tight polling loop.
+const ACTIVITY_STATE_HEARTBEAT_MS = Math.max(1_000, Number(process.env.ACTIVITY_STATE_HEARTBEAT_MS) || 1_500);
 const MIN_LYRICS_SYNC_OFFSET_MS = -2_000;
 const MAX_LYRICS_SYNC_OFFSET_MS = 2_000;
 const ARTWORK_FAILURE_TTL_MS = 5 * 60_000;
@@ -320,6 +330,7 @@ function assertControlPermission(guildId, identity, action) {
     "previous",
     "stop",
     "remove_queue",
+    "replace_autoplay",
     "play_next",
     "move_queue",
     "clear_queue",
@@ -377,7 +388,7 @@ function isAllowedOrigin(origin, config) {
 function assertPlayerVoiceAccess(player, identity, action) {
   if (identity.dev || !player?.voiceChannel) return;
   const guardedActions = new Set([
-    "pause", "resume", "toggle", "skip", "previous", "stop", "remove_queue", "play_next",
+    "pause", "resume", "toggle", "skip", "previous", "stop", "remove_queue", "replace_autoplay", "play_next",
     "move_queue", "clear_queue", "undo_queue", "shuffle", "volume", "toggle_mute", "seek", "filter",
     "equalizer", "equalizer_preset", "loop", "autoplay", "play", "surprise_me", "play_playlist",
     "change_source",
@@ -551,8 +562,12 @@ function resolveActivityPlayback(stateTrack, playerTrack) {
   // for Activity metadata: Poru mutates currentTrack while it dequeues and
   // retries providers, which previously left title/artwork one transition
   // behind even though the audio had already changed.
-  const track = stateTrack || playerTrack || null;
-  const usesPlayerTrack = !stateTrack && Boolean(playerTrack);
+  // `null` is meaningful here: TrackEnd writes an explicit null before Poru
+  // advances the queue. Falling back to Poru in that case briefly resurrects
+  // the previous track (or exposes the next track before TrackStart).
+  const hasAuthoritativeState = stateTrack !== undefined;
+  const track = hasAuthoritativeState ? stateTrack : playerTrack || null;
+  const usesPlayerTrack = !hasAuthoritativeState && Boolean(playerTrack);
   return {
     track,
     usesPlayerTrack,
@@ -628,13 +643,14 @@ function serializeActivitySearchResults(tracks, query) {
 }
 
 function serializeActivityActionResult(action, result) {
-  if (action === "play" || action === "surprise_me") {
+  if (action === "play" || action === "surprise_me" || action === "replace_autoplay") {
     return {
-      success: true,
+      success: result?.success !== false,
       track: result?.track ? serializeTrack(result.track) : null,
       isPlaylist: Boolean(result?.isPlaylist),
       playlistTrackCount: Number(result?.playlistTrackCount) || 0,
       ...(action === "surprise_me" ? { surpriseIntent: result?.surpriseIntent || null } : {}),
+      ...(action === "replace_autoplay" ? { error: result?.error || null, stale: Boolean(result?.stale), busy: Boolean(result?.busy) } : {}),
     };
   }
   if (action === "refresh_lyrics") return result ? serializeLyrics(result) : null;
@@ -739,6 +755,26 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
             `seed=${selection.seed.info?.author || "Unknown"} - ${selection.seed.info?.title || "Unknown"}`
           );
         }
+
+        // A room can have history without having a useful musical anchor:
+        // novelty uploads, malformed provider metadata, and an AI timeout are
+        // not a reason for the primary Surprise me CTA to fail. Fall back to
+        // the same short, verified chart path used by a fresh room.
+        if (!recommendation) {
+          Log.info(
+            "Surprise me falling back to the current chart",
+            "",
+            `guild=${guildId}`,
+            `attempts=${attemptedSeeds.size}`
+          );
+          recommendation = await fetchFreestyleSurpriseTrack(guildId, { memoryKey: surpriseMemoryKey });
+          if (recommendation) {
+            selection = {
+              seed: null,
+              intent: { mode: "freestyle", goal: "Recover Surprise me with a current, broadly loved, verified track.", preferredLanes: ["continuation", "bridge"] },
+            };
+          }
+        }
       }
 
       if (!selection) {
@@ -839,6 +875,21 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
       const removed = await lavalinkRemoveFromQueue(guildId, { position: position + 1 });
       normalizeQueueAutoplayPartition(player?.queue);
       return { success: removed?.status === "removed", undoToken: removed?.status === "removed" ? undoToken : null, ...removed };
+    }
+    case "replace_autoplay": {
+      if (!player?.queue || !player?.currentTrack) return { success: false, error: "Start playback before replacing an autoplay pick." };
+      if (!guildState.getGuildState(guildId)?.autoplay) return { success: false, error: "Turn autoplay on before replacing its next pick." };
+      const position = assertCurrentQueueItem(player.queue, payload.queueItemId, payload.position);
+      const rejectedTrack = Array.from(player.queue)[position];
+      if (!rejectedTrack?.userData?.autoplay && !rejectedTrack?.info?.autoplayed) {
+        return { success: false, error: "Only an autoplay pick can be replaced." };
+      }
+      return replaceQueuedAutoplayTrack(player, {
+        rejectedTrack,
+        referenceTrack: resolveActivityPlayback(playbackState.get(guildId)?.currentTrack, player.currentTrack).track || player.currentTrack,
+        textChannelId: player.textChannel,
+        expectedQueueItemId: payload.queueItemId,
+      });
     }
     case "play_next": {
       if (!player?.queue) return { success: false, error: "The queue is unavailable." };
@@ -993,6 +1044,10 @@ async function runActivityAction({ guildId, identity, action, payload = {} }) {
 }
 
 async function runTrackedActivityAction({ guildId, identity, action, payload = {} }) {
+  // A long-running Activity request can resolve a track after the ordinary
+  // socket handoff grace. Hold the Activity ownership through that work so
+  // trackStartUI never falls back to the legacy command-channel player.
+  const releaseActivityAction = beginActivityAction(guildId);
   const player = getPlayer(guildId);
   const beforeTrack = resolveActivityPlayback(playbackState.get(guildId)?.currentTrack, player?.currentTrack).track;
   try {
@@ -1008,6 +1063,8 @@ async function runTrackedActivityAction({ guildId, identity, action, payload = {
       markActivityStateChanged(guildId, `activity:${action}:error`);
     }
     throw error;
+  } finally {
+    releaseActivityAction();
   }
 }
 
@@ -1046,6 +1103,7 @@ function broadcastGuildState(client, guildId) {
 
 function createActivityServer(client) {
   const config = getActivityConfig();
+  const dashboardRouter = createDashboardRouter(client);
   let server = null;
   let interval = null;
   let listeningForPlayerChanges = false;
@@ -1057,6 +1115,11 @@ function createActivityServer(client) {
     if (request.method === "OPTIONS") return sendJson(response, 204, null, config);
 
     const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
+
+    if (url.pathname.startsWith("/api/dashboard/")) {
+      const handled = await dashboardRouter.handle(request, response, url);
+      if (handled) return;
+    }
 
     try {
       if (request.method === "POST" && url.pathname === "/api/token") {
@@ -1114,6 +1177,7 @@ function createActivityServer(client) {
         const body = await readJson(request);
         const guildId = limitText(body.guildId || config.devGuildId, 80);
         const identity = await authenticateRequest(client, request, guildId, config);
+        touchActivitySession(guildId);
         let result = await runTrackedActivityAction({ guildId, identity, action: body.action, payload: body.payload || {} });
         const actionPayload = body.payload || {};
         const detailName = actionPayload.newName || actionPayload.name || result?.playlistName;
@@ -1168,12 +1232,14 @@ function createActivityServer(client) {
           socket.guildId = guildId;
           socket.authorized = true;
           registerActivitySession(guildId, socket);
+          touchActivitySession(guildId);
           sendSocket(socket, { type: "ready", identity: { id: socket.identity.id, username: socket.identity.username } });
           sendSocket(socket, { type: "state", state: buildActivityState(client, guildId, socket.identity.id) });
           return;
         }
         if (!socket.authorized) return sendSocket(socket, { type: "error", error: "Authenticate the Activity socket first." });
         if (message.type === "heartbeat") {
+          touchActivitySession(socket.guildId);
           return sendSocket(socket, { type: "heartbeat", time: Date.now() });
         }
         if (message.type === "action") {

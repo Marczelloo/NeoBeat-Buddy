@@ -1,7 +1,8 @@
-import { forwardRef, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowBendUpRight,
+  ArrowsClockwise,
   Bell,
   CaretRight,
   Check,
@@ -14,6 +15,7 @@ import {
   Globe,
   Heart,
   House,
+  Keyboard,
   LinkSimple,
   MagnifyingGlass,
   MusicNotes,
@@ -132,7 +134,46 @@ function formatQueueEta(queue = [], index = 0) {
 
 function VolumeSlider({ slider, onPreview, onCommit, className = "" }) {
   const [isAdjusting, setIsAdjusting] = useState(false);
+  const sliderRef = useRef(null);
+  const inputRef = useRef(null);
   const value = Math.round(slider.value);
+  const [bubbleLeft, setBubbleLeft] = useState(15);
+
+  const syncBubblePosition = useCallback(() => {
+    const sliderElement = sliderRef.current;
+    const inputElement = inputRef.current;
+    if (!sliderElement || !inputElement) return;
+
+    const sliderRect = sliderElement.getBoundingClientRect();
+    const inputRect = inputElement.getBoundingClientRect();
+    if (!sliderRect.width || !inputRect.width) return;
+
+    // Native range thumbs travel inside the track, not from one outer edge to
+    // the other. Measuring the actual input keeps the bubble pinned to the
+    // thumb in both the main player and the compact bottom bar.
+    const thumbSize = 13;
+    const ratio = clamp(value / 100, 0, 1);
+    const thumbCenter = inputRect.left - sliderRect.left
+      + thumbSize / 2
+      + Math.max(0, inputRect.width - thumbSize) * ratio;
+    setBubbleLeft(Math.round(thumbCenter * 10) / 10);
+  }, [value]);
+
+  useLayoutEffect(() => {
+    syncBubblePosition();
+    const observe = () => syncBubblePosition();
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(observe);
+    if (resizeObserver) {
+      resizeObserver.observe(sliderRef.current);
+      resizeObserver.observe(inputRef.current);
+    }
+    window.addEventListener("resize", observe);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", observe);
+    };
+  }, [syncBubblePosition]);
+
   const startAdjusting = () => {
     slider.begin();
     setIsAdjusting(true);
@@ -143,9 +184,10 @@ function VolumeSlider({ slider, onPreview, onCommit, className = "" }) {
   };
 
   return (
-    <div className={`volume-slider ${className} ${isAdjusting ? "is-adjusting" : ""}`} style={{ "--volume-bubble-left": `${value}%` }}>
+    <div ref={sliderRef} className={`volume-slider ${className} ${isAdjusting ? "is-adjusting" : ""}`} style={{ "--volume-bubble-left": `${bubbleLeft}px` }}>
       <output className="volume-bubble" aria-live="polite">{value}</output>
       <input
+        ref={inputRef}
         className="range range-volume"
         type="range"
         min="0"
@@ -198,6 +240,58 @@ const IconButton = forwardRef(function IconButton({ label, children, className =
   );
 });
 
+const ACTIVITY_SHORTCUTS = [
+  ["/", "Focus search"],
+  ["Space", "Play or pause"],
+  ["N", "Skip track"],
+  ["P", "Restart current track"],
+  ["L", "Open lyrics"],
+  ["Q", "Toggle queue"],
+  ["Alt + ↑ / ↓", "Move the focused queue item"],
+  ["Esc", "Close an open menu or drawer"],
+];
+
+function ShortcutHelp({ placement = "toolbar" }) {
+  const detailsRef = useRef(null);
+
+  useEffect(() => {
+    const closeOnEscapeOrOutside = (event) => {
+      if (!detailsRef.current?.open) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        detailsRef.current.open = false;
+        detailsRef.current.querySelector("summary")?.focus();
+      } else if (event.type === "pointerdown" && !detailsRef.current.contains(event.target)) {
+        detailsRef.current.open = false;
+      }
+    };
+    document.addEventListener("keydown", closeOnEscapeOrOutside);
+    document.addEventListener("pointerdown", closeOnEscapeOrOutside);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscapeOrOutside);
+      document.removeEventListener("pointerdown", closeOnEscapeOrOutside);
+    };
+  }, []);
+
+  return (
+    <details ref={detailsRef} className={`shortcut-help shortcut-help-${placement}`}>
+      <summary className="shortcut-help-toggle" aria-label="Show keyboard shortcuts">
+        <Keyboard size={17} aria-hidden="true" />
+        <span className="shortcut-help-label">Shortcuts</span>
+      </summary>
+      <div className="shortcut-help-popover" role="dialog" aria-label="Keyboard shortcuts">
+        <div className="shortcut-help-heading">
+          <strong>Keyboard shortcuts</strong>
+          <span>Quick controls for the room</span>
+        </div>
+        <dl className="shortcut-list">
+          {ACTIVITY_SHORTCUTS.map(([key, description]) => <div className="shortcut-row" key={key}><dt><kbd>{key}</kbd></dt><dd>{description}</dd></div>)}
+        </dl>
+      </div>
+    </details>
+  );
+}
+
 function getTrackLikeKey(track) {
   const normalize = (value) => String(value || "").normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
   return `${normalize(track?.title)}::${normalize(track?.author)}`;
@@ -233,7 +327,7 @@ function moveQueueTrackForDisplay(queue = [], from, to) {
 }
 
 function getActionPendingKey(action, payload = {}) {
-  if (action === "remove_queue" || action === "play_next") return `${action}:${payload.queueItemId || Number(payload.position)}`;
+  if (action === "remove_queue" || action === "play_next" || action === "replace_autoplay") return `${action}:${payload.queueItemId || Number(payload.position)}`;
   if (action === "move_queue") return `${action}:${payload.fromQueueItemId || Number(payload.from)}`;
   if (action === "play") return `${action}:${payload.trackId || payload.query || "unknown"}`;
   if (action === "toggle_like" || action === "track_feedback") return `${action}:${payload.track?.id || payload.trackId || "current"}`;
@@ -271,6 +365,7 @@ function getActionFeedback(action, payload = {}, result = null, state = null) {
     case "previous": return "Restarted the current track";
     case "shuffle": return "Queue shuffled";
     case "play_next": return "Moved to play next";
+    case "replace_autoplay": return track ? `Autoplay pick replaced: ${track}` : "Finding a different autoplay pick";
     case "autoplay": return payload.enabled ? "Autoplay on — MewBit will keep the room moving" : "Autoplay off — the queue is now manual";
     case "loop": {
       const loop = state?.player?.loop || "NONE";
@@ -529,7 +624,7 @@ function PlaylistSubmenuItem({ track, playlists = [], onAction, onClose }) {
   );
 }
 
-function TrackMenuActions({ track, playlists = [], likedTrackIds = [], onAction, onClose, allowSourceChange = false }) {
+function TrackMenuActions({ track, playlists = [], likedTrackIds = [], onAction, onClose }) {
   const isLiked = likedTrackIds.includes(track.id) || likedTrackIds.includes(getTrackLikeKey(track));
   const linkUrl = [track.uri, track.playQuery].find((value) => typeof value === "string" && /^https?:\/\//i.test(value));
   return (
@@ -547,7 +642,6 @@ function TrackMenuActions({ track, playlists = [], likedTrackIds = [], onAction,
           <WarningCircle size={15} aria-hidden="true" /><span>Not this direction</span>
         </button>
       </> : null}
-      {allowSourceChange ? <div className="row-menu-source-switch" role="group" aria-label="Try another source"><span>Try another source</span><div>{SOURCE_NAMES.filter((source) => source !== "auto" && source !== track.source).map((source) => <button type="button" key={source} onClick={() => { onAction("change_source", { source, expectedTrackId: track.id }); onClose(); }}>{sourceLabel(source)}</button>)}</div></div> : null}
       {linkUrl ? (
         <button type="button" role="menuitem" className="row-menu-item" onClick={() => { navigator.clipboard?.writeText(linkUrl).catch(() => {}); onClose(); }}>
           <CopySimple size={15} aria-hidden="true" /><span>Copy link</span>
@@ -691,7 +785,7 @@ function formatActivityEventTime(timestamp) {
   return `${Math.floor(delta / 3_600_000)}h ago`;
 }
 
-function ActivityFeedPanel({ events = [], active = false }) {
+function ActivityFeedPanel({ events = [] }) {
   if (!events.length) {
     return <div className="activity-feed-empty"><Bell size={26} weight="duotone" aria-hidden="true" /><strong>Room is quiet</strong><span>Actions and playback issues will appear here.</span></div>;
   }
@@ -707,8 +801,71 @@ function ActivityFeedPanel({ events = [], active = false }) {
           </div>
         </li>
       ))}
-      <li className="activity-feed-status"><span className={active ? "is-live" : ""} aria-hidden="true" />{active ? "Activity connected" : "Activity reconnecting"}</li>
     </ol>
+  );
+}
+
+function TrackFeedbackActions({ track, onAction, isActionPending = () => false, className = "" }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  const firstActionRef = useRef(null);
+
+  useEffect(() => setOpen(false), [track?.id]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeIfOutside = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        window.requestAnimationFrame(() => triggerRef.current?.focus());
+      }
+    };
+    document.addEventListener("pointerdown", closeIfOutside);
+    document.addEventListener("keydown", onKeyDown);
+    const focusFrame = window.requestAnimationFrame(() => firstActionRef.current?.focus());
+    return () => {
+      document.removeEventListener("pointerdown", closeIfOutside);
+      document.removeEventListener("keydown", onKeyDown);
+      window.cancelAnimationFrame(focusFrame);
+    };
+  }, [open]);
+
+  if (!track) return null;
+  const pending = isActionPending(`track_feedback:${track.id}`);
+  const submitFeedback = (sentiment) => {
+    onAction("track_feedback", { track, sentiment });
+    setOpen(false);
+  };
+
+  return (
+    <div ref={rootRef} className={`track-feedback-actions ${className}`}>
+      <IconButton
+        ref={triggerRef}
+        label="Tune autoplay recommendations"
+        className={open ? "is-active" : ""}
+        onClick={() => setOpen((current) => !current)}
+        disabled={pending}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <Waveform size={16} weight={open ? "fill" : "regular"} aria-hidden="true" />
+      </IconButton>
+      {open ? <div className="track-feedback-menu" role="menu" aria-label="Tune autoplay recommendations">
+        <button ref={firstActionRef} type="button" role="menuitem" onClick={() => submitFeedback("more")} disabled={pending}>
+          <Sparkle size={15} weight="fill" aria-hidden="true" />
+          <span><strong>More like this</strong><small>Keep this energy in the next picks</small></span>
+        </button>
+        <button type="button" role="menuitem" onClick={() => submitFeedback("less")} disabled={pending}>
+          <WarningCircle size={15} aria-hidden="true" />
+          <span><strong>Not this direction</strong><small>Steer the next picks away from this sound</small></span>
+        </button>
+      </div> : null}
+    </div>
   );
 }
 
@@ -777,6 +934,7 @@ function ExternalLinkConfirmDialog({ request, onCancel, onConfirm }) {
 
 function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onAction, isActionPending = () => false }) {
   const isPlaying = player.playing && !player.paused;
+  const isMuted = Boolean(player.muted);
   const volume = clamp(Number(player.volume || 0), 0, 100);
   const volumeSlider = useBufferedSlider(volume);
   const [volumeOpen, setVolumeOpen] = useState(false);
@@ -800,6 +958,7 @@ function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onA
           <span>Autoplay</span>
         </button>
         <TrackSaveActions track={player.currentTrack} playlists={playlists} likedTrackIds={likedTrackIds} onAction={onAction} isActionPending={isActionPending} className="main-save-actions" />
+        <TrackFeedbackActions track={player.currentTrack} onAction={onAction} isActionPending={isActionPending} className="main-feedback-actions" />
       </div>
       <div className="transport-controls">
         <IconButton label={`Loop mode ${player.loop}`} className={player.loop !== "NONE" ? "is-active" : ""} loading={isActionPending("loop")} onClick={() => onAction("loop")}>
@@ -824,8 +983,8 @@ function PlayerControls({ player, playlists = [], likedTrackIds = [], onTab, onA
       <div className="deck-side deck-right">
         <IconButton label="Open lyrics" onClick={() => onTab("lyrics")} disabled={!player.currentTrack}><MusicNotes size={19} weight="regular" aria-hidden="true" /></IconButton>
         <div className="deck-volume" ref={volumeWrapRef}>
-          <IconButton label={volumeSlider.value === 0 ? "Unmute player" : "Mute player"} className="volume-toggle" loading={isActionPending("toggle_mute")} onClick={() => onAction("toggle_mute")}>
-            {volumeSlider.value === 0 ? <SpeakerSlash size={18} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
+          <IconButton label={isMuted ? "Unmute player" : "Mute player"} className={`volume-toggle ${isMuted ? "is-muted" : ""}`} loading={isActionPending("toggle_mute")} onClick={() => onAction("toggle_mute")} aria-pressed={isMuted}>
+            {isMuted ? <SpeakerSlash size={18} weight="fill" aria-hidden="true" /> : <SpeakerHigh size={18} weight="fill" aria-hidden="true" />}
           </IconButton>
           <VolumeSlider className="volume-inline-control" slider={volumeSlider} onPreview={previewVolume} onCommit={commitVolume} />
           <IconButton label={volumeOpen ? "Close volume controls" : "Adjust volume"} className={`volume-mobile-trigger ${volumeOpen ? "is-active" : ""}`} onClick={() => setVolumeOpen((value) => !value)} aria-expanded={volumeOpen} aria-haspopup="true"><Faders size={17} weight="regular" aria-hidden="true" /></IconButton>
@@ -924,7 +1083,7 @@ function NowPlaying({ state, onTab, onAction, onOpenExternalLink, isActionPendin
         <div className="time-row"><span>{formatTime(seekSlider.value)}</span><span>{formatTime(duration)}</span></div>
       </div>
       <SmartMenu open={Boolean(titleMenu)} position={titleMenu || { top: 0, left: 0 }} rootRef={titleRef} menuRef={titleMenuRef} label={`Actions for ${track?.title || "track"}`}>
-        {track ? <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onAction={onAction} onClose={closeTitleMenu} allowSourceChange /> : null}
+        {track ? <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds || []} onAction={onAction} onClose={closeTitleMenu} /> : null}
       </SmartMenu>
     </section>
   );
@@ -1055,6 +1214,9 @@ function QueuePanel({ queue, playlists = [], likedTrackIds = [], onAction, isAct
             <div className="queue-side">
               {track.autoplay ? <span className="auto-pill" title="Added by MewBit autoplay">AUTO</span> : null}
               <div className="queue-side-btns">
+                {track.autoplay ? <IconButton label={`Find a different autoplay pick than ${track.title}`} className="queue-replace-autoplay" loading={isActionPending(`replace_autoplay:${track.queueItemId}`)} onClick={() => onAction("replace_autoplay", { position: index, queueItemId: track.queueItemId })}>
+                  <ArrowsClockwise size={15} aria-hidden="true" />
+                </IconButton> : null}
                 <IconButton label={`Play ${track.title} next`} className="queue-play-next" loading={isActionPending(`play_next:${track.queueItemId}`)} onClick={() => onAction("play_next", { position: index, queueItemId: track.queueItemId })}>
                   <ArrowBendUpRight size={15} aria-hidden="true" />
                 </IconButton>
@@ -1069,6 +1231,9 @@ function QueuePanel({ queue, playlists = [], likedTrackIds = [], onAction, isAct
       </>}
       {(menuTrack ? (<SmartMenu open position={menu} rootRef={null} menuRef={menuRef} label={`Actions for ${menuTrack.title}`}>
         <>
+          {menuTrack.autoplay ? <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("replace_autoplay", { position: menuIndex, queueItemId: menuTrack.queueItemId }); closeMenu(); }}>
+            <ArrowsClockwise size={15} aria-hidden="true" /><span>Find a different autoplay pick</span>
+          </button> : null}
           <button type="button" role="menuitem" className="row-menu-item" onClick={() => { onAction("play_next", { position: menuIndex, queueItemId: menuTrack.queueItemId }); closeMenu(); }}>
             <Play size={15} weight="fill" aria-hidden="true" /><span>Play next</span>
           </button>
@@ -1523,6 +1688,7 @@ function ActivityLoader({ message, leaving }) {
 
 function PlayerBar({ state, onAction, onView, onOpenExternalLink, isActionPending }) {
   const { player } = state;
+  const isMuted = Boolean(player.muted);
   const position = usePlayerPosition(player);
   const track = player.currentTrack;
   const duration = Math.max(player.durationMs || track?.durationMs || 0, 1);
@@ -1609,12 +1775,12 @@ function PlayerBar({ state, onAction, onView, onOpenExternalLink, isActionPendin
       </div>
       <div className="player-bar-actions">
         <IconButton label="Open lyrics" onClick={() => onView("lyrics")} disabled={!track}><Subtitles size={17} weight="regular" aria-hidden="true" /></IconButton>
-        <IconButton label={volumeSlider.value === 0 ? "Unmute player" : "Mute player"} loading={isActionPending("toggle_mute")} onClick={() => onAction("toggle_mute")}>{volumeSlider.value === 0 ? <SpeakerSlash size={17} weight="regular" aria-hidden="true" /> : <SpeakerHigh size={17} weight="fill" aria-hidden="true" />}</IconButton>
+        <IconButton label={isMuted ? "Unmute player" : "Mute player"} className={isMuted ? "is-muted" : ""} loading={isActionPending("toggle_mute")} onClick={() => onAction("toggle_mute")} aria-pressed={isMuted}>{isMuted ? <SpeakerSlash size={17} weight="fill" aria-hidden="true" /> : <SpeakerHigh size={17} weight="fill" aria-hidden="true" />}</IconButton>
         <VolumeSlider className="bar-volume-control" slider={volumeSlider} onPreview={previewVolume} onCommit={commitVolume} />
       </div>
       <SmartMenu open={Boolean(titleMenu)} position={titleMenu || { top: 0, left: 0 }} rootRef={titleRef} menuRef={titleMenuRef} label={`Actions for ${track?.title || "track"}`}>
         <>
-          <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds} onAction={onAction} onClose={closeTitleMenu} allowSourceChange />
+          <TrackMenuActions track={track} playlists={state.playlists} likedTrackIds={state.likedTrackIds} onAction={onAction} onClose={closeTitleMenu} />
         </>
       </SmartMenu>
     </footer>
@@ -1656,7 +1822,10 @@ function App() {
   const stateRef = useRef(state);
   const seenActivityEventIds = useRef(new Set());
   const activityFeedReady = useRef(false);
-  const lastRealtimeActivityAt = useRef(0);
+  // This timestamp tracks the last accepted player-state snapshot, not the
+  // WebSocket transport heartbeat. A healthy socket can still stop delivering
+  // state messages, and transport pongs must not hide that condition.
+  const lastActivityStateAt = useRef(0);
   const isCompactViewport = useCompactViewport();
   const isCompact = MOCK_COMPACT_PREVIEW || isCompactViewport;
   const isDrawerViewport = useMediaQuery("(max-width: 900px)");
@@ -1747,13 +1916,14 @@ function App() {
   }, [state.activity?.events, showToast]);
 
   const applyState = useCallback((nextState) => {
-    if (!nextState) return;
+    if (!nextState) return false;
     const revision = Number(nextState.revision ?? 0);
     const generatedAt = Number(nextState.generatedAt ?? nextState.player?.updatedAt ?? 0);
     const current = appliedSnapshot.current;
-    if (revision < current.revision || (revision === current.revision && generatedAt < current.generatedAt)) return;
+    if (revision < current.revision || (revision === current.revision && generatedAt < current.generatedAt)) return false;
     appliedSnapshot.current = { revision, generatedAt };
     setState(nextState);
+    return true;
   }, []);
 
   useEffect(() => {
@@ -1821,8 +1991,7 @@ function App() {
           try {
             const response = await fetchActivityState(nextContext);
             if (alive && response.state) {
-              applyState(response.state);
-              lastRealtimeActivityAt.current = Date.now();
+              if (applyState(response.state)) lastActivityStateAt.current = Date.now();
               setConnection({ status: "live", message: "Realtime gateway connected" });
               return true;
             }
@@ -1838,7 +2007,7 @@ function App() {
 
         try {
           const response = await fetchActivityState(nextContext);
-          if (alive && response.state) { applyState(response.state); lastRealtimeActivityAt.current = Date.now(); }
+          if (alive && response.state && applyState(response.state)) lastActivityStateAt.current = Date.now();
           if (alive) setConnection({ status: "live", message: "Realtime gateway connected" });
         } catch (error) {
           if (alive) {
@@ -1855,20 +2024,25 @@ function App() {
 
         stopSocket = connectActivitySocket({
           ...nextContext,
-          onState: (nextState) => { if (alive) { lastRealtimeActivityAt.current = Date.now(); applyState(nextState); setConnection({ status: "live", message: "Realtime gateway connected" }); finishHydration(); } },
-          onReady: () => { if (alive) { lastRealtimeActivityAt.current = Date.now(); setConnection({ status: "live", message: "Realtime gateway connected" }); } },
-          onHeartbeat: () => { if (alive) lastRealtimeActivityAt.current = Date.now(); },
+          onState: (nextState) => {
+            if (alive) {
+              if (applyState(nextState)) lastActivityStateAt.current = Date.now();
+              setConnection({ status: "live", message: "Realtime gateway connected" });
+              finishHydration();
+            }
+          },
+          onReady: () => { if (alive) setConnection({ status: "live", message: "Realtime gateway connected" }); },
           onConnection: (nextConnection) => { if (alive && nextContext.mode === "discord") setConnection(nextConnection); },
           onError: (error) => { if (alive && nextContext.mode === "discord") setConnection({ status: "reconnecting", message: error.message }); },
         });
 
         // Socket messages are the state path. HTTP only repairs a socket that
         // became silent (Discord iframe/proxy edge case), on return to the
-        // foreground, or after an explicit reconnect — never every 2 seconds.
+        // foreground, or after an explicit reconnect — never continuously.
         const resyncIfStale = () => {
-          if (Date.now() - lastRealtimeActivityAt.current >= 10_000) void reconcile({ quiet: true });
+          if (Date.now() - lastActivityStateAt.current >= 3_000) void reconcile({ quiet: true });
         };
-        healthWatchTimer = window.setInterval(resyncIfStale, 3_000);
+        healthWatchTimer = window.setInterval(resyncIfStale, 1_000);
         const onVisibilityChange = () => {
           if (document.visibilityState === "visible") void reconcile({ quiet: false });
         };
@@ -1953,6 +2127,14 @@ function App() {
       if (action === "remove_queue") { const index = next.player.queue.findIndex((track) => track.queueItemId === payload.queueItemId); next.player.queue.splice(index >= 0 ? index : payload.position, 1); next.player.queue = partitionQueueForDisplay(next.player.queue); }
       if (action === "clear_queue") next.player.queue = [];
       if (action === "play_next") { const index = next.player.queue.findIndex((track) => track.queueItemId === payload.queueItemId); const [track] = next.player.queue.splice(index >= 0 ? index : payload.position, 1); if (track) { track.autoplay = false; next.player.queue.unshift(track); } next.player.queue = partitionQueueForDisplay(next.player.queue); }
+      if (action === "replace_autoplay") {
+        const index = next.player.queue.findIndex((track) => track.queueItemId === payload.queueItemId);
+        const position = index >= 0 ? index : payload.position;
+        const current = next.player.queue[position];
+        const replacement = mockSearchResults.find((track) => track.id !== current?.id) || null;
+        if (current && replacement) next.player.queue.splice(position, 1, { ...replacement, autoplay: true, requester: "MewBit", queueItemId: current.queueItemId });
+        next.player.queue = partitionQueueForDisplay(next.player.queue);
+      }
       if (action === "move_queue") { const from = next.player.queue.findIndex((track) => track.queueItemId === payload.fromQueueItemId); const to = next.player.queue.findIndex((track) => track.queueItemId === payload.toQueueItemId); next.player.queue = moveQueueTrackForDisplay(next.player.queue, from >= 0 ? from : payload.from, to >= 0 ? to : payload.to); }
       if (action === "undo_queue") {
         const snapshot = localUndoSnapshots.current.get(payload.token);
@@ -2200,7 +2382,6 @@ function App() {
                   <IconButton label="Sound settings" className={activeTab === "filters" ? "is-active" : ""} onClick={() => goToView("filters")}><SlidersHorizontal size={17} aria-hidden="true" /></IconButton>
                 </div>
                 <div className="stage-actions" aria-label="Player tools">
-                  <span className={`connection-health is-${connection.status}`} role="status" title={connection.message}><i aria-hidden="true" /> <span>{connection.status === "live" ? "Live" : connection.status === "reconnecting" ? "Resyncing" : "Offline"}</span></span>
                   <IconButton label="Room activity" className={`${activeTab === "activity" ? "is-active" : ""} ${hasActivityErrors ? "has-issues" : ""}`} onClick={() => goToView("activity")}><Bell size={17} weight={activeTab === "activity" ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                   <IconButton label="Toggle queue" className={rightSidebarOpen ? "is-active" : ""} aria-pressed={rightSidebarOpen} onClick={() => { if (window.matchMedia("(max-width: 900px)").matches) setLeftSidebarOpen(false); setRightSidebarOpen((value) => !value); }}><Queue size={17} weight={rightSidebarOpen ? "fill" : "regular"} aria-hidden="true" /></IconButton>
                 </div>
@@ -2211,7 +2392,7 @@ function App() {
               {activeTab === "search" ? <section className="content-panel panel-surface"><PanelTitle icon={<MagnifyingGlass size={18} aria-hidden="true" />} title="Find a track" description="Search providers together, then choose the exact source" /><SearchPanel {...searchProps} showSearchBar={false} onAction={onAction} /></section> : null}
               {activeTab === "filters" ? <section className={`content-panel panel-surface filters-surface filters-surface-${soundSection}`}><PanelTitle icon={<SlidersHorizontal size={18} aria-hidden="true" />} title="Shape the sound" description="EQ and playful filters are applied to the live player" action={<div className="sound-mode-actions" role="tablist" aria-label="Sound controls"><button type="button" role="tab" aria-selected={soundSection === "effects"} className={soundSection === "effects" ? "is-active" : ""} onClick={() => setSoundSection("effects")}><Faders size={15} aria-hidden="true" /><span>Effects</span></button><button type="button" role="tab" aria-selected={soundSection === "equalizer"} className={soundSection === "equalizer" ? "is-active" : ""} onClick={() => setSoundSection("equalizer")}><SlidersHorizontal size={15} aria-hidden="true" /><span>Equalizer</span></button></div>} /><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading sound controls</span></div>}><LazyFiltersPanel filters={state.player.filters} filterPresets={state.filterPresets} equalizerPresets={state.equalizerPresets} activeSection={soundSection} canAdjust={Boolean(state.player.currentTrack)} onAction={onAction} isActionPending={isActionPending} /></Suspense></section> : null}
               {activeTab === "lyrics" ? <section className="content-panel panel-surface"><Suspense fallback={<div className="empty-state" aria-busy="true"><SpinnerGap className="button-spinner" size={28} aria-hidden="true" /><span>Loading lyrics</span></div>}><LazyLiveLyricsPanel player={state.player} onAction={onAction} isActionPending={isActionPending} /></Suspense></section> : null}
-              {activeTab === "activity" ? <section className="content-panel panel-surface activity-feed-panel"><PanelTitle icon={<Bell size={18} aria-hidden="true" />} title="Room activity" description="Live actions and playback issues from this listening room" /><ActivityFeedPanel events={activityEvents} active={state.activity?.active} /></section> : null}
+              {activeTab === "activity" ? <section className="content-panel panel-surface activity-feed-panel"><PanelTitle icon={<Bell size={18} aria-hidden="true" />} title="Room activity" description="Live actions and playback issues from this listening room" action={<ShortcutHelp placement="activity" />} /><ActivityFeedPanel events={activityEvents} /></section> : null}
               {activeTab === "playlists" ? <section className="content-panel panel-surface"><PlaylistsPanel playlists={state.playlists} currentTrack={state.player.currentTrack} likedTrackIds={state.likedTrackIds || []} selectedPlaylist={selectedPlaylistDetail?.name || selectedPlaylist} playlistDetail={selectedPlaylistDetail} composerOpen={playlistComposerOpen} onComposerClose={closePlaylistComposer} onAction={onAction} /></section> : null}
             </div>
           </section>

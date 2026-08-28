@@ -8,8 +8,10 @@ const {
 } = require("../../../helpers/activity/feed");
 const {
   hasActiveActivitySession,
+  beginActivityAction,
   registerActivitySession,
   resetActivitySessions,
+  touchActivitySession,
   unregisterActivitySession,
 } = require("../../../helpers/activity/sessions");
 
@@ -64,4 +66,39 @@ test("Activity sessions are scoped to a guild and are released on disconnect", (
 
   unregisterActivitySession("room-a", socket);
   assert.equal(hasActiveActivitySession("room-a"), false);
+});
+
+test("recent Activity traffic preserves the player UI during a socket handoff", () => {
+  resetActivitySessions();
+
+  touchActivitySession("room-handoff");
+  assert.equal(hasActiveActivitySession("room-handoff"), true);
+
+  resetActivitySessions();
+  assert.equal(hasActiveActivitySession("room-handoff"), false);
+});
+
+test("an in-flight Activity action keeps the legacy player suppressed through slow resolution", () => {
+  resetActivitySessions();
+  const startedAt = 1_000;
+  const release = beginActivityAction("room-slow-action", startedAt);
+
+  // This specifically covers a provider request taking longer than the
+  // ordinary 15-second socket handoff grace.
+  assert.equal(hasActiveActivitySession("room-slow-action", startedAt + 20_000), true);
+
+  release(startedAt + 20_000);
+  assert.equal(hasActiveActivitySession("room-slow-action", startedAt + 20_001), true);
+
+  resetActivitySessions();
+  assert.equal(hasActiveActivitySession("room-slow-action"), false);
+});
+
+test("an abandoned Activity action lease expires instead of hiding the legacy player forever", () => {
+  resetActivitySessions();
+  const startedAt = 1_000;
+  beginActivityAction("room-expired-action", startedAt);
+
+  assert.equal(hasActiveActivitySession("room-expired-action", startedAt + 120_000), false);
+  resetActivitySessions();
 });

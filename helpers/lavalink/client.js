@@ -1,8 +1,8 @@
 const { inspect } = require("util");
 const { Poru } = require("poru");
-const { markActivityStateChanged } = require("../activity/sync");
 const { reportActivityIssue } = require("../activity/feed");
 const { hasActiveActivitySession } = require("../activity/sessions");
+const { markActivityStateChanged } = require("../activity/sync");
 const {
   restoreVoiceChannelStatus,
   updateTrackVoiceChannelStatus,

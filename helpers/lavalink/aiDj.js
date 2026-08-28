@@ -28,7 +28,7 @@ ADAPTIVE ARTIST RUNS - match rigidity to the artist's character:
 VIBE CONTINUITY:
 - Give every proposal an honest energy value plus a compact mood tag (2-5 words). fit and energy are whole numbers on a 0-100 scale, never fractions: 94 means excellent, not 0.94.
 - Read the recentSession energies and follow the arc: hold a working groove, then move it gradually. Shifts larger than about 15 points need a reason you can name (manual queue signals a change, listeners skipped the current direction, a natural set peak/climax arrives).
-- Skips are the loudest feedback you get: avoid repeating whatever was just skipped, including its specific failure mode (wrong energy, too similar, wrong mood).
+- Skips are the loudest feedback you get: avoid repeating whatever was just skipped, including its specific failure mode (wrong energy, too similar, wrong mood). A recent skip marked "listener-rejected queued pick" is an immediate next-track veto: do not return that recording, a mirror of it, or a near-identical immediate direction unless the supplied manual history makes a different continuation overwhelmingly more natural.
 
 PLAN SHAPE:
 Return 3 to maximumProposals specific, real recordings in deliberate priority order, each marked with a route:
@@ -179,6 +179,7 @@ function buildDirectorInput({ anchorTrack, referenceTrack, profile, context, max
     recentSession: (profile.recentTracks || []).slice(-10).map(describeRecentTrack),
     upcomingManualTracks: (profile.pendingManualTracks || []).slice(0, 4).map(describeTrack),
     recentSkips: (context.recentSkips || []).slice(0, 6),
+    recentlyRejectedCandidates: (context.blockedTracks || []).slice(0, 6).map(describeTrack),
     verifiedCatalog: (profile.verifiedCatalogCandidates || []).slice(0, 20).map(describeVerifiedCandidate),
     constraints: {
       anchorGenreFamilies: context.anchorFamilies || [],
@@ -188,7 +189,7 @@ function buildDirectorInput({ anchorTrack, referenceTrack, profile, context, max
       sameAlbumStreak: context.albumStreak || 0,
       repeatCooldownMinutes: Math.round((Number(context.repeatCooldownMs) || 0) / 60_000),
       maximumProposals: maxProposals,
-      forbidden: "recent repeats, provider mirrors, unrequested alternate versions, generic algorithmic or playlist suggestions",
+      forbidden: "recent repeats, provider mirrors, listener-rejected queued picks and their immediate direction, unrequested alternate versions, generic algorithmic or playlist suggestions",
     },
   };
 }

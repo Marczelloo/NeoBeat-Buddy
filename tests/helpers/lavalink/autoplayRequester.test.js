@@ -10,6 +10,8 @@ test.describe("Lavalink autoplay queueing", () => {
       userData: {},
     };
     const queuedTracks = [];
+    let replacementOptions = null;
+    let replacementPlayer = null;
     const player = {
       guildId: "guild-1",
       voiceChannel: "voice-1",
@@ -45,8 +47,9 @@ test.describe("Lavalink autoplay queueing", () => {
       filename: require.resolve("../../../helpers/lavalink/autoplayV3"),
       loaded: true,
       exports: {
-        fetchAutoplayV3Track: async (reference) => {
-          assert.equal(reference, player.currentTrack);
+        fetchAutoplayV3Track: async (reference, _guildId, options = {}) => {
+          assert.ok(reference === player.currentTrack || reference === replacementPlayer?.currentTrack);
+          if (reference === replacementPlayer?.currentTrack) replacementOptions = options;
           return relatedTrack;
         },
       },
@@ -61,7 +64,7 @@ test.describe("Lavalink autoplay queueing", () => {
     };
     delete require.cache[modulePath];
 
-    const { queueAutoplayTrack } = require(modulePath);
+    const { queueAutoplayTrack, replaceQueuedAutoplayTrack } = require(modulePath);
     const added = await queueAutoplayTrack(player, player.currentTrack, "text-channel-id");
 
     assert.equal(added, true);
@@ -70,5 +73,28 @@ test.describe("Lavalink autoplay queueing", () => {
     assert.equal(queuedTracks[0].info.requesterTag, "MewBot");
     assert.equal(queuedTracks[0].info.autoplayed, true);
     assert.equal(queuedTracks[0].userData.autoplay, true);
+
+    const rejectedTrack = {
+      track: "old-encoded",
+      info: { title: "Rejected Pick", author: "Artist", length: 120000, autoplayed: true },
+      userData: { autoplay: true, activityQueueId: "queued-auto" },
+    };
+    replacementPlayer = {
+      ...player,
+      currentTrack: { info: { title: "Current", author: "Anchor" } },
+      queue: [rejectedTrack],
+    };
+    const replacement = await replaceQueuedAutoplayTrack(replacementPlayer, {
+      rejectedTrack,
+      expectedQueueItemId: "queued-auto",
+    });
+
+    assert.equal(replacement.success, true);
+    assert.equal(replacementPlayer.queue.length, 1);
+    assert.equal(replacementPlayer.queue[0].info.title, "Next Song");
+    assert.equal(replacementPlayer.queue[0].info.autoplayed, true);
+    assert.equal(replacementPlayer.queue[0].userData.autoplayReplacementOf.title, "Rejected Pick");
+    assert.deepEqual(replacementOptions.blockedTracks, [rejectedTrack]);
+    assert.equal(replacementOptions.selectionIntent.mode, "replace");
   });
 });

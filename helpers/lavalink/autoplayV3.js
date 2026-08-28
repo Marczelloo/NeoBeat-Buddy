@@ -151,7 +151,7 @@ function candidateIdentityKey(candidate) {
  * Builds the shared selection context used by both the AI path and the
  * deterministic fallback ladder.
  */
-function buildSelectionContext({ profile, exposure, referenceTrack, recentTracks, skipPatterns, anchorTrack }) {
+function buildSelectionContext({ profile, exposure, referenceTrack, recentTracks, skipPatterns, anchorTrack, blockedTracks = [] }) {
 
   const referenceMetadata = getTrackMetadata(referenceTrack);
   const anchorMetadata = getTrackMetadata(anchorTrack || referenceTrack);
@@ -180,8 +180,13 @@ function buildSelectionContext({ profile, exposure, referenceTrack, recentTracks
       .map((skip) => ({
         artist: cleanArtistName(skip.artist),
         title: skip.title,
-        reason: skip.reason === "manual" ? "listener-skip" : skip.reason,
+        reason: skip.reason === "manual"
+          ? "listener-skip"
+          : skip.reason === "autoplay_replace"
+            ? "listener-rejected queued pick"
+            : skip.reason,
       })),
+    blockedTracks: blockedTracks.filter(Boolean).slice(-6),
     repeatCooldownMs: REPEAT_COOLDOWN_MS,
   };
 }
@@ -207,6 +212,11 @@ function filterAICandidates(candidates, context, { minFit = AI_DJ_MIN_FIT, now =
 
     if (hasRecentExposure(candidate, context.profile, context.exposure, context.referenceTrack, now)) {
       rejected["recent-duplicate"] = (rejected["recent-duplicate"] || 0) + 1;
+      continue;
+    }
+
+    if (hasTrackIdentity(context.blockedTracks || [], candidate, { includeIdentifier: false })) {
+      rejected["listener-rejected"] = (rejected["listener-rejected"] || 0) + 1;
       continue;
     }
 
@@ -358,8 +368,12 @@ function scoreCandidateV3(candidate, context) {
       ? 44
       : sources.has("deezer_recommendations")
         ? 34 + Math.round(similarity * 10)
-        : sources.has("youtube_mix")
-          ? 30
+      : sources.has("youtube_mix")
+        ? 30
+        : sources.has("deezer_chart")
+          ? 18
+            + Math.round(Math.max(0, Math.min(100, Number(candidate.popularity) || 0)) / 10)
+            + Math.max(0, 10 - Math.min(10, Number(candidate.chartPosition) || 10))
           : 0;
 
   // The current transition matters more than the session-opening manual
@@ -418,12 +432,17 @@ function selectFallbackCandidates(candidates, context) {
     seen.add(identity);
 
     const sources = sourceSet(candidate);
-    if (!sources.has("lastfm_similar") && !sources.has("youtube_mix") && !sources.has("same_album") && !sources.has("deezer_recommendations")) {
+    const isAllowedChartFallback = Boolean(context.allowChartFallback && sources.has("deezer_chart"));
+    if (!isAllowedChartFallback && !sources.has("lastfm_similar") && !sources.has("youtube_mix") && !sources.has("same_album") && !sources.has("deezer_recommendations")) {
       bump("unrelated-source");
       continue;
     }
     if (hasRecentExposure(candidate, context.profile, context.exposure, context.referenceTrack)) {
       bump("recent-duplicate");
+      continue;
+    }
+    if (hasTrackIdentity(context.blockedTracks || [], candidate, { includeIdentifier: false })) {
+      bump("listener-rejected");
       continue;
     }
 
@@ -529,6 +548,10 @@ async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack,
       Log.info("Autoplay resolved track rejected as a cross-provider repeat", "", `guild=${guildId}`, `track=${track.info?.author || "Unknown"} - ${track.info?.title || "Unknown"}`);
       continue;
     }
+    if (hasTrackIdentity(context.blockedTracks || [], track, { includeIdentifier: false })) {
+      Log.info("Autoplay resolved track rejected after listener replaced the pick", "", `guild=${guildId}`, `track=${track.info?.author || "Unknown"} - ${track.info?.title || "Unknown"}`);
+      continue;
+    }
     track.userData = {
       ...(track.userData || {}),
       autoplayV3: true,
@@ -544,6 +567,7 @@ async function resolveV3Candidates(ranked, guildId, referenceTrack, anchorTrack,
 
 async function fetchAutoplayV3Track(referenceTrack, guildId, {
   pendingManualTracks = [],
+  blockedTracks = [],
   allowWhenAutoplayDisabled = false,
   selectionIntent = null,
   mode = "normal",
@@ -566,8 +590,12 @@ async function fetchAutoplayV3Track(referenceTrack, guildId, {
 
   const recentTracks = getRecentTracks(profile, referenceTrack);
   const skipPatterns = getSkipPatterns(guildId);
-  const context = buildSelectionContext({ profile, exposure: profile.autoplayExposure, referenceTrack, recentTracks, skipPatterns, anchorTrack });
+  const context = buildSelectionContext({ profile, exposure: profile.autoplayExposure, referenceTrack, recentTracks, skipPatterns, anchorTrack, blockedTracks });
   context.selectionIntent = selectionIntent;
+  // A chart pick is never a normal-autoplay fallback. It is only a safe,
+  // verified escape hatch for Surprise me when personal context is too noisy
+  // or the AI request times out.
+  context.allowChartFallback = surpriseMode;
   const reference = getAutoplayReference(referenceTrack);
   const candidates = await collectCandidates(referenceTrack, guildId, profile, reference, {
     sources: surpriseMode

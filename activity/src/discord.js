@@ -105,28 +105,33 @@ export async function setMewbitPresence(sdk, player) {
   if (!sdk?.commands?.setActivity) return;
 
   const track = player?.currentTrack;
-  if (!track) {
-    await sdk.commands.setActivity({ activity: null });
-    return;
-  }
-
   const isPlaying = Boolean(track && player?.playing && !player?.paused);
   const positionMs = Math.max(0, Number(player?.positionMs) || 0);
   const durationMs = Math.max(positionMs, Number(player?.durationMs || track?.durationMs) || 0);
   const start = Date.now() - positionMs;
   const artwork = track?.artworkUrl || track?.artworkFallbackUrl;
+  const details = track
+    ? cleanPresenceText(track?.title, "MewBit")
+    : "Choosing the next track";
+  const state = track
+    ? cleanPresenceText(`${track?.author || "Unknown artist"}${player?.paused ? " · paused" : ""}`, "Unknown artist")
+    : undefined;
 
   await sdk.commands.setActivity({
     activity: {
-      type: 2,
-      details: cleanPresenceText(track?.title, "Choosing a track"),
-      state: cleanPresenceText(track?.author, "Unknown artist"),
+      // Discord only reliably renders a "Listening" presence when it has a
+      // concrete recording. The empty-room state is an app Activity instead,
+      // so it remains visible while a listener browses or searches.
+      type: track ? 2 : 0,
+      instance: true,
+      details,
+      state,
       timestamps: track && isPlaying
         ? { start, end: durationMs ? start + durationMs : undefined }
-        : null,
+        : undefined,
       assets: artwork && /^https?:\/\//i.test(artwork)
         ? { large_image: artwork }
-        : null,
+        : undefined,
     },
   });
 }

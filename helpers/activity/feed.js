@@ -48,6 +48,7 @@ function actionDetail(action, payload, beforeTrack, result) {
     case "shuffle": return "shuffled the queue";
     case "autoplay": return payload?.enabled ? "turned autoplay on" : "turned autoplay off";
     case "play_next": return "moved a track to play next";
+    case "replace_autoplay": return "asked MewBit for a different autoplay pick";
     case "remove_queue": return "removed a queued track";
     case "clear_queue": return "cleared the queue";
     case "undo_queue": return "restored the queue";

@@ -1,10 +1,10 @@
 ﻿const { SlashCommandBuilder } = require("discord.js");
+const { hasActiveActivitySession } = require("../../helpers/activity/sessions");
 const djProposals = require("../../helpers/dj/proposals");
 const djStore = require("../../helpers/dj/store");
 const { buildProposalAnnouncement, buildProposalComponents, buildProposalEmbed } = require("../../helpers/dj/ui");
 const { errorEmbed, successEmbed, playlistEmbed, songEmbed } = require("../../helpers/embeds");
 const { getGuildState, updateGuildState } = require("../../helpers/guildState.js");
-const { hasActiveActivitySession } = require("../../helpers/activity/sessions");
 const { recordSearch } = require("../../helpers/history/searchHistory");
 const { beginAutocompleteRequest, isLatestAutocompleteRequest } = require("../../helpers/interactions/autocompleteGuard");
 const { buildTrackAutocompleteValue } = require("../../helpers/lavalink/autocompleteTrack");

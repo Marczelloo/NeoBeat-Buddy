@@ -916,8 +916,18 @@
 
 /* The value surfaces only while the listener is actively adjusting volume. */
 .deck-volume { position: relative; }
+.icon-button.is-muted {
+  color: var(--muted-strong);
+  border-color: rgb(255 255 255 / 0.16);
+  background: rgb(255 255 255 / 0.055);
+}
+.icon-button.is-muted:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: rgb(255 255 255 / 0.09);
+}
 .volume-inline-control,
-.bar-volume-control { position: relative; min-width: 0; }
+.bar-volume-control { position: relative; min-width: 0; overflow: visible; }
 .volume-inline-control { width: clamp(90px, 12vw, 170px); }
 .volume-inline-control .range-volume { width: 100%; }
 .bar-volume-control { width: 90px; flex: 0 1 90px; }
@@ -926,7 +936,10 @@
 .volume-bubble {
   position: absolute;
   z-index: 3;
-  left: clamp(15px, var(--volume-bubble-left), calc(100% - 15px));
+  /* The bubble's centre follows the measured native thumb. It may overhang
+     the compact range at either edge, which is more truthful than clamping
+     it away from the actual 0% or 100% position. */
+  left: var(--volume-bubble-left);
   bottom: calc(100% + 6px);
   display: grid;
   min-width: 30px;
@@ -974,15 +987,229 @@
 
 /* Activity resilience and queue controls. The same controls serve hover,
    keyboard focus and coarse touch input; no long-press-only operations. */
-.connection-health { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--faint); font: 700 9px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
-.connection-health i { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 999px; background: var(--faint); box-shadow: 0 0 0 3px rgb(255 255 255 / 0.025); }
-.connection-health.is-live { color: var(--cyan-soft); }.connection-health.is-live i { background: var(--cyan); }.connection-health.is-reconnecting { color: #f3c878; }.connection-health.is-reconnecting i { background: #f3c878; animation: connection-pulse 1s ease-in-out infinite; }.connection-health.is-error i, .connection-health.is-preview i { background: var(--danger); }
-@keyframes connection-pulse { 50% { opacity: 0.32; transform: scale(0.72); } }
 .queue-row:focus-visible { outline: 2px solid rgb(103 227 244 / 0.62); outline-offset: 2px; }
 .queue-track-copy > span { font-variant-numeric: tabular-nums; }
 .row-menu-explainer { display: grid; gap: 4px; margin: 4px 8px 7px; padding: 9px 10px; border: 1px solid rgb(103 227 244 / 0.18); border-radius: 9px; color: var(--muted); background: rgb(103 227 244 / 0.045); font-size: 11px; line-height: 1.35; }
 .row-menu-explainer strong { color: var(--cyan-soft); font-size: 10px; }
-.row-menu-source-switch { display: grid; gap: 7px; margin: 6px 8px; padding: 9px 10px; border-top: 1px solid var(--line); color: var(--faint); font: 700 9px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
-.row-menu-source-switch > div { display: flex; flex-wrap: wrap; gap: 5px; }.row-menu-source-switch button { min-height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted-strong); background: var(--surface-raised); font: 600 10px/1 "Hanken Grotesk", "Segoe UI", sans-serif; text-transform: none; }.row-menu-source-switch button:hover { color: var(--text); border-color: var(--line-strong); background: var(--surface-soft); }
-@media (pointer: coarse) { .queue-side-btns { display: inline-flex; } .queue-row { min-height: 58px; } .queue-play-next, .queue-remove { width: 36px; height: 36px; } }
-@media (max-width: 760px) { .connection-health > span { display: none; }.connection-health { min-width: 18px; justify-content: center; }.row-menu-source-switch button { min-height: 36px; } }
+.queue-replace-autoplay {
+  width: 32px;
+  height: 32px;
+  color: var(--muted);
+}
+.queue-replace-autoplay:hover {
+  color: var(--violet);
+  border-color: rgb(167 139 250 / 0.28);
+  background: rgb(167 139 250 / 0.07);
+}
+@media (pointer: coarse) { .queue-side-btns { display: inline-flex; } .queue-row { min-height: 58px; } .queue-play-next, .queue-remove, .queue-replace-autoplay { width: 36px; height: 36px; } }
+
+/* Small, discoverable help surface for the room's actual keyboard controls. */
+.shortcut-help {
+  position: relative;
+  flex: 0 0 auto;
+}
+.shortcut-help summary {
+  list-style: none;
+}
+.shortcut-help summary::-webkit-details-marker {
+  display: none;
+}
+.shortcut-help-toggle {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+.shortcut-help-toggle:hover,
+.shortcut-help[open] .shortcut-help-toggle {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+}
+.shortcut-help-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 60;
+  width: min(300px, calc(100vw - 28px));
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 18px 44px rgb(0 0 0 / 0.48);
+  animation: shortcut-help-in 140ms var(--ease) both;
+}
+.shortcut-help-heading {
+  display: grid;
+  gap: 3px;
+  padding: 1px 2px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.shortcut-help-heading strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.shortcut-help-heading span {
+  color: var(--faint);
+  font-size: 10px;
+}
+.shortcut-list {
+  display: grid;
+  gap: 3px;
+  margin: 10px 0 0;
+}
+.shortcut-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 29px;
+}
+.shortcut-row dt,
+.shortcut-row dd {
+  margin: 0;
+}
+.shortcut-row dd {
+  color: var(--muted-strong);
+  font-size: 11px;
+}
+.shortcut-row kbd {
+  display: inline-block;
+  min-width: 28px;
+  padding: 4px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--muted-strong);
+  background: var(--surface-soft);
+  font: 700 9px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-align: center;
+  white-space: nowrap;
+}
+@keyframes shortcut-help-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Autoplay feedback belongs with autoplay, but it should not fracture the
+   transport row. One compact control opens the two deliberate choices. */
+.track-feedback-actions {
+  position: relative;
+  min-width: 0;
+  display: inline-grid;
+  align-items: center;
+}
+.track-feedback-actions > .icon-button.is-active {
+  color: var(--cyan);
+  border-color: transparent;
+  background: rgb(103 227 244 / 0.1);
+}
+.track-feedback-actions > .icon-button {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.track-feedback-actions > .icon-button:hover {
+  color: var(--cyan);
+  border-color: transparent;
+  background: rgb(103 227 244 / 0.07);
+}
+.track-feedback-menu {
+  position: absolute;
+  z-index: 14;
+  left: 0;
+  bottom: calc(100% + 10px);
+  width: min(244px, calc(100vw - 32px));
+  display: grid;
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045), 0 14px 34px rgb(0 0 0 / 0.42);
+  animation: track-feedback-menu-in 140ms var(--ease) both;
+}
+.track-feedback-menu::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  bottom: -5px;
+  width: 9px;
+  height: 9px;
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--surface-raised);
+  transform: rotate(45deg);
+}
+.track-feedback-menu button {
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: transparent;
+  text-align: left;
+  transition-property: color, background-color, transform;
+  transition-duration: 140ms;
+}
+.track-feedback-menu button:hover,
+.track-feedback-menu button:focus-visible {
+  color: var(--cyan-soft);
+  background: rgb(103 227 244 / 0.08);
+}
+.track-feedback-menu button:last-child:hover,
+.track-feedback-menu button:last-child:focus-visible {
+  color: #ffb4c0;
+  background: rgb(255 128 152 / 0.08);
+}
+.track-feedback-menu button:active { transform: scale(0.98); }
+.track-feedback-menu button > span { min-width: 0; display: grid; gap: 1px; }
+.track-feedback-menu strong { font-size: 11px; line-height: 1.2; }
+.track-feedback-menu small { color: var(--faint); font-size: 9px; line-height: 1.25; }
+@keyframes track-feedback-menu-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 760px) {
+  .shortcut-help-label { display: none; }
+  .shortcut-help-toggle { width: 34px; justify-content: center; padding: 0; }
+}
+
+@media (max-width: 680px) {
+  .track-feedback-menu { left: auto; right: 0; }
+  .track-feedback-menu::after { left: auto; right: 12px; }
+}
+
+/* Shortcuts are secondary room help, so they live with Room activity instead
+   of competing with the global search in the shared toolbar. */
+.activity-feed-panel > .panel-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.shortcut-help-activity {
+  margin-top: 2px;
+}
+.shortcut-help-activity .shortcut-help-popover {
+  top: calc(100% + 8px);
+}
+@media (max-width: 520px) {
+  .activity-feed-panel > .panel-title { gap: 8px; }
+  .shortcut-help-activity .shortcut-help-label { display: none; }
+  .shortcut-help-activity .shortcut-help-toggle { width: 34px; justify-content: center; padding: 0; }
+}

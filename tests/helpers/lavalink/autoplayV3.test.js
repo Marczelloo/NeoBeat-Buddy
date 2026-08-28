@@ -128,6 +128,27 @@ describe("Autoplay V3 AI-first selection", () => {
     assert.strictEqual(sameAsReference.rejected["recent-duplicate"], 1);
   });
 
+  it("rejects a listener-replaced autoplay pick even when another provider supplies it", () => {
+    const rejectedPick = {
+      info: { title: "Save Your Tears", author: "The Weeknd", identifier: "spotify-save-your-tears" },
+      userData: { autoplay: true },
+    };
+    const providerMirror = aiCandidate("Save Your Tears (Official Video)", "The Weeknd", {
+      identifier: "youtube-save-your-tears",
+      fit: 96,
+    });
+
+    const aiResult = filterAICandidates([providerMirror], context({ blockedTracks: [rejectedPick] }));
+    assert.deepStrictEqual(aiResult.ranked, []);
+    assert.strictEqual(aiResult.rejected["listener-rejected"], 1);
+
+    const fallbackResult = selectFallbackCandidates([
+      candidate("Save Your Tears", "The Weeknd", "youtube_mix", { identifier: "deezer-save-your-tears" }),
+    ], context({ blockedTracks: [rejectedPick] }));
+    assert.deepStrictEqual(fallbackResult.ranked, []);
+    assert.strictEqual(fallbackResult.rejected["listener-rejected"], 1);
+  });
+
   it("does not ban a recently skipped artist on the AI path (demotion happens at ordering)", () => {
     const skippedArtistPick = aiCandidate("Comeback Track", "Mata", { fit: 91, lane: "bridge" });
     const selectionContext = context({
@@ -272,6 +293,22 @@ describe("Autoplay V3 AI-first selection", () => {
     const { ranked, rejected } = selectFallbackCandidates([deezer], context());
     assert.strictEqual(ranked.length, 1);
     assert.deepStrictEqual(rejected, {});
+  });
+
+  it("uses a verified chart pick only as the Surprise me fallback", () => {
+    const chartPick = candidate("Current Chart Pick", "Popular Artist", "deezer_chart", {
+      identifier: "chart-pick",
+    });
+    chartPick.popularity = 92;
+    chartPick.chartPosition = 2;
+
+    const normal = selectFallbackCandidates([chartPick], context());
+    assert.deepStrictEqual(normal.ranked, []);
+    assert.strictEqual(normal.rejected["unrelated-source"], 1);
+
+    const surprise = selectFallbackCandidates([chartPick], context({ allowChartFallback: true }));
+    assert.strictEqual(surprise.ranked.length, 1);
+    assert.ok(surprise.ranked[0].score > 0);
   });
 
   it("keeps factual guards on the fallback ladder: skips, duplicates and streak caps", () => {

@@ -178,14 +178,51 @@ describe("Search result ranking", () => {
     assert.deepStrictEqual(filterPlayableSearchResults([clean, explicit], "2pac hit em up clean"), [clean]);
   });
 
-  it("prefers a matching catalog recording over the same YouTube upload metadata", () => {
+  it("keeps a matching YouTube recording ahead of the same Spotify recording in YouTube-first search", () => {
     const youtube = createTrack("Hit 'Em Up (Official Audio)", "2Pac - Topic", 95);
     youtube.info.sourceName = "youtube";
     const spotify = createTrack("Hit 'Em Up", "2Pac", 50);
     spotify.info.sourceName = "spotify";
 
     const ranked = rankSearchResults([youtube, spotify], "2pac hit em up");
-    assert.strictEqual(ranked[0].info.sourceName, "spotify");
+    assert.strictEqual(ranked[0].info.sourceName, "youtube");
+  });
+
+  it("shows one preferred Spotify or YouTube representative for provider copies of the same recording", () => {
+    const providers = ["soundcloud", "deezer", "youtube", "spotify"].map((source) => {
+      const track = createTrack("Hit 'Em Up", "2Pac", 80);
+      track.info.sourceName = source;
+      track.info.uri = `https://${source}.example/hit-em-up`;
+      return track;
+    });
+
+    const ranked = rankSearchResults(providers, "2pac hit em up");
+
+    assert.strictEqual(ranked.length, 1);
+    assert.strictEqual(ranked[0].info.sourceName, "youtube");
+  });
+
+  it("keeps a substantially better Deezer or SoundCloud match ahead of a loose preferred-provider result", () => {
+    const looseYoutube = createTrack("One More Time", "Random Uploader", 99);
+    looseYoutube.info.sourceName = "youtube";
+    const exactDeezer = createTrack("One More Time", "Daft Punk", 30);
+    exactDeezer.info.sourceName = "deezer";
+
+    const ranked = rankSearchResults([looseYoutube, exactDeezer], "daft punk one more time");
+
+    assert.strictEqual(ranked[0].info.sourceName, "deezer");
+    assert.strictEqual(ranked[0].info.author, "Daft Punk");
+  });
+
+  it("suppresses uploader-name and long-title noise after an exact one-word title match", () => {
+    const exactTrack = createTrack("Frascati", "Taco Hemingway", 50);
+    exactTrack.info.sourceName = "spotify";
+    const uploaderNoise = createTrack("Gloria - Vivaldi - Frascati", "Frascati", 99);
+    uploaderNoise.info.sourceName = "soundcloud";
+
+    const ranked = rankSearchResults([uploaderNoise, exactTrack], "frascati");
+
+    assert.deepStrictEqual(ranked.map((track) => track.info.title), ["Frascati"]);
   });
 
   it("excludes alternate-only results at the playback boundary", () => {
