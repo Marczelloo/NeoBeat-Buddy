@@ -54,7 +54,7 @@
   border-radius: 14px;
 }
 
-/* The plate. Number, name, surface — the same left-signature / right-note
+/* The plate. Name left, surface right — the same left-signature / right-note
    shape the response canvas head already uses, so an exhibit reads as part of
    this page rather than as an imported gallery. */
 .plate {
@@ -63,11 +63,6 @@
   gap: 10px;
   padding: 11px 14px;
   border-bottom: 1px solid var(--line);
-}
-
-.plate-no {
-  font-size: 10px;
-  color: var(--muted);
 }
 
 .plate b {

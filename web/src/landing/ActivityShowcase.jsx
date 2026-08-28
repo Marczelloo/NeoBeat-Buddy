@@ -11,13 +11,15 @@ import "./activity.css";
  * every cell is the same size tells you every frame matters the same amount,
  * which is never true.
  *
+ * The frames are not numbered. Nobody cites a landing page by figure number,
+ * so the index was decoration wearing the costume of a reference.
+ *
  * Each frame removes itself if its file is missing, so the section stays
  * correct when an asset has not been captured yet.
  */
 
 const LEAD = {
   file: "player.png",
-  index: "01",
   title: "The player",
   tag: "activity",
   alt: "The MewBit Activity: library, now playing, transport and the shared queue",
@@ -33,7 +35,6 @@ const INSET = {
 const PANELS = [
   {
     file: "search.png",
-    index: "02",
     title: "Search",
     tag: "activity",
     span: "is-wide",
@@ -41,7 +42,6 @@ const PANELS = [
   },
   {
     file: "lyrics.png",
-    index: "03",
     title: "Lyrics",
     tag: "activity",
     span: "is-narrow",
@@ -50,7 +50,6 @@ const PANELS = [
   },
   {
     file: "filters.png",
-    index: "04",
     title: "Effects",
     tag: "activity",
     span: "is-narrow",
@@ -59,7 +58,6 @@ const PANELS = [
   },
   {
     file: "equalizer.png",
-    index: "05",
     title: "Equalizer",
     tag: "activity",
     span: "is-wide",
@@ -69,7 +67,6 @@ const PANELS = [
 
 const EMBED = {
   file: "embed.png",
-  index: "06",
   title: "The message embed",
   tag: "text channel",
   small: true,
@@ -78,7 +75,6 @@ const EMBED = {
 function Plate({ shot }) {
   return (
     <div className="plate">
-      <span className="mono plate-no">{shot.index}</span>
       <b>{shot.title}</b>
       <span className="mono plate-tag">{shot.tag}</span>
     </div>

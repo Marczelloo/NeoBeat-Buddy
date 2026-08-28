@@ -42,36 +42,13 @@
   }
 }
 
-.hf-ring-lit {
-  animation: hf-ring 9s ease-in-out infinite alternate;
-}
-
-@keyframes hf-ring {
-  from {
-    opacity: 0.18;
-  }
-  to {
-    opacity: 0.44;
-  }
-}
-
-.hf-ring-ticks {
-  animation: hf-ticks 26s linear infinite;
-}
-
-@keyframes hf-ticks {
-  to {
-    stroke-dashoffset: -144;
-  }
-}
-
 .hf-head {
   animation: hf-sweep 11s linear infinite;
 }
 
 @keyframes hf-sweep {
   from {
-    transform: translateX(-160px);
+    transform: translateX(-200px);
   }
   to {
     transform: translateX(1440px);
@@ -1189,35 +1166,7 @@
 /* ---------- feature ledger ---------- */
 
 .ledger {
-  position: relative;
   margin-top: clamp(56px, 8vw, 92px);
-}
-
-.ledger-ring {
-  position: absolute;
-  top: -60px;
-  right: -14%;
-  width: min(880px, 92%);
-  height: 520px;
-  pointer-events: none;
-  z-index: -1;
-}
-
-.ringfield {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-/* The ring hangs past the gutter on wide screens on purpose. On narrow ones
-   that overhang is clipped content, not composition, so it comes back inside. */
-@media (max-width: 720px) {
-  .ledger-ring {
-    top: -30px;
-    right: 0;
-    width: 100%;
-    height: 360px;
-  }
 }
 
 .ledger h2 {

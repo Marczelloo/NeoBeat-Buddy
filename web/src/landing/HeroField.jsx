@@ -1,10 +1,10 @@
 /**
  * The hero plate, drawn from the Discord avatar rather than photographed.
  *
- * The avatar's composition is three things: a thin neon ring, a symmetric
- * waveform running through its centre, and near-black behind both. That is
- * what this draws — the same geometry at page scale, so the opening reads as
- * the brand instead of as stock atmosphere.
+ * What survives from the avatar is the part that means something: the
+ * symmetric waveform, magenta to the left and cyan to the right, on near-black.
+ * The ring went with it at first and has been taken out again — a glowing
+ * circle behind a headline is the default move, and it read as one.
  *
  * Everything is deterministic. `wobble` is a fixed-seed hash, not Math.random,
  * so the silhouette is identical on every render and every reload; a hero that
@@ -43,17 +43,6 @@ const BARS = Array.from({ length: BAR_COUNT }, (_, index) => {
   };
 });
 
-const SPARKS = Array.from({ length: 14 }, (_, index) => {
-  const angle = wobble(index + 200) * Math.PI * 2;
-  const radius = 268 + wobble(index + 300) * 132;
-  return {
-    cx: VIEW_W / 2 + Math.cos(angle) * radius * 1.9,
-    cy: AXIS + Math.sin(angle) * radius * 0.62,
-    r: 0.9 + wobble(index + 400) * 1.5,
-    o: 0.1 + wobble(index + 500) * 0.26,
-  };
-});
-
 export default function HeroField() {
   return (
     <svg
@@ -71,12 +60,6 @@ export default function HeroField() {
           <stop offset="34%" stopColor="var(--live)" />
           <stop offset="50%" stopColor="#ffffff" />
           <stop offset="66%" stopColor="var(--accent)" />
-          <stop offset="100%" stopColor="var(--accent)" />
-        </linearGradient>
-
-        <linearGradient id="hf-ring" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor="var(--live)" />
-          <stop offset="52%" stopColor="#ffffff" />
           <stop offset="100%" stopColor="var(--accent)" />
         </linearGradient>
 
@@ -107,55 +90,6 @@ export default function HeroField() {
       </defs>
 
       <g mask="url(#hf-mask)">
-        <g className="hf-rings">
-          <ellipse
-            cx={VIEW_W / 2}
-            cy={AXIS}
-            rx="470"
-            ry="272"
-            fill="none"
-            stroke="#ffffff"
-            strokeWidth="1"
-            opacity="0.05"
-          />
-          <ellipse
-            className="hf-ring-lit"
-            cx={VIEW_W / 2}
-            cy={AXIS}
-            rx="352"
-            ry="204"
-            fill="none"
-            stroke="url(#hf-ring)"
-            strokeWidth="1.25"
-            opacity="0.3"
-          />
-          <ellipse
-            className="hf-ring-ticks"
-            cx={VIEW_W / 2}
-            cy={AXIS}
-            rx="352"
-            ry="204"
-            fill="none"
-            stroke="#ffffff"
-            strokeWidth="1"
-            opacity="0.05"
-            strokeDasharray="2 10"
-          />
-        </g>
-
-        <g className="hf-sparks">
-          {SPARKS.map((spark, index) => (
-            <circle
-              key={index}
-              cx={spark.cx}
-              cy={spark.cy}
-              r={spark.r}
-              fill="#ffffff"
-              opacity={spark.o}
-            />
-          ))}
-        </g>
-
         <g className="hf-wave" opacity="0.45">
           {BARS.map((bar) => (
             <rect
@@ -173,7 +107,7 @@ export default function HeroField() {
         </g>
 
         {/* The playhead. One animated node standing in for "this is running". */}
-        <rect className="hf-head" x="0" y={AXIS - 150} width="150" height="300" fill="url(#hf-head)" />
+        <rect className="hf-head" x="0" y="0" width="190" height={VIEW_H} fill="url(#hf-head)" />
       </g>
 
       <rect width={VIEW_W} height={VIEW_H} fill="url(#hf-veil)" />
