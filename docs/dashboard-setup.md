@@ -21,6 +21,11 @@ serve the site:
 | Local development | `http://localhost:5174/api/dashboard/callback` |
 | Production | `https://your-domain.example/api/dashboard/callback` |
 
+Add **both** rows now, not one at a time. Discord accepts several redirect
+URIs on one application and picks by exact match at sign-in, so registering
+the local and production callbacks together means neither environment ever
+has to touch the portal again.
+
 The value must match `DASHBOARD_OAUTH_REDIRECT_URI` exactly, including scheme,
 port and trailing path. Discord rejects the sign-in otherwise.
 
@@ -41,9 +46,34 @@ Add to your `.env` (see `.env-example`):
 ```
 DASHBOARD_ENABLED=true
 DASHBOARD_PUBLIC_URL=http://localhost:5174
-DASHBOARD_OAUTH_REDIRECT_URI=http://localhost:8787/api/dashboard/callback
 DASHBOARD_SESSION_TTL_MS=604800000
 ```
+
+`DASHBOARD_OAUTH_REDIRECT_URI` is intentionally absent: it derives from
+`DASHBOARD_PUBLIC_URL`. Local and production then differ by that one
+variable — production sets `DASHBOARD_PUBLIC_URL=https://your-domain.example`
+and nothing else changes. Set the explicit variable only when the callback is
+served somewhere other than the site origin.
+
+Both values are trimmed and stripped of trailing slashes before use. Discord
+compares the redirect URI byte for byte and reports a mismatch as nothing but
+`invalid redirect_uri`, so a stray space in a `.env` line would otherwise be
+invisible.
+
+### Which URI is this deployment actually sending?
+
+The bot prints it on every start, next to the gateway line:
+
+```
+MewBit dashboard ready http://localhost:5174
+  redirect_uri=http://localhost:5174/api/dashboard/callback
+  register this exact URI under OAuth2 in the Discord Developer Portal
+```
+
+Copy that string into the portal rather than retyping it. If sign-in fails
+with `invalid redirect_uri`, compare the portal entry against this line
+first — that is the whole diagnosis, and Discord will not tell you which of
+the two it disliked.
 
 `CLIENT_ID` and `DISCORD_CLIENT_SECRET` are already required by the Activity
 and are reused here.

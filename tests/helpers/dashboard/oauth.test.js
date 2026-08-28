@@ -36,6 +36,59 @@ test("an http public url marks the deployment insecure so cookies drop Secure", 
   });
 });
 
+test("the redirect uri derives from the public url so a deployment sets one value", () => {
+  withEnv({ DASHBOARD_PUBLIC_URL: "https://mewbit.test", DASHBOARD_OAUTH_REDIRECT_URI: undefined }, () => {
+    assert.equal(getDashboardConfig().redirectUri, "https://mewbit.test/api/dashboard/callback");
+  });
+});
+
+test("a trailing slash or stray whitespace cannot reach Discord's byte-for-byte comparison", () => {
+  // Discord answers a mismatch with nothing but "invalid redirect_uri", so an
+  // invisible character in a .env line is otherwise very expensive to find.
+  withEnv({ DASHBOARD_PUBLIC_URL: "  https://mewbit.test/  ", DASHBOARD_OAUTH_REDIRECT_URI: undefined }, () => {
+    const config = getDashboardConfig();
+    assert.equal(config.publicUrl, "https://mewbit.test");
+    assert.equal(config.redirectUri, "https://mewbit.test/api/dashboard/callback");
+  });
+
+  withEnv({ DASHBOARD_OAUTH_REDIRECT_URI: " https://mewbit.test/api/dashboard/callback/ " }, () => {
+    assert.equal(getDashboardConfig().redirectUri, "https://mewbit.test/api/dashboard/callback");
+  });
+});
+
+test("an explicit redirect uri still overrides the derived one", () => {
+  withEnv({
+    DASHBOARD_PUBLIC_URL: "https://mewbit.test",
+    DASHBOARD_OAUTH_REDIRECT_URI: "https://gateway.mewbit.test/api/dashboard/callback",
+  }, () => {
+    assert.equal(getDashboardConfig().redirectUri, "https://gateway.mewbit.test/api/dashboard/callback");
+  });
+});
+
+test("the authorize url and the token exchange send the identical redirect uri", async () => {
+  // These must match byte for byte or Discord rejects the exchange after the
+  // user has already approved, which looks like a server fault rather than a
+  // configuration one. `withEnv` is synchronous, so the config is read inside
+  // it and the awaited work happens outside — awaiting in there would restore
+  // the environment before the assertions ran.
+  const config = withEnv(
+    { DASHBOARD_PUBLIC_URL: "https://mewbit.test", CLIENT_ID: "123", DISCORD_CLIENT_SECRET: "shh" },
+    () => getDashboardConfig()
+  );
+
+  const authorize = new URL(buildAuthorizeUrl("state-token", config));
+
+  let exchangedBody = null;
+  await exchangeCode("code-token", config, async (_url, init) => {
+    exchangedBody = new URLSearchParams(init.body);
+    return { ok: true, json: async () => ({ access_token: "token" }) };
+  });
+
+  assert.equal(config.redirectUri, "https://mewbit.test/api/dashboard/callback");
+  assert.equal(authorize.searchParams.get("redirect_uri"), config.redirectUri);
+  assert.equal(exchangedBody.get("redirect_uri"), config.redirectUri);
+});
+
 test("the dashboard can be switched off", () => {
   withEnv({ DASHBOARD_ENABLED: "false" }, () => {
     assert.equal(getDashboardConfig().enabled, false);

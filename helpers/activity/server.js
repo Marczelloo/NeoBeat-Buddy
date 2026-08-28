@@ -3,6 +3,7 @@ const http = require("node:http");
 const { URL } = require("node:url");
 const { WebSocketServer } = require("ws");
 
+const { getDashboardConfig } = require("../dashboard/oauth");
 const { createDashboardRouter } = require("../dashboard/routes");
 const djStore = require("../dj/store");
 const { getUserPresets } = require("../equalizer/customPresets");
@@ -1271,6 +1272,23 @@ function createActivityServer(client) {
       server.listen(config.port, config.host, () => {
         const actualPort = server.address()?.port || config.port;
         Log.success("MewBit Activity gateway ready", `http://${config.host}:${actualPort}`);
+
+        // Discord rejects a sign-in with nothing but "invalid redirect_uri",
+        // and never says which value it expected. Print the exact string this
+        // deployment will send, so registering it in the Developer Portal is
+        // a copy rather than a reconstruction.
+        const dashboard = getDashboardConfig();
+        if (dashboard.enabled) {
+          Log.info(
+            "MewBit dashboard ready",
+            dashboard.publicUrl,
+            `redirect_uri=${dashboard.redirectUri}`,
+            "register this exact URI under OAuth2 in the Discord Developer Portal"
+          );
+          if (!dashboard.clientId || !dashboard.clientSecret) {
+            Log.warning("Dashboard OAuth credentials are missing", "set CLIENT_ID and DISCORD_CLIENT_SECRET");
+          }
+        }
       });
       if (!listeningForPlayerChanges) {
         activityStateEvents.on("change", handlePlayerStateChange);

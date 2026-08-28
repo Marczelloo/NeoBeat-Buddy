@@ -4,13 +4,25 @@ function isFalse(value) {
   return ["0", "false", "off", "no"].includes(String(value ?? "").toLowerCase());
 }
 
+// Discord compares the redirect URI byte for byte against the list registered
+// on the application, and says only "invalid redirect_uri" when it does not
+// match. A trailing slash or a stray space picked up from a .env line is
+// therefore invisible and costs an afternoon, so normalise both ends here.
+function normalizeUrl(value) {
+  return String(value ?? "").trim().replace(/\/+$/, "");
+}
+
 function getDashboardConfig() {
-  const publicUrl = (process.env.DASHBOARD_PUBLIC_URL || "http://localhost:5174").replace(/\/+$/, "");
+  const publicUrl = normalizeUrl(process.env.DASHBOARD_PUBLIC_URL) || "http://localhost:5174";
+  const explicitRedirect = normalizeUrl(process.env.DASHBOARD_OAUTH_REDIRECT_URI);
 
   return {
     enabled: !isFalse(process.env.DASHBOARD_ENABLED ?? "true"),
     publicUrl,
-    redirectUri: process.env.DASHBOARD_OAUTH_REDIRECT_URI || `${publicUrl}/api/dashboard/callback`,
+    // Deriving from the public URL means a deployment only has to set one
+    // value; the explicit variable stays for layouts that serve the callback
+    // somewhere other than the site origin.
+    redirectUri: explicitRedirect || `${publicUrl}/api/dashboard/callback`,
     clientId: process.env.CLIENT_ID,
     clientSecret: process.env.ACTIVITY_CLIENT_SECRET || process.env.DISCORD_CLIENT_SECRET,
     secure: publicUrl.startsWith("https://"),
