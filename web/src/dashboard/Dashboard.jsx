@@ -73,7 +73,7 @@ export default function Dashboard() {
     <div className="dash">
       <header className="dash-top">
         <Link className="mark" to="/">
-          <Mark size={22} />
+          <Mark size={26} />
           MewBit
         </Link>
 

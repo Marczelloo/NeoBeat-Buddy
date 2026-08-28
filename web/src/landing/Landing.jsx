@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoUrl } from "../api.js";
 import ActivityShowcase from "./ActivityShowcase.jsx";
@@ -12,7 +12,31 @@ import { COMMANDS, DEFAULT_COMMAND_ID, filterCommands } from "./commands.js";
 import "./landing.css";
 
 export default function Landing() {
+  const groundRef = useRef(null);
   const [query, setQuery] = useState("");
+
+  // The hero art drifts a little slower than the page. Cheap, capped, and
+  // skipped entirely under reduced motion.
+  useEffect(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return undefined;
+
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const shift = Math.min(window.scrollY * 0.18, 90);
+        groundRef.current?.style.setProperty("--ground-shift", `${shift}px`);
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
   const [activeId, setActiveId] = useState(DEFAULT_COMMAND_ID);
 
   const visible = useMemo(() => filterCommands(query), [query]);
@@ -31,11 +55,11 @@ export default function Landing() {
   }
 
   return (
-    <main className="landing">
+    <main className="landing" ref={groundRef}>
       <div className="wrap">
         <header className="topbar">
           <span className="mark">
-            <Mark size={22} animated />
+            <Mark size={26} animated />
             MewBit
           </span>
 
