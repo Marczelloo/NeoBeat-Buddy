@@ -4,6 +4,7 @@ const Log = require("../logs/log");
 const { consumeRateLimit } = require("../security/rateLimit");
 const statsStore = require("../stats/store");
 const accessStore = require("./access");
+const { describeEmbedOptions, sendDashboardEmbed } = require("./embed");
 const {
   getDashboardConfig,
   buildAuthorizeUrl,
@@ -29,6 +30,7 @@ const MAX_BODY_SIZE = 32 * 1024;
 const PREFIX = "/api/dashboard";
 const SETTINGS_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/settings$/;
 const ACCESS_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/access$/;
+const EMBED_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/embed$/;
 const STATE_TTL_MS = 10 * 60 * 1000;
 const SESSION_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -417,6 +419,45 @@ function createDashboardRouter(client) {
           access: await describeAccess(client, guildId, session.userId),
           log: accessStore.getChangeLog(guildId, 50),
         });
+      }
+
+      throw Object.assign(new Error("Method not allowed."), { statusCode: 405 });
+    }
+
+    const embedMatch = EMBED_PATTERN.exec(url.pathname);
+    if (embedMatch) {
+      const guildId = embedMatch[1];
+      const session = requireSession(request);
+
+      if (!session.guilds.some((guild) => guild.id === guildId)) {
+        throw Object.assign(new Error("You are not a member of this server."), { statusCode: 403 });
+      }
+      await assertGuildAccess(client, guildId, session.userId);
+
+      if (request.method === "GET") {
+        enforceRateLimit(request, "read", 240, 60_000);
+        return sendJson(response, 200, { ok: true, options: describeEmbedOptions(client, guildId) });
+      }
+
+      if (request.method === "POST") {
+        assertSameOrigin(request, config);
+        // Far tighter than a settings write: this posts a visible message into
+        // a channel, so a mistake or an abused session is loud and permanent.
+        enforceRateLimit(request, "embed", 10, 60_000);
+
+        const body = await readJsonBody(request);
+        const sent = await sendDashboardEmbed(client, guildId, body);
+
+        accessStore.recordChange(guildId, {
+          userId: session.userId,
+          username: session.username,
+          section: "embed",
+          field: "message",
+          from: "not sent",
+          to: `posted in #${sent.channelName}`,
+        });
+
+        return sendJson(response, 200, { ok: true, sent });
       }
 
       throw Object.assign(new Error("Method not allowed."), { statusCode: 405 });

@@ -34,6 +34,9 @@ export const patchSettings = (guildId, patch) =>
 export const getAccess = (guildId) => call(`/api/dashboard/guilds/${guildId}/access`);
 export const putAccess = (guildId, operators) =>
   call(`/api/dashboard/guilds/${guildId}/access`, { method: "PUT", body: { operators } });
+export const getEmbedOptions = (guildId) => call(`/api/dashboard/guilds/${guildId}/embed`);
+export const postEmbed = (guildId, embed) =>
+  call(`/api/dashboard/guilds/${guildId}/embed`, { method: "POST", body: embed });
 export const getPublicStats = () => call("/api/dashboard/public/stats");
 export const logout = () => call("/api/dashboard/logout", { method: "POST" });
 

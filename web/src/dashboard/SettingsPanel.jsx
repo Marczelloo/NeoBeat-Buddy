@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getSettings, patchSettings } from "../api.js";
 import SaveState from "./SaveState.jsx";
 import AccessSection from "./sections/AccessSection.jsx";
+import EmbedSection from "./sections/EmbedSection.jsx";
 import EqualizerSection from "./sections/EqualizerSection.jsx";
 import LogsSection from "./sections/LogsSection.jsx";
 import { AnnouncementsSection, DjSection, PlayerSection, SourceSection } from "./sections/MusicSections.jsx";
@@ -37,6 +38,10 @@ const SECTION_COPY = {
     title: "Tickets",
     lead: "How members report bugs, request features, and send feedback.",
   },
+  embed: {
+    title: "Embeds",
+    lead: "Compose a message and post it to a channel as MewBit. Nothing is sent until you press Send.",
+  },
   access: {
     title: "Access",
     lead: "Who may change this server's settings here, and what they have changed.",
@@ -55,6 +60,7 @@ const SECTION_COMPONENTS = {
   announcements: AnnouncementsSection,
   logs: LogsSection,
   tickets: TicketsSection,
+  embed: EmbedSection,
   access: AccessSection,
   stats: StatsSection,
 };

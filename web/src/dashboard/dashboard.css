@@ -762,6 +762,107 @@ code.mono {
   color: var(--faint);
 }
 
+/* ---------- embed composer ---------- */
+
+.textarea {
+  min-height: 120px;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.6;
+}
+
+.composer-row {
+  display: grid;
+  gap: 5px;
+  justify-items: end;
+}
+
+.composer-row > .input {
+  width: 100%;
+}
+
+.counter {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.counter.is-near {
+  color: var(--muted-strong);
+}
+
+.panel-sent {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  outline: 1px solid rgba(103, 227, 244, 0.38);
+  font-size: 13px;
+  color: var(--muted-strong);
+}
+
+.panel-sent a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* A close-enough rendering of a Discord embed: the point is seeing the shape
+   and the stripe before posting, not pixel parity with the client. */
+.embed-preview {
+  position: relative;
+  max-width: 520px;
+  padding: 14px 16px 14px 20px;
+  border-radius: 8px;
+  background: var(--raised);
+  outline: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.embed-preview::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--embed-stripe, var(--accent));
+}
+
+.embed-author {
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-strong);
+}
+
+.embed-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.embed-description {
+  margin-top: 7px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--muted-strong);
+}
+
+.embed-image {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  border-radius: 6px;
+}
+
+.embed-footer {
+  margin-top: 11px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 900px) {

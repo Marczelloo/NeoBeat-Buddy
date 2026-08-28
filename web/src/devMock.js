@@ -190,6 +190,36 @@ export function installDevMock() {
       });
     }
 
+    if (/\/api\/dashboard\/guilds\/\d+\/embed/.test(url)) {
+      if (init.method === "POST") {
+        const body = JSON.parse(init.body);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        if (!body.channelId) return json({ ok: false, error: "Choose a channel to post in." }, 400);
+        const channel = CHANNELS.find((entry) => entry.id === body.channelId);
+        return json({
+          ok: true,
+          sent: { messageId: "1500000000000000001", url: "https://discord.com/channels/0/0/0", channelName: channel?.name || "unknown" },
+        });
+      }
+      return json({
+        ok: true,
+        options: {
+          // The third channel stands in for one MewBit cannot post in, so the
+          // blocked path is reachable without editing permissions in Discord.
+          channels: CHANNELS.map((entry, index) => ({ ...entry, canPost: index !== 2 })),
+          colors: [
+            { value: "#19E6FF", label: "MewBit cyan" },
+            { value: "#FF2BD6", label: "MewBit magenta" },
+            { value: "#5865F2", label: "Blurple" },
+            { value: "#57F287", label: "Green" },
+            { value: "#ED4245", label: "Red" },
+          ],
+          defaultColor: "#19E6FF",
+          limits: { title: 256, description: 4000, footer: 2048, author: 256 },
+        },
+      });
+    }
+
     const accessMatch = /\/api\/dashboard\/guilds\/(\d+)\/access/.exec(url);
     if (accessMatch) {
       const guildId = accessMatch[1];
