@@ -37,6 +37,11 @@ export const putAccess = (guildId, operators) =>
 export const getEmbedOptions = (guildId) => call(`/api/dashboard/guilds/${guildId}/embed`);
 export const postEmbed = (guildId, embed) =>
   call(`/api/dashboard/guilds/${guildId}/embed`, { method: "POST", body: embed });
+export const getServerPlaylists = (guildId) => call(`/api/dashboard/guilds/${guildId}/playlists`);
+export const patchServerPlaylist = (guildId, playlistId, patch) =>
+  call(`/api/dashboard/guilds/${guildId}/playlists/${playlistId}`, { method: "PATCH", body: patch });
+export const deleteServerPlaylist = (guildId, playlistId) =>
+  call(`/api/dashboard/guilds/${guildId}/playlists/${playlistId}`, { method: "DELETE" });
 export const getInstance = () => call("/api/dashboard/instance");
 export const getPublicStats = () => call("/api/dashboard/public/stats");
 export const logout = () => call("/api/dashboard/logout", { method: "POST" });

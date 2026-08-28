@@ -913,6 +913,116 @@ code.mono {
   color: var(--muted);
 }
 
+/* ---------- server playlists ---------- */
+
+.plists {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plist {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--raised);
+  outline: 1px solid var(--line);
+}
+
+.plist-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.plist-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.plist-text b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.plist-text small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.plist-desc {
+  margin-top: 6px !important;
+  color: var(--muted-strong) !important;
+}
+
+.plist-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn-ghost.is-danger:hover {
+  color: var(--danger);
+}
+
+.plist-edit {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.plist-tracks {
+  margin: 12px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  display: grid;
+  gap: 7px;
+}
+
+.plist-tracks li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.plist-num {
+  font-size: 10.5px;
+  color: var(--faint);
+  text-align: right;
+}
+
+.plist-track b {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted-strong);
+}
+
+.plist-track small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.plist-dur,
+.plist-empty {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.plist-empty {
+  margin-top: 12px;
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 900px) {

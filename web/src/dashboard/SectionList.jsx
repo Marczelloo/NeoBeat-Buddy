@@ -14,6 +14,7 @@ export const SECTION_GROUPS = [
       { id: "source", label: "Source", hint: "Default search provider" },
       { id: "equalizer", label: "Equalizer", hint: "Stored sound shaping" },
       { id: "dj", label: "DJ", hint: "Role gating and skip votes" },
+      { id: "playlists", label: "Playlists", hint: "Shared with the whole server" },
     ],
   },
   {

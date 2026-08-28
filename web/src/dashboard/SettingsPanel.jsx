@@ -6,6 +6,7 @@ import EmbedSection from "./sections/EmbedSection.jsx";
 import EqualizerSection from "./sections/EqualizerSection.jsx";
 import InstanceSection from "./sections/InstanceSection.jsx";
 import LogsSection from "./sections/LogsSection.jsx";
+import PlaylistsSection from "./sections/PlaylistsSection.jsx";
 import { AnnouncementsSection, DjSection, PlayerSection, SourceSection } from "./sections/MusicSections.jsx";
 import StatsSection from "./sections/StatsSection.jsx";
 import TicketsSection from "./sections/TicketsSection.jsx";
@@ -22,6 +23,10 @@ const SECTION_COPY = {
   equalizer: {
     title: "Equalizer",
     lead: "The sound shaping this server keeps. It is restored every time MewBit starts playing.",
+  },
+  playlists: {
+    title: "Playlists",
+    lead: "The playlists this server shares. Personal ones belong to their owner and are not shown here.",
   },
   dj: {
     title: "DJ",
@@ -74,6 +79,7 @@ const SECTION_COMPONENTS = {
   source: SourceSection,
   equalizer: EqualizerSection,
   dj: DjSection,
+  playlists: PlaylistsSection,
   announcements: AnnouncementsSection,
   logs: LogsSection,
   tickets: TicketsSection,

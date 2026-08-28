@@ -193,6 +193,7 @@ commands cannot drift apart.
 | Tickets | Notification channel | `/ticket admin setup` |
 | Tickets | Ping role | `/ticket admin setup` |
 
+| Playlists | Rename, describe and delete server playlists | `/playlist` (creator only) |
 | Embeds | Compose and post a message as MewBit | `/embed` |
 | Access | Who may use this dashboard | — (owner only) |
 
@@ -216,9 +217,14 @@ described under **Access control** below.
 - **Moderation.** `/mod` is entirely actions — kick, ban, timeout, purge — with
   no stored per-guild configuration, so there is nothing for a settings page to
   hold.
-- **Per-member preferences.** `/setup source me` and saved playlists belong to
-  a member, not a server, and this dashboard is scoped to servers you
-  administer.
+- **Personal playlists.** A member's own playlists belong to them. Only
+  playlists shared with the whole server (`/playlist create scope:Server`)
+  appear here, and personal ones are unreachable from the endpoint even by id.
+- **Adding tracks.** Putting a track into a playlist means resolving it against
+  a provider, which is the player's job — that stays in Discord and the
+  Activity. The dashboard renames, describes and deletes.
+- **Per-member preferences.** `/setup source me` belongs to a member, not a
+  server, and this dashboard is scoped to servers you administer.
 
 ### Two settings that are not simply stored
 
@@ -229,6 +235,12 @@ would leave the record disagreeing with reality:
   category and every channel in it, exactly as `/logs access` does. A role is
   recorded only once its overwrite actually landed; if Discord refuses, the
   save reports it and the role is not listed as having access.
+- **Server playlists** are the one place the dashboard is deliberately more
+  permissive than the slash command. `/playlist` lets only the creator edit or
+  delete, which is right between members — but it leaves the person running the
+  server unable to clear out a playlist whose author has left. The dashboard
+  module touches `data.server[guildId]` only, for a guild the caller already
+  administers, so the member-facing rules are untouched.
 - **The equalizer** is persisted as the server's stored filters *and* pushed to
   a running player when there is one. The stored copy is what `playback.js`
   restores on the next player, so a change made while nothing is playing is

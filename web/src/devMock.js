@@ -143,6 +143,7 @@ export function installDevMock() {
 
   const store = new Map();
   const accessStore = new Map();
+  const playlistStore = new Map();
   const realFetch = window.fetch;
 
   const json = (body, status = 200) =>
@@ -208,6 +209,68 @@ export function installDevMock() {
           version: "1.1.4",
         },
       });
+    }
+
+    const playlistMatch = /\/api\/dashboard\/guilds\/(\d+)\/playlists(?:\/([\w-]+))?/.exec(url);
+    if (playlistMatch) {
+      const guildId = playlistMatch[1];
+      const playlistId = playlistMatch[2];
+      if (!playlistStore.has(guildId)) {
+        // The third server has none, so the empty state is reachable.
+        playlistStore.set(
+          guildId,
+          guildId === GUILDS[2].id
+            ? []
+            : [
+                {
+                  id: "s-1",
+                  name: "Friday Night",
+                  description: "Loud things for the weekend",
+                  createdBy: "400000000000000001",
+                  createdByName: "Nova",
+                  trackCount: 2,
+                  durationMs: 621_000,
+                  tracks: [
+                    { title: "Loser", author: "Tame Impala", durationMs: 210_000 },
+                    { title: "Rosemary", author: "Deftones", durationMs: 411_000 },
+                  ],
+                },
+                {
+                  id: "s-2",
+                  name: "Study",
+                  description: "",
+                  createdBy: "400000000000000099",
+                  // Unresolved on purpose: the creator has left the server.
+                  createdByName: null,
+                  trackCount: 0,
+                  durationMs: 0,
+                  tracks: [],
+                },
+              ]
+        );
+      }
+
+      const list = playlistStore.get(guildId);
+
+      if (init.method === "DELETE") {
+        playlistStore.set(guildId, list.filter((playlist) => playlist.id !== playlistId));
+        await new Promise((resolve) => setTimeout(resolve, 240));
+      } else if (init.method === "PATCH") {
+        const patch = JSON.parse(init.body);
+        const name = String(patch.name || "").trim();
+        if (!name) return json({ ok: false, error: "A playlist needs a name." }, 400);
+        if (list.some((playlist) => playlist.id !== playlistId && playlist.name.toLowerCase() === name.toLowerCase())) {
+          return json({ ok: false, error: `This server already has a playlist called "${name}".` }, 400);
+        }
+        const target = list.find((playlist) => playlist.id === playlistId);
+        if (target) {
+          target.name = name;
+          target.description = patch.description || "";
+        }
+        await new Promise((resolve) => setTimeout(resolve, 240));
+      }
+
+      return json({ ok: true, playlists: playlistStore.get(guildId) });
     }
 
     if (/\/api\/dashboard\/guilds\/\d+\/embed/.test(url)) {

@@ -14,6 +14,7 @@ const {
   fetchOauthGuilds,
 } = require("./oauth");
 const { listManageableGuilds, assertGuildAccess, assertGuildOwner } = require("./permissions");
+const { listServerPlaylists, editServerPlaylist, deleteServerPlaylist } = require("./playlists");
 const {
   createSession,
   getSession,
@@ -32,6 +33,7 @@ const PREFIX = "/api/dashboard";
 const SETTINGS_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/settings$/;
 const ACCESS_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/access$/;
 const EMBED_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/embed$/;
+const PLAYLISTS_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/playlists(?:\/([A-Za-z0-9_-]{1,64}))?$/;
 const STATE_TTL_MS = 10 * 60 * 1000;
 const SESSION_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -457,6 +459,56 @@ function createDashboardRouter(client) {
           warningCount: (metrics.warnings || []).length,
         },
       });
+    }
+
+    const playlistMatch = PLAYLISTS_PATTERN.exec(url.pathname);
+    if (playlistMatch) {
+      const guildId = playlistMatch[1];
+      const playlistId = playlistMatch[2] || null;
+      const session = requireSession(request);
+
+      if (!session.guilds.some((guild) => guild.id === guildId)) {
+        throw Object.assign(new Error("You are not a member of this server."), { statusCode: 403 });
+      }
+      await assertGuildAccess(client, guildId, session.userId);
+
+      if (request.method === "GET" && !playlistId) {
+        enforceRateLimit(request, "read", 240, 60_000);
+        return sendJson(response, 200, { ok: true, playlists: await listServerPlaylists(client, guildId) });
+      }
+
+      if (request.method === "PATCH" && playlistId) {
+        assertSameOrigin(request, config);
+        enforceRateLimit(request, "write", 60, 60_000);
+        const patch = await readJsonBody(request);
+        const playlist = editServerPlaylist(guildId, playlistId, patch);
+        accessStore.recordChange(guildId, {
+          userId: session.userId,
+          username: session.username,
+          section: "playlists",
+          field: "playlist",
+          from: "edited",
+          to: playlist.name,
+        });
+        return sendJson(response, 200, { ok: true, playlists: await listServerPlaylists(client, guildId) });
+      }
+
+      if (request.method === "DELETE" && playlistId) {
+        assertSameOrigin(request, config);
+        enforceRateLimit(request, "write", 60, 60_000);
+        const removed = deleteServerPlaylist(guildId, playlistId);
+        accessStore.recordChange(guildId, {
+          userId: session.userId,
+          username: session.username,
+          section: "playlists",
+          field: "playlist",
+          from: `${removed.name} (${removed.trackCount} tracks)`,
+          to: "deleted",
+        });
+        return sendJson(response, 200, { ok: true, playlists: await listServerPlaylists(client, guildId) });
+      }
+
+      throw Object.assign(new Error("Method not allowed."), { statusCode: 405 });
     }
 
     const embedMatch = EMBED_PATTERN.exec(url.pathname);
