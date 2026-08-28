@@ -18,11 +18,18 @@ serve the site:
 
 | Environment | Redirect URI |
 |---|---|
-| Local development | `http://localhost:8787/api/dashboard/callback` |
+| Local development | `http://localhost:5174/api/dashboard/callback` |
 | Production | `https://your-domain.example/api/dashboard/callback` |
 
 The value must match `DASHBOARD_OAUTH_REDIRECT_URI` exactly, including scheme,
 port and trailing path. Discord rejects the sign-in otherwise.
+
+The local URI points at the Vite dev server, not at the gateway, because Vite
+proxies `/api` through to it. That keeps the page, the sign-in and every API
+call on one origin, which is what the write-origin check on `PATCH` compares
+against — so browse the dashboard at `localhost:5174`, not `127.0.0.1:5174`.
+Those are the same server but different origins, and only the first matches
+`DASHBOARD_PUBLIC_URL`.
 
 Scopes are requested at sign-in time and do not need configuring: `identify`
 and `guilds`.
@@ -45,7 +52,41 @@ and are reused here.
 used for the post-login redirect and for the write-origin check, so it must be
 the real public origin in production.
 
-## 3. Run it
+## 3. Run the bot stack locally
+
+The dashboard reads and writes through the running bot, so the bot has to be
+up before either surface shows anything. `docker-compose.local.yml` is a
+development overlay for that; it is never loaded automatically, so the base
+file the Raspberry Pi reads stays untouched.
+
+```bash
+pnpm local:up
+```
+
+It differs from the base compose file in three ways, all of them wrong to put
+in the base file:
+
+- The bot is **built from this checkout** instead of pulling the published
+  arm64 image, so local changes are what actually runs.
+- The gateway is published on **8787**, which is what `web/vite.config.js`
+  proxies `/api` to. The base file keeps it on 8788 to stay clear of the
+  dashboard runner on the Pi.
+- `helpers/`, `commands/`, `events/` and `index.js` are **bind-mounted**, so a
+  backend edit needs a restart rather than a rebuild:
+
+```bash
+pnpm local:restart
+```
+
+That is about seven seconds. `node_modules` is deliberately not mounted: the
+host tree is installed for Windows, and the image's own copy is the one that
+matches the container runtime. Changing a dependency does need `pnpm local:up`
+again.
+
+`pnpm local:logs` follows the bot, `pnpm local:down` stops everything.
+
+## 4. Run the web app
+
 
 ```bash
 pnpm web:dev
@@ -66,7 +107,7 @@ the gateway, or on a separate host with `/api` proxied to the gateway — the
 OAuth redirect URI differs between those two layouts, so pick one and set
 `DASHBOARD_OAUTH_REDIRECT_URI` to match.
 
-## 4. Working on the dashboard without Discord
+## 5. Working on the dashboard without Discord
 
 The dashboard needs a real Discord session to show anything. For UI work
 without one, append `?mock=1` in development:

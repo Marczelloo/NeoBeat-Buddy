@@ -12,3 +12,14 @@ env/
 .env
 .env.*
 !.env-example
+
+# Scratch checkouts and experiment trees. They are not part of the running
+# bot, and one of them alone is 12k files of build context.
+.codex-tmp-*
+activity-next
+activity/redesigns
+.impeccable
+web/dist
+web/node_modules
+docs
+tests

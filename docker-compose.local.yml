@@ -1,0 +1,32 @@
+# Local development overlay. Never loaded automatically — pass it explicitly:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# The base file pulls a published arm64 image built for the Raspberry Pi and
+# keeps the gateway on 8788 so it does not collide with the dashboard runner
+# there. Neither is right on a workstation, so both are replaced here rather
+# than edited in the file the Pi also reads.
+services:
+  bot:
+    # Build this checkout instead of pulling the published image, so local
+    # changes are what actually runs.
+    image: mewbit/neo-beat-buddy:local
+    build:
+      context: .
+      dockerfile: dockerfile
+    ports:
+      # 8787 is what web/vite.config.js proxies /api to by default. Compose
+      # appends to the base list rather than replacing it, so the gateway ends
+      # up published on both 8787 and the base file's 8788. Harmless locally.
+      - "127.0.0.1:8787:8787"
+    volumes:
+      # Source is bind-mounted so a restart picks up an edit without a rebuild.
+      # node_modules is deliberately not mounted: the host tree is installed for
+      # Windows, and the image's own copy is the one that matches the runtime.
+      - ./helpers:/app/helpers
+      - ./commands:/app/commands
+      - ./events:/app/events
+      - ./index.js:/app/index.js
+    environment:
+      # Readable logs while working locally.
+      FAST_LOGS: "1"
