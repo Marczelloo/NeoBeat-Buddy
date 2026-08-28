@@ -164,6 +164,26 @@ export function installDevMock() {
   window.fetch = async (input, init = {}) => {
     const url = String(input);
 
+    if (url.includes("/api/dashboard/instance")) {
+      return json({
+        ok: true,
+        instance: {
+          healthy: false,
+          issues: ["Elevated memory usage: 78.4%"],
+          version: "1.1.4",
+          uptime: "3d 4h 12m",
+          uptimeMs: 274_320_000,
+          servers: 3,
+          lavalink: { connected: true, lastCheck: Date.now(), reconnects: 2, latency: 34 },
+          performance: { lastMemoryUsage: { heapUsed: "184.2 MB", heapTotal: "235.0 MB" }, eventLoopLag: 3 },
+          commands: { total: 4187, successful: 4102, failed: 85 },
+          tracks: { played: 3910, failed: 41, skipped: 612 },
+          errorCount: 7,
+          warningCount: 23,
+        },
+      });
+    }
+
     if (url.includes("/api/dashboard/public/stats")) {
       return json({
         ok: true,

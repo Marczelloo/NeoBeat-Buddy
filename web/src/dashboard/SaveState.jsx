@@ -5,7 +5,7 @@ import { Check, CircleNotch } from "@phosphor-icons/react";
  * reports what reached the bot; the field itself carries the mark. It has a
  * resting line so the foot of the column always says where changes go.
  */
-export default function SaveState({ state, guildName }) {
+export default function SaveState({ state, guildName, autosaves = true }) {
   if (state === "saving") {
     return (
       <footer className="savebar" role="status" aria-live="polite">
@@ -26,7 +26,9 @@ export default function SaveState({ state, guildName }) {
 
   return (
     <footer className="savebar is-resting">
-      Changes save as you make them.
+      {/* Statistics and Instance only report, and the embed composer waits for
+          Send. Promising autosave on any of those would be a plain lie. */}
+      {autosaves ? "Changes save as you make them." : null}
       {guildName ? <span className="savebar-guild">{guildName}</span> : null}
     </footer>
   );

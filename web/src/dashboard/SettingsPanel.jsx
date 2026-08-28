@@ -4,6 +4,7 @@ import SaveState from "./SaveState.jsx";
 import AccessSection from "./sections/AccessSection.jsx";
 import EmbedSection from "./sections/EmbedSection.jsx";
 import EqualizerSection from "./sections/EqualizerSection.jsx";
+import InstanceSection from "./sections/InstanceSection.jsx";
 import LogsSection from "./sections/LogsSection.jsx";
 import { AnnouncementsSection, DjSection, PlayerSection, SourceSection } from "./sections/MusicSections.jsx";
 import StatsSection from "./sections/StatsSection.jsx";
@@ -46,11 +47,27 @@ const SECTION_COPY = {
     title: "Access",
     lead: "Who may change this server's settings here, and what they have changed.",
   },
+  instance: {
+    title: "Instance",
+    lead: "How the bot process itself is doing. This is the whole instance, not just this server.",
+  },
   stats: {
     title: "Statistics",
     lead: "What this server has listened to. Nothing here can be changed.",
   },
 };
+
+/* Sections whose controls write on change. The rest either only report, or
+   wait for an explicit action. */
+const AUTOSAVING_SECTIONS = new Set([
+  "player",
+  "source",
+  "equalizer",
+  "dj",
+  "announcements",
+  "logs",
+  "tickets",
+]);
 
 const SECTION_COMPONENTS = {
   player: PlayerSection,
@@ -63,6 +80,7 @@ const SECTION_COMPONENTS = {
   embed: EmbedSection,
   access: AccessSection,
   stats: StatsSection,
+  instance: InstanceSection,
 };
 
 export default function SettingsPanel({ guildId, section, sectionLabel, guildName }) {
@@ -192,7 +210,7 @@ export default function SettingsPanel({ guildId, section, sectionLabel, guildNam
         />
       </div>
 
-      <SaveState state={saveState} guildName={guildName} />
+      <SaveState state={saveState} guildName={guildName} autosaves={AUTOSAVING_SECTIONS.has(section)} />
     </section>
   );
 }

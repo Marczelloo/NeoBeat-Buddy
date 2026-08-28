@@ -30,7 +30,10 @@ export const SECTION_GROUPS = [
   {
     id: "insight",
     label: "Insight",
-    sections: [{ id: "stats", label: "Statistics", hint: "This server's listening history" }],
+    sections: [
+      { id: "stats", label: "Statistics", hint: "This server's listening history" },
+      { id: "instance", label: "Instance", hint: "Health of the bot itself" },
+    ],
   },
 ];
 

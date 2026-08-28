@@ -1,6 +1,7 @@
 const { randomBytes } = require("node:crypto");
 const { version: packageVersion } = require("../../package.json");
 const Log = require("../logs/log");
+const health = require("../monitoring/health");
 const { consumeRateLimit } = require("../security/rateLimit");
 const statsStore = require("../stats/store");
 const accessStore = require("./access");
@@ -422,6 +423,40 @@ function createDashboardRouter(client) {
       }
 
       throw Object.assign(new Error("Method not allowed."), { statusCode: 405 });
+    }
+
+    if (request.method === "GET" && url.pathname === `${PREFIX}/instance`) {
+      enforceRateLimit(request, "read", 240, 60_000);
+      const session = requireSession(request);
+      // Instance-wide, so it is deliberately available to anyone who can reach
+      // any server's dashboard — but it carries no error *text*. Messages can
+      // quote content from other servers, and an operator here was trusted with
+      // one server, not with all of them.
+      if (!listManageableGuilds(client, session.guilds, session.userId).length) {
+        throw Object.assign(new Error("You do not manage any server MewBit is in."), { statusCode: 403 });
+      }
+
+      const metrics = health.getMetrics();
+      const status = health.getHealthStatus();
+
+      return sendJson(response, 200, {
+        ok: true,
+        instance: {
+          healthy: status.healthy,
+          issues: status.issues,
+          version: packageVersion,
+          uptime: metrics.uptime,
+          uptimeMs: metrics.uptimeMs,
+          servers: client?.guilds?.cache?.size ?? 0,
+          lavalink: metrics.lavalink,
+          performance: metrics.performance,
+          commands: metrics.commands,
+          tracks: metrics.tracks,
+          // Counts only, for the reason above.
+          errorCount: (metrics.errors || []).length,
+          warningCount: (metrics.warnings || []).length,
+        },
+      });
     }
 
     const embedMatch = EMBED_PATTERN.exec(url.pathname);

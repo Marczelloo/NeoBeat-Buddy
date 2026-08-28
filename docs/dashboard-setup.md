@@ -193,10 +193,19 @@ commands cannot drift apart.
 | Tickets | Notification channel | `/ticket admin setup` |
 | Tickets | Ping role | `/ticket admin setup` |
 
+| Embeds | Compose and post a message as MewBit | `/embed` |
 | Access | Who may use this dashboard | — (owner only) |
 
-Statistics is read-only: it reports this server's listening history and changes
-nothing. Access is owner-only and is described under **Access control** below.
+Statistics and Instance are read-only. Statistics reports this server's
+listening history; Instance reports the health of the bot process itself —
+uptime, memory, Lavalink latency, counters — and is the same for every server,
+because it describes the deployment rather than the guild. It carries error and
+warning *counts* but never their text, which can quote content from other
+servers.
+
+Embeds acts rather than configures: nothing is sent until Send is pressed, and
+it is the only section that does not autosave. Access is owner-only and is
+described under **Access control** below.
 
 ### What the dashboard deliberately will not do
 

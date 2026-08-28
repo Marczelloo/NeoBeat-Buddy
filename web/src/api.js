@@ -37,6 +37,7 @@ export const putAccess = (guildId, operators) =>
 export const getEmbedOptions = (guildId) => call(`/api/dashboard/guilds/${guildId}/embed`);
 export const postEmbed = (guildId, embed) =>
   call(`/api/dashboard/guilds/${guildId}/embed`, { method: "POST", body: embed });
+export const getInstance = () => call("/api/dashboard/instance");
 export const getPublicStats = () => call("/api/dashboard/public/stats");
 export const logout = () => call("/api/dashboard/logout", { method: "POST" });
 
