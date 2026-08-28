@@ -827,7 +827,7 @@
 }
 
 .ledger-side h3 {
-  font-size: clamp(19px, 2vw, 24px);
+  font-size: clamp(19px, 2vw, 23px);
   font-weight: 800;
   letter-spacing: -0.028em;
   color: var(--text);
