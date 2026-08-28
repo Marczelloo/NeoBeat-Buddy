@@ -193,8 +193,10 @@ commands cannot drift apart.
 | Tickets | Notification channel | `/ticket admin setup` |
 | Tickets | Ping role | `/ticket admin setup` |
 
-Statistics is the one read-only section: it reports this server's listening
-history and changes nothing.
+| Access | Who may use this dashboard | — (owner only) |
+
+Statistics is read-only: it reports this server's listening history and changes
+nothing. Access is owner-only and is described under **Access control** below.
 
 ### What the dashboard deliberately will not do
 
@@ -229,32 +231,49 @@ save.
 
 ## Access control
 
-A visitor sees a server only when both are true: they hold **Administrator**
-on it, and the bot is in it.
+**The server owner, and the people the owner names. Nobody else.**
 
-The OAuth `guilds` scope only decides what the server rail renders. Every read
-and every write of a guild's settings independently re-verifies the member
-against the live Discord client — `assertGuildAdmin` fetches the member and
-checks owner-or-Administrator on each request. A permission claim from the
-browser is never trusted, and the guild list captured at login is never
-sufficient on its own. An admin demoted after signing in is refused on their
-next request, because the bot runs with the `GuildMembers` intent and Discord
-pushes role changes into the member cache.
+Discord's Administrator permission grants nothing here. On most servers it is
+handed out far more widely than "may change how the bot behaves for everyone",
+and those are not the same authority.
 
-### What this means in practice
+- The owner always has access, and cannot be removed from it.
+- The owner may name up to 25 **operators**, who can then change every setting
+  for that server.
+- Only the owner can change that list. An operator cannot promote anyone,
+  including themselves.
+- A named operator who leaves the server loses access immediately; the entry
+  stays visible so the owner can see why.
+- Ownership is read from the live guild on every request, so transferring a
+  server moves dashboard control with it at once.
 
-**Administrator is the whole gate.** Anyone who holds it on a server can change
-every setting on this page. That is the same authority `/setup`, `/dj` and
-`/logs` already require in Discord, so the dashboard grants nothing new — but
-if a server hands Administrator out widely, it has handed out the dashboard
-too. There is currently no owner-only mode and no per-section restriction.
+### An operator does not need Administrator
 
-**Nothing records who changed what.** The Activity keeps an action feed; the
-dashboard does not. With several administrators there is no way to attribute a
-change after the fact.
+This is the deliberate trade, and the Access section says so in the interface
+rather than burying it here: naming someone grants them settings access that
+the equivalent slash commands would refuse them. It is how you delegate the
+bot without handing over the server — and it is why only the owner holds the
+list.
 
-Both are deliberate omissions rather than oversights, and both are cheap to add
-if a server needs them.
+### Everything is verified per request
+
+The OAuth `guilds` scope is not filtered by permission, because an operator
+needs none; it only establishes that the visitor is a member. Which servers
+appear, and whether any given read or write is allowed, is decided server-side
+on every request against the live Discord client. A permission claim from the
+browser is never trusted, and the guild list captured at sign-in is never
+sufficient on its own.
+
+### Every change is attributed
+
+Each write through the dashboard is recorded: who, when, which setting, and
+the value before and after. The trail lives in the Access section, alongside
+the list of who can make changes — the same question asked after the fact.
+
+Entries are diffed from the settings before and after the write rather than
+taken from the request, so a value the server clamped or refused is never
+recorded as though it applied. The last 200 changes per server are kept.
+Changes made with slash commands in Discord are not recorded.
 
 ### Request hardening
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSettings, patchSettings } from "../api.js";
 import SaveState from "./SaveState.jsx";
+import AccessSection from "./sections/AccessSection.jsx";
 import EqualizerSection from "./sections/EqualizerSection.jsx";
 import LogsSection from "./sections/LogsSection.jsx";
 import { AnnouncementsSection, DjSection, PlayerSection, SourceSection } from "./sections/MusicSections.jsx";
@@ -36,6 +37,10 @@ const SECTION_COPY = {
     title: "Tickets",
     lead: "How members report bugs, request features, and send feedback.",
   },
+  access: {
+    title: "Access",
+    lead: "Who may change this server's settings here, and what they have changed.",
+  },
   stats: {
     title: "Statistics",
     lead: "What this server has listened to. Nothing here can be changed.",
@@ -50,6 +55,7 @@ const SECTION_COMPONENTS = {
   announcements: AnnouncementsSection,
   logs: LogsSection,
   tickets: TicketsSection,
+  access: AccessSection,
   stats: StatsSection,
 };
 
@@ -171,6 +177,7 @@ export default function SettingsPanel({ guildId, section, sectionLabel, guildNam
         ))}
 
         <Section
+          guildId={guildId}
           settings={settings}
           commit={commit}
           savedField={savedField}

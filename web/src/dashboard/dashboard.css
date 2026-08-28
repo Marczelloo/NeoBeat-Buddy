@@ -630,6 +630,138 @@ code.mono {
   color: var(--text);
 }
 
+/* ---------- access list ---------- */
+
+.owner-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.people {
+  display: grid;
+  gap: 1px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+  border-radius: 12px;
+  background: var(--line);
+  outline: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 15px;
+  background: var(--raised);
+}
+
+.person-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.person-text b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.person-text small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Named, but no longer in the server. The access has already lapsed; the row
+   stays so the owner can see why rather than wondering. */
+.person.is-gone .person-text b {
+  color: var(--muted);
+}
+
+.addrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.input {
+  flex: 1;
+  min-width: 180px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--raised);
+  outline: 1px solid var(--line);
+  border: 0;
+  font-size: 13px;
+  color: var(--text);
+  transition: outline-color 0.15s var(--ease);
+}
+
+.input::placeholder {
+  color: var(--faint);
+}
+
+.input:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+.addrow-hint {
+  margin-top: 9px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ---------- change trail ---------- */
+
+.trail {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 12px;
+  background: var(--line);
+  outline: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.trail-item {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 14px;
+  padding: 11px 15px;
+  background: var(--raised);
+}
+
+.trail-when {
+  font-size: 10.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.trail-what {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.trail-what b {
+  font-weight: 600;
+  color: var(--muted-strong);
+}
+
+.trail-what small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 900px) {
@@ -716,6 +848,11 @@ code.mono {
     justify-self: stretch;
     max-width: none;
     margin-top: 12px;
+  }
+
+  .trail-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
   }
 }
 

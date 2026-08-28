@@ -142,6 +142,7 @@ export function installDevMock() {
   if (!new URLSearchParams(window.location.search).has("mock")) return;
 
   const store = new Map();
+  const accessStore = new Map();
   const realFetch = window.fetch;
 
   const json = (body, status = 200) =>
@@ -189,6 +190,52 @@ export function installDevMock() {
       });
     }
 
+    const accessMatch = /\/api\/dashboard\/guilds\/(\d+)\/access/.exec(url);
+    if (accessMatch) {
+      const guildId = accessMatch[1];
+      if (!accessStore.has(guildId)) {
+        accessStore.set(guildId, {
+          // The third server stands in for one the visitor does not own, so the
+          // read-only view of this section is reachable too.
+          viewerIsOwner: guildId !== GUILDS[2].id,
+          operators: guildId === GUILDS[0].id ? [{ id: "400000000000000001", name: "Nova", present: true }] : [],
+          log: [],
+        });
+      }
+      const entry = accessStore.get(guildId);
+
+      if (init.method === "PUT") {
+        if (!entry.viewerIsOwner) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          return json({ ok: false, error: "Only the server owner can change who may use the dashboard." }, 403);
+        }
+        const wanted = JSON.parse(init.body).operators || [];
+        const before = entry.operators.map((operator) => operator.id);
+        entry.operators = wanted.map(
+          (id) => entry.operators.find((operator) => operator.id === id) || { id, name: `Member ${id.slice(-4)}`, present: true }
+        );
+        for (const id of wanted.filter((value) => !before.includes(value))) {
+          entry.log.unshift({ at: new Date().toISOString(), username: "Marczelloo", section: "access", field: "operator", from: "no access", to: `dashboard access for ${id}` });
+        }
+        for (const id of before.filter((value) => !wanted.includes(value))) {
+          entry.log.unshift({ at: new Date().toISOString(), username: "Marczelloo", section: "access", field: "operator", from: "dashboard access", to: `no access for ${id}` });
+        }
+        await new Promise((resolve) => setTimeout(resolve, 240));
+      }
+
+      return json({
+        ok: true,
+        access: {
+          ownerId: "400000000000000000",
+          ownerName: entry.viewerIsOwner ? "Marczelloo" : "Someone else",
+          viewerIsOwner: entry.viewerIsOwner,
+          operators: entry.operators,
+          maxOperators: 25,
+        },
+        log: entry.log,
+      });
+    }
+
     if (url.includes("/api/dashboard/me")) {
       return json({ ok: true, user: { id: "u1", username: "Marczelloo", avatar: null }, guilds: GUILDS });
     }
@@ -227,6 +274,24 @@ export function installDevMock() {
         // Mirror the gateway's rule rather than letting the mock drift from it.
         if (current.logs && !Object.values(current.logs.categories).some(Boolean)) current.logs.enabled = false;
         if (current.equalizer && patch.equalizer?.bands) current.equalizer.preset = "custom";
+
+        // Mirror the gateway attributing every write, so the Access section has
+        // something to show without hand-editing the mock.
+        const entry = accessStore.get(guildId);
+        if (entry) {
+          for (const [section, values] of Object.entries(patch)) {
+            for (const [field, value] of Object.entries(values)) {
+              entry.log.unshift({
+                at: new Date().toISOString(),
+                username: "Marczelloo",
+                section,
+                field,
+                from: "previous",
+                to: typeof value === "boolean" ? (value ? "on" : "off") : String(value).slice(0, 40),
+              });
+            }
+          }
+        }
         await new Promise((resolve) => setTimeout(resolve, 240));
       }
 

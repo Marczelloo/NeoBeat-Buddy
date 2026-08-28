@@ -3,6 +3,7 @@ const { version: packageVersion } = require("../../package.json");
 const Log = require("../logs/log");
 const { consumeRateLimit } = require("../security/rateLimit");
 const statsStore = require("../stats/store");
+const accessStore = require("./access");
 const {
   getDashboardConfig,
   buildAuthorizeUrl,
@@ -10,7 +11,7 @@ const {
   fetchOauthUser,
   fetchOauthGuilds,
 } = require("./oauth");
-const { listManageableGuilds, hasAdminFromOauthGuild, assertGuildAdmin } = require("./permissions");
+const { listManageableGuilds, assertGuildAccess, assertGuildOwner } = require("./permissions");
 const {
   createSession,
   getSession,
@@ -27,6 +28,7 @@ const { readGuildSettings, applyGuildSettings } = require("./settings");
 const MAX_BODY_SIZE = 32 * 1024;
 const PREFIX = "/api/dashboard";
 const SETTINGS_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/settings$/;
+const ACCESS_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/access$/;
 const STATE_TTL_MS = 10 * 60 * 1000;
 const SESSION_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -120,6 +122,104 @@ function assertSameOrigin(request, config) {
   }
 }
 
+/* Rendered for the trail, not for replay. A boolean reads as on/off, and an
+   id is shown as the name it refers to where the guild still knows one. */
+function renderValue(guild, value) {
+  if (value === null || value === undefined || value === "") return "not set";
+  if (typeof value === "boolean") return value ? "on" : "off";
+  if (Array.isArray(value)) return value.length ? `${value.length} selected` : "none";
+  if (typeof value === "object") return JSON.stringify(value).slice(0, 120);
+
+  const text = String(value);
+  if (/^\d{5,25}$/.test(text)) {
+    const channel = guild?.channels?.cache?.get(text);
+    if (channel) return `#${channel.name}`;
+    const role = guild?.roles?.cache?.get(text);
+    if (role) return `@${role.name}`;
+  }
+  return text.slice(0, 120);
+}
+
+/**
+ * Records one entry per field the patch actually moved.
+ *
+ * Diffing before against after, rather than trusting the patch, means a value
+ * the server clamped or refused is never written down as though it applied —
+ * the equalizer clamps gains, and turning the last log category off also turns
+ * logging off.
+ */
+function recordSettingsChanges(guild, guildId, session, before, after, patch) {
+  for (const section of Object.keys(patch || {})) {
+    const from = before?.[section];
+    const to = after?.[section];
+    if (!from || !to || typeof from !== "object") continue;
+
+    for (const field of Object.keys(to)) {
+      // Derived and read-only members of a section are not changes anyone made.
+      if (["presets", "frequencies", "minGain", "maxGain", "configured", "openCount", "totalCount"].includes(field)) {
+        continue;
+      }
+      const wasValue = from[field];
+      const isValue = to[field];
+      if (JSON.stringify(wasValue) === JSON.stringify(isValue)) continue;
+
+      accessStore.recordChange(guildId, {
+        userId: session.userId,
+        username: session.username,
+        section,
+        field,
+        from: renderValue(guild, wasValue),
+        to: renderValue(guild, isValue),
+      });
+    }
+  }
+}
+
+function recordAccessChange(guildId, session, previous, operators) {
+  const added = operators.filter((id) => !previous.includes(id));
+  const removed = previous.filter((id) => !operators.includes(id));
+  for (const [ids, verb] of [[added, "granted"], [removed, "revoked"]]) {
+    for (const id of ids) {
+      accessStore.recordChange(guildId, {
+        userId: session.userId,
+        username: session.username,
+        section: "access",
+        field: "operator",
+        from: verb === "granted" ? "no access" : "dashboard access",
+        to: verb === "granted" ? `dashboard access for ${id}` : `no access for ${id}`,
+      });
+    }
+  }
+}
+
+/** The operator list, resolved to names the owner will recognise. */
+async function describeAccess(client, guildId, viewerId) {
+  const guild = client?.guilds?.cache?.get(guildId);
+  const operatorIds = accessStore.getOperators(guildId);
+  const operators = [];
+
+  for (const id of operatorIds) {
+    const member = await guild?.members?.fetch(id).catch(() => null);
+    operators.push({
+      id,
+      name: member?.user?.globalName || member?.user?.username || "Unknown member",
+      // A named operator who has left keeps the entry but not the access, so
+      // the owner can see why someone stopped being able to sign in.
+      present: Boolean(member),
+    });
+  }
+
+  const owner = await guild?.members?.fetch(guild.ownerId).catch(() => null);
+
+  return {
+    ownerId: guild?.ownerId ?? null,
+    ownerName: owner?.user?.globalName || owner?.user?.username || "the server owner",
+    viewerIsOwner: guild?.ownerId === viewerId,
+    operators,
+    maxOperators: accessStore.MAX_OPERATORS,
+  };
+}
+
 function createDashboardRouter(client) {
   async function route(request, response, url) {
     const config = getDashboardConfig();
@@ -156,12 +256,11 @@ function createDashboardRouter(client) {
         username: user.global_name || user.username || "Discord user",
         avatar: user.avatar || null,
         accessToken: token.access_token,
-        guilds: guilds.filter(hasAdminFromOauthGuild).map((guild) => ({
-          id: guild.id,
-          name: guild.name,
-          permissions: guild.permissions,
-          owner: guild.owner,
-        })),
+        // Every guild the visitor is in, unfiltered. An operator needs no
+        // Discord permission to qualify, so filtering by Administrator here
+        // would hide exactly the servers they were named for. This list only
+        // establishes membership; access is decided per request.
+        guilds: guilds.map((guild) => ({ id: guild.id, name: guild.name })),
       });
 
       return redirect(response, `${config.publicUrl}/dashboard`, {
@@ -184,7 +283,7 @@ function createDashboardRouter(client) {
       return sendJson(response, 200, {
         ok: true,
         user: { id: session.userId, username: session.username, avatar: session.avatar },
-        guilds: listManageableGuilds(client, session.guilds),
+        guilds: listManageableGuilds(client, session.guilds, session.userId),
       });
     }
 
@@ -229,9 +328,9 @@ function createDashboardRouter(client) {
       const session = requireSession(request);
 
       if (!session.guilds.some((guild) => guild.id === guildId)) {
-        throw Object.assign(new Error("You need Administrator permission in this server."), { statusCode: 403 });
+        throw Object.assign(new Error("You are not a member of this server."), { statusCode: 403 });
       }
-      await assertGuildAdmin(client, guildId, session.userId);
+      const { role } = await assertGuildAccess(client, guildId, session.userId);
 
       if (request.method === "GET") {
         // Authenticated, but not free: this reads five stores and enumerates
@@ -244,11 +343,80 @@ function createDashboardRouter(client) {
         assertSameOrigin(request, config);
         enforceRateLimit(request, "write", 60, 60_000);
         const patch = await readJsonBody(request);
+        const before = readGuildSettings(client, guildId);
         // A patch can partly succeed: a log access role Discord refused does
         // not invalidate the settings saved alongside it. Warnings carry that
         // back so the UI can say what did not land instead of implying all did.
         const { settings, warnings } = await applyGuildSettings(guildId, patch, client);
-        return sendJson(response, 200, { ok: true, settings, warnings });
+        recordSettingsChanges(client?.guilds?.cache?.get(guildId), guildId, session, before, settings, patch);
+        return sendJson(response, 200, { ok: true, settings, warnings, role });
+      }
+
+      throw Object.assign(new Error("Method not allowed."), { statusCode: 405 });
+    }
+
+    const accessMatch = ACCESS_PATTERN.exec(url.pathname);
+    if (accessMatch) {
+      const guildId = accessMatch[1];
+      const session = requireSession(request);
+
+      if (!session.guilds.some((guild) => guild.id === guildId)) {
+        throw Object.assign(new Error("You are not a member of this server."), { statusCode: 403 });
+      }
+      // Reading the list needs access; changing it needs ownership. An operator
+      // must not be able to promote anyone, including themselves.
+      await assertGuildAccess(client, guildId, session.userId);
+
+      if (request.method === "GET") {
+        enforceRateLimit(request, "read", 240, 60_000);
+        return sendJson(response, 200, {
+          ok: true,
+          access: await describeAccess(client, guildId, session.userId),
+          log: accessStore.getChangeLog(guildId, 50),
+        });
+      }
+
+      if (request.method === "PUT") {
+        assertSameOrigin(request, config);
+        enforceRateLimit(request, "write", 60, 60_000);
+        assertGuildOwner(client, guildId, session.userId);
+
+        const body = await readJsonBody(request);
+        if (!Array.isArray(body.operators)) {
+          throw Object.assign(new Error("Operators must be a list of user ids."), { statusCode: 400 });
+        }
+        if (body.operators.length > accessStore.MAX_OPERATORS) {
+          throw Object.assign(
+            new Error(`At most ${accessStore.MAX_OPERATORS} people can be named.`),
+            { statusCode: 400 }
+          );
+        }
+
+        const guild = client?.guilds?.cache?.get(guildId);
+        const wanted = [];
+        for (const raw of body.operators) {
+          if (typeof raw !== "string" || !/^\d{5,25}$/.test(raw)) {
+            throw Object.assign(new Error("Every operator must be a user id."), { statusCode: 400 });
+          }
+          if (raw === guild?.ownerId) continue; // The owner is implicit, never listed.
+          // Naming someone who is not in the server would grant access that
+          // silently activates if they ever join.
+          const member = await guild?.members?.fetch(raw).catch(() => null);
+          if (!member) {
+            throw Object.assign(new Error("That person is not a member of this server."), { statusCode: 400 });
+          }
+          wanted.push(raw);
+        }
+
+        const previous = accessStore.getOperators(guildId);
+        const operators = accessStore.setOperators(guildId, wanted);
+        recordAccessChange(guildId, session, previous, operators);
+
+        return sendJson(response, 200, {
+          ok: true,
+          access: await describeAccess(client, guildId, session.userId),
+          log: accessStore.getChangeLog(guildId, 50),
+        });
       }
 
       throw Object.assign(new Error("Method not allowed."), { statusCode: 405 });

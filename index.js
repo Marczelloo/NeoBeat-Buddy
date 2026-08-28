@@ -8,6 +8,7 @@ const token = process.env.DISCORD_TOKEN;
 const logsCommand = require("./commands/utility/logs.js");
 const { createActivityServer } = require("./helpers/activity/server.js");
 const { setClient } = require("./helpers/clientRegistry.js");
+const dashboardAccess = require("./helpers/dashboard/access.js");
 const djStore = require("./helpers/dj/store.js");
 const guildState = require("./helpers/guildState.js");
 const equalizerStore = require("./helpers/lavalink/equalizerStore.js");
@@ -403,6 +404,7 @@ async function bootstrap() {
     ["DJ store", djStore.init()],
     ["Guild state", guildState.init()],
     ["Equalizer store", equalizerStore.init()],
+    ["Dashboard access", dashboardAccess.init()],
     ["User preferences", userPrefs.init()],
     ["Server logs config", logsCommand.loadConfig()],
   ];

@@ -4,22 +4,27 @@ process.env.DISCORD_CLIENT_SECRET = "secret";
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const accessStore = require("../../../helpers/dashboard/access");
 const { createDashboardRouter } = require("../../../helpers/dashboard/routes");
 const { createSession, resetSessions, SESSION_COOKIE } = require("../../../helpers/dashboard/sessions");
 const { resetGuildState } = require("../../../helpers/guildState");
 
 const GUILD = "900000000000000009";
 
-function fakeClient() {
-  const member = { id: "u1", permissions: { has: () => true } };
+function fakeClient({ ownerId = "u1", members = ["u1", "u2"] } = {}) {
   return {
     guilds: {
       cache: new Map([[GUILD, {
         id: GUILD,
         name: "Test Server",
-        ownerId: "u1",
+        ownerId,
         iconURL: () => null,
-        members: { fetch: async () => member },
+        members: {
+          fetch: async (userId) => {
+            if (!members.includes(userId)) throw new Error("Unknown Member");
+            return { id: userId, user: { username: `name-${userId}` } };
+          },
+        },
         channels: { cache: new Map() },
         roles: { cache: new Map() },
       }]]),
@@ -288,4 +293,118 @@ test("reading settings is rate limited, not just writing", async () => {
   }
 
   assert.equal(last, 429);
+});
+
+/* ------------------------------------------------------ access endpoint --- */
+
+
+// The operator store validates ids as snowflakes, so the placeholder "u1"/"u2"
+// the older tests use cannot be stored as operators.
+const OWNER_ID = "700000000000000001";
+const OPERATOR_ID = "700000000000000002";
+
+function accessClient() {
+  return fakeClient({ ownerId: OWNER_ID, members: [OWNER_ID, OPERATOR_ID] });
+}
+
+function accessUrl() {
+  return url(`/api/dashboard/guilds/${GUILD}/access`);
+}
+
+async function call(router, options, target = accessUrl()) {
+  const response = fakeResponse();
+  await router.handle(request(options), response, target);
+  return response;
+}
+
+test("the owner can read the operator list and the change log", async () => {
+  resetSessions();
+  accessStore.resetGuildAccess(GUILD);
+  accessStore.setOperators(GUILD, [OPERATOR_ID]);
+  const router = createDashboardRouter(accessClient());
+  const id = createSession({ userId: OWNER_ID, username: "Owner", guilds: [{ id: GUILD }] });
+
+  const response = await call(router, { cookie: `${SESSION_COOKIE}=${id}` });
+  const payload = JSON.parse(response.body);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(payload.access.viewerIsOwner, true);
+  assert.deepEqual(payload.access.operators.map((o) => o.id), [OPERATOR_ID]);
+  assert.ok(Array.isArray(payload.log));
+});
+
+test("an operator may read the list but not change it", async () => {
+  resetSessions();
+  accessStore.resetGuildAccess(GUILD);
+  accessStore.setOperators(GUILD, [OPERATOR_ID]);
+  const router = createDashboardRouter(accessClient());
+  const id = createSession({ userId: OPERATOR_ID, username: "Operator", guilds: [{ id: GUILD }] });
+
+  const read = await call(router, { cookie: `${SESSION_COOKIE}=${id}` });
+  assert.equal(read.statusCode, 200);
+  assert.equal(JSON.parse(read.body).access.viewerIsOwner, false);
+
+  // Otherwise an operator could promote anyone, including themselves.
+  const write = await call(router, {
+    method: "PUT",
+    cookie: `${SESSION_COOKIE}=${id}`,
+    body: JSON.stringify({ operators: [OPERATOR_ID, OWNER_ID] }),
+  });
+  assert.equal(write.statusCode, 403);
+});
+
+test("the owner can name an operator, and it is written to the trail", async () => {
+  resetSessions();
+  accessStore.resetGuildAccess(GUILD);
+  const router = createDashboardRouter(accessClient());
+  const id = createSession({ userId: OWNER_ID, username: "Owner", guilds: [{ id: GUILD }] });
+
+  const response = await call(router, {
+    method: "PUT",
+    cookie: `${SESSION_COOKIE}=${id}`,
+    body: JSON.stringify({ operators: [OPERATOR_ID] }),
+  });
+  const payload = JSON.parse(response.body);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(payload.access.operators.map((o) => o.id), [OPERATOR_ID]);
+  assert.equal(payload.log[0].section, "access");
+  assert.match(payload.log[0].to, new RegExp(`dashboard access for ${OPERATOR_ID}`));
+});
+
+test("naming someone who is not in the server is refused", async () => {
+  resetSessions();
+  accessStore.resetGuildAccess(GUILD);
+  const router = createDashboardRouter(accessClient());
+  const id = createSession({ userId: OWNER_ID, username: "Owner", guilds: [{ id: GUILD }] });
+
+  // Otherwise the grant would sit dormant and activate if they ever joined.
+  const response = await call(router, {
+    method: "PUT",
+    cookie: `${SESSION_COOKIE}=${id}`,
+    body: JSON.stringify({ operators: ["999000000000000009"] }),
+  });
+
+  assert.equal(response.statusCode, 400);
+});
+
+test("a settings write is attributed in the change log", async () => {
+  resetSessions();
+  resetGuildState(GUILD);
+  accessStore.resetGuildAccess(GUILD);
+  const router = createDashboardRouter(accessClient());
+  const id = createSession({ userId: OWNER_ID, username: "Owner", guilds: [{ id: GUILD }] });
+
+  await call(
+    router,
+    { method: "PATCH", cookie: `${SESSION_COOKIE}=${id}`, body: JSON.stringify({ player: { autoplay: true } }) },
+    url(`/api/dashboard/guilds/${GUILD}/settings`)
+  );
+
+  const entry = accessStore.getChangeLog(GUILD, 10)[0];
+  assert.equal(entry.username, "Owner");
+  assert.equal(entry.section, "player");
+  assert.equal(entry.field, "autoplay");
+  assert.equal(entry.from, "off");
+  assert.equal(entry.to, "on");
 });

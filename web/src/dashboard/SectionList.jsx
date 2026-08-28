@@ -23,6 +23,7 @@ export const SECTION_GROUPS = [
       { id: "announcements", label: "Announcements", hint: "Update posts" },
       { id: "logs", label: "Server logs", hint: "What gets recorded, and who reads it" },
       { id: "tickets", label: "Tickets", hint: "Reports and feedback" },
+      { id: "access", label: "Access", hint: "Who may use this dashboard" },
     ],
   },
   {
