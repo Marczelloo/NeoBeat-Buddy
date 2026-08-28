@@ -2,10 +2,10 @@ import { DotsThree, MagnifyingGlass, Play, Plus } from "@phosphor-icons/react";
 import CoverArt from "../CoverArt.jsx";
 
 const RESULTS = [
-  { art: "signallost", title: "FRASCATI", artist: "Taco Hemingway - Topic", source: "YouTube", time: "2:58" },
-  { art: "tamagotchi", title: "Tamagotchi", artist: "Taconafide", source: "Deezer", time: "3:25", flac: true },
-  { art: "nightdrive", title: "Night Drive", artist: "Chiasm", source: "SoundCloud", time: "4:12" },
-  { art: "nightdrive", title: "Nastepna stacja", artist: "Taco Hemingway - Topic", source: "YouTube", time: "4:12" },
+  { art: "dieforyou", title: "The Weeknd - Die For You (Official Video)", artist: "The Weeknd", source: "YouTube", time: "4:20" },
+  { art: "loser", title: "Loser", artist: "Tame Impala", source: "Deezer", time: "3:59", flac: true },
+  { art: "rosemary", title: "Rosemary", artist: "Deftones", source: "SoundCloud", time: "6:51" },
+  { art: "avengers", title: "Avengers", artist: "Quebonafide, Eripe", source: "Spotify", time: "3:41" },
 ];
 
 export default function PlayResponse() {

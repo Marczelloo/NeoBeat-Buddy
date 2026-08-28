@@ -1,26 +1,34 @@
 import { useState } from "react";
 
-/* Band frequencies match the ten preset bands in helpers/lavalink/constants.js. */
-const FREQS = ["25", "40", "63", "100", "160", "250", "400", "630", "1k", "1.6k"];
+/* The real 15-band set from BAND_FREQUENCIES in helpers/equalizer/panel.js. */
+const FREQS = [
+  "25", "40", "63", "100", "160", "250", "400", "630",
+  "1k", "1.6k", "2.5k", "4k", "6.3k", "10k", "16k",
+];
 
+/* Gains lifted from EQUALIZER_PRESETS in helpers/lavalink/constants.js,
+   expanded across all fifteen bands. */
 const PRESETS = {
-  bassboost: [5, 4.5, 3.5, 2, 0.5, -0.5, -1, -0.5, 0.5, 1.5],
-  flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  vocal: [-2, -1.5, -0.5, 1, 2.5, 3.5, 3, 2, 1, 0.5],
-  nightcore: [2, 1.5, 0.5, -0.5, -1, 0.5, 2, 3.5, 4.5, 5],
-  lofi: [3, 2.5, 1.5, 0.5, -1, -2.5, -3.5, -4, -4.5, -5],
+  bassboost: [0.5, 0.45, 0.35, 0.25, 0.15, 0.08, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  vocal: [-0.18, -0.15, -0.1, 0.05, 0.12, 0.18, 0.22, 0.25, 0.18, 0.12, 0.08, 0, 0, 0, 0],
+  nightcore: [0.1, 0.08, 0.05, 0, 0, 0, 0, 0.12, 0.15, 0.18, 0.2, 0.22, 0.18, 0, 0],
+  lofi: [0.15, 0.12, 0.08, 0.05, 0, -0.15, -0.2, -0.15, -0.1, 0, 0.08, 0, -0.12, -0.15, -0.18],
+  flat: Array(15).fill(0),
 };
 
+const SCALE = 12;
 const RANGE = 6;
+
+const toDb = (gain) => Math.round(gain * SCALE * 2) / 2;
 
 export default function EqResponse() {
   const [preset, setPreset] = useState("bassboost");
-  const [gains, setGains] = useState(PRESETS.bassboost);
+  const [gains, setGains] = useState(PRESETS.bassboost.map(toDb));
   const [dragging, setDragging] = useState(null);
 
   function applyPreset(name) {
     setPreset(name);
-    setGains(PRESETS[name]);
+    setGains(PRESETS[name].map(toDb));
   }
 
   function setBand(index, value) {
@@ -39,8 +47,8 @@ export default function EqResponse() {
   return (
     <div>
       <p className="resp-lead">
-        Twenty-two presets across the ten equalizer bands, custom presets saved per user, and filter
-        presets that stack on top. Drag a band — this one is live.
+        Fifteen bands from 25 Hz to 16 kHz, twenty-two presets, and custom presets saved per user.
+        Drag a band — this one is live.
       </p>
 
       <div className="eq">
@@ -50,8 +58,6 @@ export default function EqResponse() {
 
           return (
             <div className="eq-band" key={hz}>
-              <span className="mono eq-db">{db > 0 ? `+${db}` : db}</span>
-
               <div
                 className={dragging === index ? "eq-track is-dragging" : "eq-track"}
                 onPointerDown={(event) => {
@@ -98,7 +104,7 @@ export default function EqResponse() {
             {name}
           </button>
         ))}
-        <span className="eq-more mono">{preset === "custom" ? "custom" : "+17 more"}</span>
+        <span className="eq-more mono">{preset === "custom" ? "custom" : "+18 more"}</span>
       </div>
       <p className="resp-foot mono">Changes apply to the live player straight away, and your own presets are saved per user.</p>
     </div>

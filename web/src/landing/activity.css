@@ -513,3 +513,129 @@
     display: none;
   }
 }
+
+/* ---------- autoplay provenance in the queue ---------- */
+
+.qpanel-label.is-auto {
+  margin-top: 14px;
+  color: var(--auto);
+}
+
+.autobadge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 5px;
+  outline: 1px solid rgba(167, 139, 250, 0.45);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--auto);
+}
+
+.app-queue .qrow,
+.qpanel .qrow {
+  grid-template-columns: 14px 34px minmax(0, 1fr) auto auto;
+}
+
+/* ---------- fun filters ---------- */
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ftile {
+  padding: 11px 13px;
+  border-radius: 11px;
+  background: var(--raised);
+  outline: 1px solid var(--line);
+  text-align: left;
+  transition: outline-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+
+.ftile b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted-strong);
+}
+
+.ftile small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.ftile:hover {
+  outline-color: var(--line-strong);
+}
+
+.ftile.is-on {
+  outline-color: rgba(103, 227, 244, 0.4);
+  background: rgba(103, 227, 244, 0.06);
+}
+
+.ftile.is-on b {
+  color: var(--accent);
+}
+
+@media (max-width: 820px) {
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* In the showcase the queue column is narrow, and the violet section label
+   already marks provenance — the per-row badge only crowds the title. */
+.app-queue .autobadge {
+  display: none;
+}
+
+.app-queue .qrow {
+  grid-template-columns: 12px 30px minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.app-queue .qart {
+  width: 30px;
+  height: 30px;
+}
+
+.app-queue .qmeta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  /* The deck carries eleven controls; let it wrap rather than push the page. */
+  .app-deck {
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+  }
+
+  .deck-transport {
+    margin: 0;
+    order: -1;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .deck-ico {
+    width: 28px;
+    height: 28px;
+  }
+}

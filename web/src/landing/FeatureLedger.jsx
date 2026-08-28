@@ -24,8 +24,8 @@ const LEDGER = [
     group: "Control",
     items: [
       ["DJ mode", "Role gating, vote skipping, strict mode"],
-      ["Equalizer", "22 presets across ten bands, plus custom presets per user"],
-      ["Filters", "Preset filter chains stacked on top of the EQ"],
+      ["Equalizer", "15 bands from 25 Hz to 16 kHz, 22 presets, custom presets per user"],
+      ["Filters", "13 one-click effects — nightcore, 8D, karaoke, vaporwave and more"],
       ["Lyrics", "Synced, with a per-user timing offset"],
     ],
   },

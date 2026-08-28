@@ -1,6 +1,7 @@
 import DeployResponse from "./responses/DeployResponse.jsx";
 import DjResponse from "./responses/DjResponse.jsx";
 import EqResponse from "./responses/EqResponse.jsx";
+import FilterResponse from "./responses/FilterResponse.jsx";
 import PlayResponse from "./responses/PlayResponse.jsx";
 import QueueResponse from "./responses/QueueResponse.jsx";
 
@@ -33,9 +34,17 @@ export const COMMANDS = [
     id: "eq",
     signature: "/equalizer <preset>",
     match: "eq equalizer preset bass filter sound",
-    blurb: "Twenty-two presets, plus your own saved per user.",
+    blurb: "Fifteen bands, 22 presets, plus your own saved per user.",
     note: "Example session",
     Response: EqResponse,
+  },
+  {
+    id: "filter",
+    signature: "/filter <effect>",
+    match: "filter effect nightcore vaporwave karaoke 8d robot meme fun",
+    blurb: "Thirteen one-click effects, stacked on the EQ.",
+    note: "Example session",
+    Response: FilterResponse,
   },
   {
     id: "deploy",

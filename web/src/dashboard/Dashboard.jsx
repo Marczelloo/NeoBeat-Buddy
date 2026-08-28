@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, getMe, logout } from "../api.js";
+import Mark from "../landing/Mark.jsx";
 import SectionList, { DEFAULT_SECTION, SECTIONS, isSection } from "./SectionList.jsx";
 import ServerRail from "./ServerRail.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
@@ -72,11 +73,7 @@ export default function Dashboard() {
     <div className="dash">
       <header className="dash-top">
         <Link className="mark" to="/">
-          <span className="mark-signal" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
+          <Mark size={22} />
           MewBit
         </Link>
 

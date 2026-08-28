@@ -226,6 +226,9 @@
 
 .canvas-layer {
   grid-area: 1 / 1;
+  /* Grid items default to min-width:auto, so the shared cell would stretch to
+     the widest layer's max-content and overflow the page on narrow screens. */
+  min-width: 0;
   opacity: 0;
   visibility: hidden;
   transform: translateY(6px);
@@ -277,13 +280,13 @@
 }
 
 .qart {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 40px;
   height: 40px;
   border-radius: 9px;
   outline: 1px solid var(--line);
-  overflow: hidden;
+  object-fit: cover;
+  background: var(--raised);
 }
 
 .qmeta {
@@ -678,7 +681,7 @@
 
 .eq {
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-columns: repeat(15, minmax(0, 1fr));
   gap: 6px;
   padding: 14px 12px;
   border-radius: 12px;
@@ -778,7 +781,7 @@
 
 @media (max-width: 860px) {
   .eq {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
     row-gap: 14px;
   }
 

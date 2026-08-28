@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 import { repoUrl } from "../api.js";
+import Mark from "./Mark.jsx";
 
 export default function SiteFooter() {
   return (
@@ -24,11 +25,7 @@ export default function SiteFooter() {
 
       <div className="foot-base">
         <span className="mark">
-          <span className="mark-signal" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
+          <Mark size={22} />
           MewBit
         </span>
         <span className="foot-legal mono">

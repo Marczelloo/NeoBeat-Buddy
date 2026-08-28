@@ -5,6 +5,7 @@ import ActivityShowcase from "./ActivityShowcase.jsx";
 import CommandLine from "./CommandLine.jsx";
 import FeatureLedger from "./FeatureLedger.jsx";
 import LiveStats from "./LiveStats.jsx";
+import Mark from "./Mark.jsx";
 import ResponseCanvas from "./ResponseCanvas.jsx";
 import SiteFooter from "./SiteFooter.jsx";
 import { COMMANDS, DEFAULT_COMMAND_ID, filterCommands } from "./commands.js";
@@ -34,11 +35,7 @@ export default function Landing() {
       <div className="wrap">
         <header className="topbar">
           <span className="mark">
-            <span className="mark-signal" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
+            <Mark size={22} animated />
             MewBit
           </span>
 

@@ -25,14 +25,17 @@ import CoverArt from "./CoverArt.jsx";
 import "./activity.css";
 
 const UP_NEXT = [
-  { art: "signallost", title: "FRASCATI", artist: "Taco Hemingway - Topic", eta: null, time: "2:58" },
-  { art: "tamagotchi", title: "Tamagotchi", artist: "Taconafide - Topic", eta: "2:58", time: "3:22" },
-  { art: "nightdrive", title: "8 kobiet", artist: "Taconafide - Topic", eta: "6:20", time: "3:19" },
+  { art: "borderline", title: "Borderline", artist: "Tame Impala - Topic", eta: "Up next", time: "3:58" },
+  { art: "rosemary", title: "Rosemary", artist: "Deftones - Topic", eta: "In 3:58", time: "6:51" },
+];
+
+const UP_NEXT_AUTO = [
+  { art: "dieforyou", title: "Die For You", artist: "The Weeknd", eta: "In 10:49", time: "4:20" },
 ];
 
 const LIBRARY = [
   { name: "Liked Songs", count: "0 tracks", liked: true },
-  { name: "Late night rotation", count: "547 tracks", art: "nightdrive" },
+  { name: "Late night rotation", count: "547 tracks", art: "rosemary" },
 ];
 
 /**
@@ -112,7 +115,7 @@ export default function ActivityShowcase() {
 
           <div className="app-stage">
             <div className="stage-cover">
-              <CoverArt art="tamagotchi" title="Nastepna stacja" />
+              <CoverArt art="loser" title="Loser" />
               <span className="stage-signal" aria-hidden="true">
                 <i />
                 <i />
@@ -122,8 +125,8 @@ export default function ActivityShowcase() {
             </div>
 
             <div className="stage-id">
-              <h3>Nastepna stacja</h3>
-              <p>Taco Hemingway - Topic</p>
+              <h3>Tame Impala - Loser (Official Video)</h3>
+              <p>tameimpalaVEVO</p>
               <span className="srcchip mono">YouTube</span>
               <span className="stage-added mono">added by marczelloo</span>
             </div>
@@ -206,17 +209,33 @@ export default function ActivityShowcase() {
               <span className="qmeta">
                 <b>{track.title}</b>
                 <small>
-                  {track.artist} · YouTube
-                  {track.eta ? ` · In ${track.eta}` : ""}
+                  {track.artist} · YouTube · {track.eta}
                 </small>
               </span>
+              <span className="qtime">{track.time}</span>
+            </div>
+          ))}
+
+          <div className="qpanel-label mono is-auto">MewBit autoplay</div>
+
+          {UP_NEXT_AUTO.map((track, index) => (
+            <div className="qrow" key={track.title}>
+              <span className="qnum mono">{UP_NEXT.length + index + 1}</span>
+              <CoverArt art={track.art} title={track.title} />
+              <span className="qmeta">
+                <b>{track.title}</b>
+                <small>
+                  {track.artist} · YouTube · {track.eta}
+                </small>
+              </span>
+              <span className="autobadge mono">Auto</span>
               <span className="qtime">{track.time}</span>
             </div>
           ))}
         </aside>
       </div>
 
-      <p className="stage-note">Example session. Cover artwork is drawn for this page.</p>
+      <p className="stage-note">Example session. Cover artwork belongs to its rights holders.</p>
     </section>
   );
 }
