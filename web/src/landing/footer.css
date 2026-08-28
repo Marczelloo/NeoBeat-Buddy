@@ -43,7 +43,7 @@
 /* The operator at the console — near-black, one cyan rim light. It reads as
    atmosphere, so it is decorative and hidden from assistive tech. */
 .foot-close-art {
-  background-image: url("/art/operator.png");
+  background-image: url("/art/operator.webp");
   background-size: cover;
   background-position: 50% 22%;
   border-left: 1px solid var(--line);
