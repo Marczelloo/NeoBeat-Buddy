@@ -639,3 +639,46 @@
     height: 28px;
   }
 }
+
+/* ---------- real screenshot strip ---------- */
+
+.shots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.shot {
+  margin: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  outline: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.shot figcaption {
+  padding: 12px 14px;
+}
+
+.shot figcaption b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.shot figcaption span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}

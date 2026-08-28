@@ -10,8 +10,9 @@ export default function DeployResponse() {
       </p>
 
       <p className="resp-note">
-        Licensed for private and educational use. Running it on a public Discord server, commercially,
-        or as a service is outside the licence.
+        Licensed for private and educational use. MewBit resolves audio through YouTube, Spotify and
+        Deezer, which may conflict with those services&rsquo; terms — running it on a public server,
+        commercially, or as a service is outside both the licence and that risk.
       </p>
 
       <pre className="codeblock">

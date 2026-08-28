@@ -22,6 +22,7 @@ import {
   Waveform,
 } from "@phosphor-icons/react";
 import CoverArt from "./CoverArt.jsx";
+import ShotStrip from "./ShotStrip.jsx";
 import "./activity.css";
 
 const UP_NEXT = [
@@ -234,6 +235,8 @@ export default function ActivityShowcase() {
           ))}
         </aside>
       </div>
+
+      <ShotStrip />
 
       <p className="stage-note">Example session. Cover artwork belongs to its rights holders.</p>
     </section>
