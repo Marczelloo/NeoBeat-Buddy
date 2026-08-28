@@ -248,7 +248,7 @@
 }
 
 .canvas-sig {
-  font: 500 11.5px var(--mono);
+  font: 500 11px var(--mono);
   color: var(--muted-strong);
 }
 
@@ -323,8 +323,8 @@
   align-items: center;
   height: 20px;
   padding: 0 8px;
-  border-radius: 6px;
-  font: 700 9.5px/1 var(--mono);
+  border-radius: 5px;
+  font: 700 10px/1 var(--mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent);
@@ -569,7 +569,7 @@
   border-radius: 9px;
   background: var(--raised);
   outline: 1px solid var(--line);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -594,11 +594,11 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .vote-count {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--muted);
 }
 
@@ -606,7 +606,7 @@
   position: relative;
   height: 4px;
   margin: 12px 0 8px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
   overflow: hidden;
 }
@@ -614,7 +614,7 @@
 .vote-bar span {
   display: block;
   height: 100%;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--white-btn);
 }
 
@@ -649,7 +649,7 @@
   padding: 0 10px;
   border-radius: 999px;
   outline: 1px solid var(--line);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -693,7 +693,7 @@
 }
 
 .eq-db {
-  font-size: 9.5px;
+  font-size: 10px;
   color: var(--muted);
 }
 
@@ -703,13 +703,13 @@
   align-items: flex-end;
   width: 5px;
   height: 92px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
 }
 
 .eq-fill {
   width: 100%;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--white-btn);
 }
 
@@ -723,7 +723,7 @@
 }
 
 .eq-hz {
-  font-size: 9.5px;
+  font-size: 10px;
   color: var(--muted);
 }
 
@@ -820,7 +820,7 @@
 
 .statline-note {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--muted);
 }
 
@@ -838,7 +838,7 @@
 .ledger-lead {
   margin-top: 14px;
   max-width: 64ch;
-  font-size: 14.5px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--muted);
 }
@@ -875,14 +875,14 @@
 }
 
 .ledger-row dt {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
 
 .ledger-row dd {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--muted);
 }
@@ -910,7 +910,7 @@
 .foot-close p {
   margin-top: 14px;
   max-width: 56ch;
-  font-size: 14.5px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--muted);
 }
@@ -942,7 +942,7 @@
 
 .resp-note {
   margin-top: 12px;
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 1.55;
   color: var(--muted);
 }
@@ -1012,7 +1012,7 @@
 .showcase-head p {
   margin-top: 14px;
   max-width: 66ch;
-  font-size: 14.5px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--muted);
 }
@@ -1040,7 +1040,7 @@
 .stage-dot {
   width: 7px;
   height: 7px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--accent);
 }
 
@@ -1127,7 +1127,7 @@
 .stage-track {
   display: block;
   height: 4px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
   overflow: hidden;
 }
@@ -1136,7 +1136,7 @@
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--white-btn);
   transform-origin: left;
   animation: seek 9s linear infinite;
@@ -1194,7 +1194,7 @@
   display: block;
   width: 62px;
   height: 4px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
 }
 
@@ -1202,7 +1202,7 @@
   display: block;
   width: 62%;
   height: 100%;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--white-btn);
 }
 
@@ -1229,7 +1229,7 @@
 
 .stage-note {
   margin-top: 12px;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -1274,7 +1274,7 @@
 .eq-band:focus-within .eq-track {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
-  border-radius: 99px;
+  border-radius: 999px;
 }
 
 button.mode {
