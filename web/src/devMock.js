@@ -46,6 +46,32 @@ export function installDevMock() {
   window.fetch = async (input, init = {}) => {
     const url = String(input);
 
+    if (url.includes("/api/dashboard/public/stats")) {
+      return json({
+        ok: true,
+        instance: {
+          servers: 3,
+          songsPlayed: 4187,
+          msPlayed: 913_000_000,
+          songsSkipped: 612,
+          playlistsAdded: 24,
+          totalSessions: 486,
+          peakListeners: 9,
+          uniqueListeners: 37,
+          averageSessionMs: 1_878_000,
+          firstPlayedAt: "2025-09-14T20:11:00.000Z",
+          topSources: [
+            { source: "deezer", count: 2410 },
+            { source: "youtube", count: 1102 },
+            { source: "soundcloud", count: 448 },
+            { source: "spotify", count: 227 },
+          ],
+          uptimeMs: 7_412_000,
+          version: "1.1.4",
+        },
+      });
+    }
+
     if (url.includes("/api/dashboard/me")) {
       return json({ ok: true, user: { id: "u1", username: "Marczelloo", avatar: null }, guilds: GUILDS });
     }

@@ -1,16 +1,44 @@
-import { Heart, Pause, Repeat, Shuffle, SkipBack, SkipForward, SpeakerHigh } from "@phosphor-icons/react";
+import {
+  Bell,
+  ClockCounterClockwise,
+  Compass,
+  Heart,
+  House,
+  MagnifyingGlass,
+  MagnifyingGlassPlus,
+  MusicNotes,
+  Pause,
+  Plus,
+  Repeat,
+  Shuffle,
+  SidebarSimple,
+  SkipBack,
+  SkipForward,
+  SlidersHorizontal,
+  Sparkle,
+  SpeakerHigh,
+  Stop,
+  Trash,
+  Waveform,
+} from "@phosphor-icons/react";
 import CoverArt from "./CoverArt.jsx";
+import "./activity.css";
 
-const QUEUE = [
-  { art: "signallost", title: "Signal Lost", artist: "Kavinsky", time: "5:03" },
-  { art: "nightdrive", title: "Night Drive", artist: "Chiasm", time: "4:12" },
-  { art: "nightdrive", title: "Outrun", artist: "Kavinsky", time: "4:40", auto: true },
+const UP_NEXT = [
+  { art: "signallost", title: "FRASCATI", artist: "Taco Hemingway - Topic", eta: null, time: "2:58" },
+  { art: "tamagotchi", title: "Tamagotchi", artist: "Taconafide - Topic", eta: "2:58", time: "3:22" },
+  { art: "nightdrive", title: "8 kobiet", artist: "Taconafide - Topic", eta: "6:20", time: "3:19" },
+];
+
+const LIBRARY = [
+  { name: "Liked Songs", count: "0 tracks", liked: true },
+  { name: "Late night rotation", count: "547 tracks", art: "nightdrive" },
 ];
 
 /**
- * The Activity player, drawn in the same token set it ships in. This is the
- * product doing its job — the page argues by showing the surface, not by
- * describing it.
+ * The Activity player as it actually ships: library rail, player stage and a
+ * live queue. Drawn from the running surface rather than invented, so the
+ * page shows the product instead of describing it.
  */
 export default function ActivityShowcase() {
   return (
@@ -18,25 +46,74 @@ export default function ActivityShowcase() {
       <div className="showcase-head">
         <h2 id="showcase-heading">The player lives inside Discord.</h2>
         <p>
-          MewBit ships a Discord Activity: a shared visual player that opens in the voice channel,
-          so everyone sees the same queue, the same artwork and the same controls. The message embed
-          stays as a fallback.
+          MewBit ships a Discord Activity: a shared cockpit that opens in the voice channel, so
+          everyone works from the same queue, the same artwork and the same controls. The message
+          embed stays as a fallback.
         </p>
       </div>
 
-      <div className="stage" role="img" aria-label="The MewBit Activity player, shown with example content">
-        <div className="stage-chrome">
-          <span className="stage-dot" />
-          <span className="mono stage-channel"># late-night</span>
-          <span className="mono stage-listeners">4 listening</span>
-        </div>
+      <div className="app" role="img" aria-label="The MewBit Activity, shown with example content">
+        <aside className="app-lib">
+          <div className="app-lib-head">
+            <b>Library</b>
+            <span className="mono">2</span>
+          </div>
 
-        <div className="stage-body">
-          <div className="stage-left">
+          {LIBRARY.map((item) => (
+            <div className="lib-row" key={item.name}>
+              <span className="lib-art">
+                {item.liked ? <Heart size={16} weight="fill" /> : <CoverArt art={item.art} title={item.name} />}
+              </span>
+              <span className="lib-meta">
+                <b>{item.name}</b>
+                <small>{item.count}</small>
+              </span>
+            </div>
+          ))}
+
+          <div className="lib-row is-new">
+            <span className="lib-art">
+              <Plus size={16} />
+            </span>
+            <span className="lib-meta">
+              <b>New playlist</b>
+            </span>
+          </div>
+        </aside>
+
+        <div className="app-main">
+          <div className="app-toolbar">
+            <span className="tool-ico is-on">
+              <Compass size={17} />
+            </span>
+            <span className="tool-ico is-on">
+              <House size={17} />
+            </span>
+
+            <span className="tool-search">
+              <MagnifyingGlass size={16} />
+              <span className="tool-placeholder">What do you want to play?</span>
+              <span className="tool-chip">YouTube first</span>
+              <span className="tool-submit">
+                <MagnifyingGlass size={14} weight="bold" />
+              </span>
+            </span>
+
+            <span className="tool-ico">
+              <SlidersHorizontal size={17} />
+            </span>
+            <span className="tool-ico">
+              <Bell size={17} />
+            </span>
+            <span className="tool-ico is-on">
+              <SidebarSimple size={17} />
+            </span>
+          </div>
+
+          <div className="app-stage">
             <div className="stage-cover">
-              <CoverArt art="tamagotchi" title="Tamagotchi" />
+              <CoverArt art="tamagotchi" title="Nastepna stacja" />
               <span className="stage-signal" aria-hidden="true">
-                <i />
                 <i />
                 <i />
                 <i />
@@ -45,77 +122,101 @@ export default function ActivityShowcase() {
             </div>
 
             <div className="stage-id">
-              <b>Tamagotchi</b>
-              <small>TACONAFIDE</small>
-              <span className="qsub">
-                <span className="srctag">Deezer</span>
-                <span className="srctag">FLAC</span>
-              </span>
+              <h3>Nastepna stacja</h3>
+              <p>Taco Hemingway - Topic</p>
+              <span className="srcchip mono">YouTube</span>
+              <span className="stage-added mono">added by marczelloo</span>
             </div>
+          </div>
 
-            <div className="stage-seek">
-              <span className="stage-track">
-                <span className="stage-played" />
-              </span>
-              <span className="stage-times mono">
-                <span>1:14</span>
-                <span>3:25</span>
-              </span>
-            </div>
+          <div className="app-deck">
+            <span className="deck-auto">
+              <Sparkle size={14} weight="fill" />
+              Autoplay
+            </span>
+            <span className="deck-ico">
+              <Heart size={16} />
+            </span>
+            <span className="deck-ico">
+              <MagnifyingGlassPlus size={16} />
+            </span>
+            <span className="deck-ico">
+              <Waveform size={16} />
+            </span>
 
-            <div className="stage-transport">
-              <button type="button" className="stage-ico" tabIndex={-1} aria-hidden="true">
-                <Shuffle size={17} />
-              </button>
-              <button type="button" className="stage-ico" tabIndex={-1} aria-hidden="true">
-                <SkipBack size={18} weight="fill" />
-              </button>
-              <button type="button" className="stage-play" tabIndex={-1} aria-hidden="true">
+            <span className="deck-transport">
+              <span className="deck-ico">
+                <Repeat size={16} />
+              </span>
+              <span className="deck-ico">
+                <SkipBack size={17} weight="fill" />
+              </span>
+              <span className="deck-play">
                 <Pause size={18} weight="fill" />
-              </button>
-              <button type="button" className="stage-ico" tabIndex={-1} aria-hidden="true">
-                <SkipForward size={18} weight="fill" />
-              </button>
-              <button type="button" className="stage-ico" tabIndex={-1} aria-hidden="true">
-                <Repeat size={17} />
-              </button>
+              </span>
+              <span className="deck-ico">
+                <Stop size={16} weight="fill" />
+              </span>
+              <span className="deck-ico">
+                <SkipForward size={17} weight="fill" />
+              </span>
+              <span className="deck-ico">
+                <Shuffle size={16} />
+              </span>
+            </span>
 
-              <span className="stage-spacer" />
-
-              <button type="button" className="stage-ico is-liked" tabIndex={-1} aria-hidden="true">
-                <Heart size={17} weight="fill" />
-              </button>
-              <button type="button" className="stage-ico" tabIndex={-1} aria-hidden="true">
-                <SpeakerHigh size={17} />
-              </button>
-              <span className="stage-vol">
+            <span className="deck-right">
+              <span className="deck-ico">
+                <MusicNotes size={16} />
+              </span>
+              <span className="deck-ico">
+                <SpeakerHigh size={16} />
+              </span>
+              <span className="deck-vol">
                 <span />
               </span>
-            </div>
+            </span>
           </div>
 
-          <div className="stage-queue">
-            <div className="stage-queue-head mono">Up next</div>
-            {QUEUE.map((track) => (
-              <div className="qrow" key={track.title}>
-                <CoverArt art={track.art} title={track.title} />
-                <span className="qmeta">
-                  <b>{track.title}</b>
-                  <small>{track.artist}</small>
-                  {track.auto ? (
-                    <span className="qsub">
-                      <span className="autotag">Autoplay next</span>
-                    </span>
-                  ) : null}
-                </span>
-                <span className="qtime">{track.time}</span>
-              </div>
-            ))}
+          <div className="app-seek">
+            <span className="seek-track">
+              <span className="seek-played" />
+            </span>
+            <span className="seek-times mono">
+              <span>0:06</span>
+              <span>4:12</span>
+            </span>
           </div>
         </div>
+
+        <aside className="app-queue">
+          <div className="qpanel-head">
+            <b>Queue</b>
+            <span className="qpanel-count mono">3 up next</span>
+            <ClockCounterClockwise size={15} />
+            <Trash size={15} />
+          </div>
+
+          <div className="qpanel-label mono">From the room</div>
+
+          {UP_NEXT.map((track, index) => (
+            <div className="qrow" key={track.title}>
+              <span className="qnum mono">{index + 1}</span>
+              <CoverArt art={track.art} title={track.title} />
+              <span className="qmeta">
+                <b>{track.title}</b>
+                <small>
+                  {track.artist} · YouTube
+                  {track.eta ? ` · In ${track.eta}` : ""}
+                </small>
+              </span>
+              <span className="qtime">{track.time}</span>
+            </div>
+          ))}
+        </aside>
       </div>
 
-      <p className="stage-note">Example session. Artwork is drawn for this page.</p>
+      <p className="stage-note">Example session. Cover artwork is drawn for this page.</p>
     </section>
   );
 }

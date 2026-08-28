@@ -168,23 +168,32 @@ function createDashboardRouter(client) {
     if (request.method === "GET" && url.pathname === `${PREFIX}/public/stats`) {
       enforceRateLimit(request, "stats", 120, 60_000);
 
-      let songsPlayed = 0;
-      let msPlayed = 0;
+      let global = null;
+      let topSources = [];
       try {
-        const global = statsStore.getGlobalStats();
-        songsPlayed = Number(global?.songsPlayed) || 0;
-        msPlayed = Number(global?.msPlayed) || 0;
+        global = statsStore.getGlobalStats();
+        topSources = statsStore.getTopSources(null, 4) || [];
       } catch {
-        songsPlayed = 0;
-        msPlayed = 0;
+        global = null;
+        topSources = [];
       }
+
+      const num = (value) => Number(value) || 0;
 
       return sendJson(response, 200, {
         ok: true,
         instance: {
           servers: client?.guilds?.cache?.size ?? 0,
-          songsPlayed,
-          msPlayed,
+          songsPlayed: num(global?.songsPlayed),
+          msPlayed: num(global?.msPlayed),
+          songsSkipped: num(global?.songsSkipped),
+          playlistsAdded: num(global?.playlistsAdded),
+          totalSessions: num(global?.totalSessions),
+          peakListeners: num(global?.peakListeners),
+          uniqueListeners: num(global?.uniqueUserCount),
+          averageSessionMs: num(global?.averageSessionLength),
+          firstPlayedAt: global?.firstPlayedAt ?? null,
+          topSources,
           uptimeMs: Math.floor(process.uptime() * 1000),
           version: packageVersion,
         },

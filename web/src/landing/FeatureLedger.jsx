@@ -1,3 +1,5 @@
+import LedgerVisual from "./LedgerVisual.jsx";
+
 /* Every entry here is verifiable in the repository. No metrics attached. */
 const LEDGER = [
   {
@@ -50,13 +52,18 @@ export default function FeatureLedger() {
       <dl className="ledger-rows">
         {LEDGER.map((group) => (
           <div className="ledger-block" key={group.group}>
-            <h3>{group.group}</h3>
-            {group.items.map(([term, detail]) => (
-              <div className="ledger-row" key={term}>
-                <dt>{term}</dt>
-                <dd>{detail}</dd>
-              </div>
-            ))}
+            <div className="ledger-side">
+              <h3>{group.group}</h3>
+              <LedgerVisual group={group.group} />
+            </div>
+            <div className="ledger-list">
+              {group.items.map(([term, detail]) => (
+                <div className="ledger-row" key={term}>
+                  <dt>{term}</dt>
+                  <dd>{detail}</dd>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </dl>

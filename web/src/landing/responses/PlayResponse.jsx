@@ -1,36 +1,46 @@
+import { DotsThree, MagnifyingGlass, Play, Plus } from "@phosphor-icons/react";
 import CoverArt from "../CoverArt.jsx";
 
 const RESULTS = [
-  { art: "tamagotchi", title: "Tamagotchi", artist: "TACONAFIDE", source: "Deezer", time: "3:25", flac: true },
-  { art: "nightdrive", title: "Night Drive", artist: "Chiasm", source: "SoundCloud", time: "4:12", flac: false },
-  { art: "signallost", title: "Signal Lost", artist: "Kavinsky", source: "YouTube", time: "5:03", flac: false },
+  { art: "signallost", title: "FRASCATI", artist: "Taco Hemingway - Topic", source: "YouTube", time: "2:58" },
+  { art: "tamagotchi", title: "Tamagotchi", artist: "Taconafide", source: "Deezer", time: "3:25", flac: true },
+  { art: "nightdrive", title: "Night Drive", artist: "Chiasm", source: "SoundCloud", time: "4:12" },
+  { art: "nightdrive", title: "Nastepna stacja", artist: "Taco Hemingway - Topic", source: "YouTube", time: "4:12" },
 ];
 
 export default function PlayResponse() {
   return (
     <div>
-      <p className="resp-lead">
-        One query, four providers. Results keep the source they actually resolved from, so you always
-        know what is about to play.
-      </p>
+      <div className="find">
+        <span className="find-ico">
+          <MagnifyingGlass size={17} />
+        </span>
+        <span>
+          <b>Find a track</b>
+          <small>Search providers together, then choose the exact source</small>
+        </span>
+      </div>
 
-      {RESULTS.map((track) => (
-        <div
-          className="qrow"
-          key={track.title}
-        >
-          <CoverArt art={track.art} title={track.title} />
-          <span className="qmeta">
-            <b>{track.title}</b>
-            <small>{track.artist}</small>
-            <span className="qsub">
-              <span className="srctag">{track.source}</span>
-              {track.flac ? <span className="srctag">FLAC</span> : null}
-              <span className="qtime">{track.time}</span>
+      <div className="results">
+        {RESULTS.map((track, index) => (
+          <div className={index === 0 ? "qrow is-hover" : "qrow"} key={track.title}>
+            <CoverArt art={track.art} title={track.title} />
+            <span className="qmeta">
+              <b>{track.title}</b>
+              <small>
+                {track.artist} · {track.source}
+                {track.flac ? " · FLAC" : ""}
+              </small>
             </span>
-          </span>
-        </div>
-      ))}
+            <span className="qtime">{track.time}</span>
+            <span className="qacts">
+              <Play size={15} weight="fill" />
+              <Plus size={15} />
+              <DotsThree size={17} weight="bold" />
+            </span>
+          </div>
+        ))}
+      </div>
       <p className="resp-foot mono">Ranked across every provider that answered — title, artist and duration are matched before anything plays.</p>
     </div>
   );
