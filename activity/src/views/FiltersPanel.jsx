@@ -1,7 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Faders, SpinnerGap } from "@phosphor-icons/react";
 
-const BAND_LABELS = ["60", "120", "250", "500", "1k", "2k", "4k", "8k", "16k", "31k", "63k", "125k", "250k", "500k", "1m"];
+// Lavalink exposes exactly these 15 fixed EQ bands (0–14). Keep the compact
+// visual label separate from the full spoken frequency used by the slider.
+const EQUALIZER_BANDS = Object.freeze([
+  { label: "25", frequency: "25 Hz" },
+  { label: "40", frequency: "40 Hz" },
+  { label: "63", frequency: "63 Hz" },
+  { label: "100", frequency: "100 Hz" },
+  { label: "160", frequency: "160 Hz" },
+  { label: "250", frequency: "250 Hz" },
+  { label: "400", frequency: "400 Hz" },
+  { label: "630", frequency: "630 Hz" },
+  { label: "1k", frequency: "1,000 Hz" },
+  { label: "1.6k", frequency: "1,600 Hz" },
+  { label: "2.5k", frequency: "2,500 Hz" },
+  { label: "4k", frequency: "4,000 Hz" },
+  { label: "6.3k", frequency: "6,300 Hz" },
+  { label: "10k", frequency: "10,000 Hz" },
+  { label: "16k", frequency: "16,000 Hz" },
+]);
 const FILTER_PRESET_META = Object.freeze({
   nightcore: { label: "Nightcore", description: "Faster, brighter, and slightly higher pitch" },
   vaporwave: { label: "Vaporwave", description: "Slow, dreamy, and lower-pitched" },
@@ -31,7 +49,7 @@ function formatEqGain(gain) {
 }
 
 export default function FiltersPanel({ filters, filterPresets, equalizerPresets = [], onAction, isActionPending = () => false, activeSection = "effects", canAdjust = true }) {
-  const values = useMemo(() => Array.from({ length: 15 }, (_, index) => filters.equalizer?.find((band) => band.band === index)?.gain ?? 0), [filters.equalizer]);
+  const values = useMemo(() => Array.from({ length: EQUALIZER_BANDS.length }, (_, index) => filters.equalizer?.find((band) => band.band === index)?.gain ?? 0), [filters.equalizer]);
   const [bands, setBands] = useState(values);
   const bandsRef = useRef(values);
   const isAdjustingRef = useRef(false);
@@ -63,7 +81,7 @@ export default function FiltersPanel({ filters, filterPresets, equalizerPresets 
   };
   const resetBands = () => {
     if (!canAdjust) return;
-    const flatBands = Array(15).fill(0);
+    const flatBands = Array(EQUALIZER_BANDS.length).fill(0);
     isAdjustingRef.current = false;
     pendingBandsRef.current = flatBands;
     pendingBandsUntilRef.current = Date.now() + 5000;
@@ -85,7 +103,7 @@ export default function FiltersPanel({ filters, filterPresets, equalizerPresets 
     <div className={`filters-panel ${canAdjust ? "" : "is-unavailable"}`} aria-disabled={!canAdjust} inert={canAdjust ? undefined : ""}>
       {!canAdjust ? <p className="sound-unavailable" role="status">Start a track to adjust its sound.</p> : null}
       {activeSection === "effects" ? <div className="filter-section"><div className="filter-label-row"><div><strong>Fun Filters</strong><span>One-click Lavalink effects</span></div><button className="ghost-button" type="button" onClick={() => onAction("filter", { preset: "off" })} disabled={isActionPending("filter")}>{isActionPending("filter") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : null}Reset</button></div><div className="filter-grid">{(filterPresets || []).map((preset) => { const meta = getFilterPresetMeta(preset); return <button type="button" key={preset} className={`filter-tile ${filters.effectPreset === preset ? "is-selected" : ""}`} onClick={() => onAction("filter", { preset })} disabled={isActionPending("filter")}><span className="filter-tile-icon">{isActionPending("filter") && filters.effectPreset === preset ? <SpinnerGap className="button-spinner" size={17} aria-hidden="true" /> : <Faders size={17} aria-hidden="true" />}</span><span className="filter-tile-copy"><strong>{meta.label}</strong><small>{meta.description}</small></span>{filters.effectPreset === preset ? <Check size={15} weight="bold" aria-hidden="true" /> : null}</button>; })}</div></div> : null}
-      {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><div className="eq-actions"><label className="eq-preset-control"><span>Preset</span><select value={filters.preset === "custom" ? "custom" : filters.preset || "flat"} onChange={(event) => { if (event.target.value !== "custom") onAction("equalizer_preset", { preset: event.target.value }); }} disabled={isActionPending("equalizer_preset")} aria-label="Equalizer preset"><option value="custom" disabled>Custom curve</option>{equalizerPresets.map((preset) => <option value={preset.name} key={`${preset.custom ? "custom" : "built-in"}-${preset.name}`}>{preset.name}{preset.custom ? " • custom" : ""}</option>)}</select></label><button className="ghost-button" type="button" onClick={resetBands} disabled={isActionPending("equalizer")}>{isActionPending("equalizer") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : null}Flat</button></div></div><div className="eq-grid">{bands.map((gain, index) => <label className="eq-band" key={index}><span className="eq-band-label">{BAND_LABELS[index]}</span><span className="eq-slider-control"><input type="range" min="-0.25" max="0.2" step="0.01" value={gain} aria-label={`${BAND_LABELS[index]} Hz EQ band, ${formatEqGain(gain)} gain`} onPointerDown={() => { isAdjustingRef.current = true; }} onPointerCancel={commitBands} onChange={(event) => updateBand(index, event.target.value)} onPointerUp={commitBands} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") isAdjustingRef.current = true; }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /></span><span className="eq-band-value">{formatEqGain(gain)}</span></label>)}</div></div> : null}
+      {activeSection === "equalizer" ? <div className="filter-section eq-section"><div className="filter-label-row"><div><strong>15-band EQ</strong><span>{filters.preset === "custom" ? "Custom curve" : `${filters.preset || "flat"} preset`}</span></div><div className="eq-actions"><label className="eq-preset-control"><span>Preset</span><select value={filters.preset === "custom" ? "custom" : filters.preset || "flat"} onChange={(event) => { if (event.target.value !== "custom") onAction("equalizer_preset", { preset: event.target.value }); }} disabled={isActionPending("equalizer_preset")} aria-label="Equalizer preset"><option value="custom" disabled>Custom curve</option>{equalizerPresets.map((preset) => <option value={preset.name} key={`${preset.custom ? "custom" : "built-in"}-${preset.name}`}>{preset.name}{preset.custom ? " • custom" : ""}</option>)}</select></label><button className="ghost-button" type="button" onClick={resetBands} disabled={isActionPending("equalizer")}>{isActionPending("equalizer") ? <SpinnerGap className="button-spinner" size={15} aria-hidden="true" /> : null}Flat</button></div></div><div className="eq-grid">{bands.map((gain, index) => { const band = EQUALIZER_BANDS[index]; return <label className="eq-band" key={index}><span className="eq-band-label">{band.label}</span><span className="eq-slider-control"><input type="range" min="-0.25" max="0.2" step="0.01" value={gain} aria-label={`${band.frequency} EQ band, ${formatEqGain(gain)} gain`} onPointerDown={() => { isAdjustingRef.current = true; }} onPointerCancel={commitBands} onChange={(event) => updateBand(index, event.target.value)} onPointerUp={commitBands} onKeyDown={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") isAdjustingRef.current = true; }} onKeyUp={(event) => { if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") commitBands(); }} /></span><span className="eq-band-value">{formatEqGain(gain)}</span></label>; })}</div></div> : null}
     </div>
   );
 }
