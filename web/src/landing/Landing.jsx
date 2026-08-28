@@ -4,9 +4,11 @@ import { repoUrl } from "../api.js";
 import ActivityShowcase from "./ActivityShowcase.jsx";
 import CommandLine from "./CommandLine.jsx";
 import FeatureLedger from "./FeatureLedger.jsx";
+import HeroField from "./HeroField.jsx";
 import LiveStats from "./LiveStats.jsx";
 import Mark from "./Mark.jsx";
 import ResponseCanvas from "./ResponseCanvas.jsx";
+import SectionRule from "./SectionRule.jsx";
 import SiteFooter from "./SiteFooter.jsx";
 import { COMMANDS, DEFAULT_COMMAND_ID, filterCommands } from "./commands.js";
 import "./landing.css";
@@ -56,6 +58,11 @@ export default function Landing() {
 
   return (
     <main className="landing" ref={groundRef}>
+      {/* Drawn brand plate, not a photograph — see HeroField. */}
+      <div className="hero-plate" aria-hidden="true">
+        <HeroField />
+      </div>
+
       <div className="wrap">
         <header className="topbar">
           <span className="mark">
@@ -134,8 +141,11 @@ export default function Landing() {
         </p>
 
         <LiveStats />
+        <SectionRule seed="a" />
         <ActivityShowcase />
+        <SectionRule seed="b" />
         <FeatureLedger />
+        <SectionRule seed="c" />
         <SiteFooter />
       </div>
     </main>

@@ -47,6 +47,15 @@ export default function FilterResponse() {
           </button>
         ))}
       </div>
+
+      {/* Below 520px the tile descriptions are hidden — thirteen four-line
+          tiles made this the tallest response on the page, and the canvas is
+          sized by its tallest member. The description for the selected filter
+          comes back here instead, so nothing is actually lost. */}
+      <p className="filters-active">
+        {active ? FILTERS.find(([name]) => name === active)?.[1] : "Tap a filter to read what it does."}
+      </p>
+
       <p className="resp-foot mono">One click each, applied by Lavalink without reloading the track. They stack on top of the equalizer.</p>
     </div>
   );

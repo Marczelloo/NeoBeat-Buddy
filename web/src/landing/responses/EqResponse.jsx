@@ -20,11 +20,13 @@ const SCALE = 12;
 const RANGE = 6;
 
 const toDb = (gain) => Math.round(gain * SCALE * 2) / 2;
+const signed = (db) => (db > 0 ? `+${db}` : `${db}`);
 
 export default function EqResponse() {
   const [preset, setPreset] = useState("bassboost");
   const [gains, setGains] = useState(PRESETS.bassboost.map(toDb));
   const [dragging, setDragging] = useState(null);
+  const [hovered, setHovered] = useState(null);
 
   function applyPreset(name) {
     setPreset(name);
@@ -48,49 +50,71 @@ export default function EqResponse() {
     <div>
       <p className="resp-lead">
         Fifteen bands from 25 Hz to 16 kHz, twenty-two presets, and custom presets saved per user.
-        Drag a band — this one is live.
+        Grab a handle — this one is live.
       </p>
 
       <div className="eq">
-        {FREQS.map((hz, index) => {
-          const db = gains[index];
-          const scale = (db + RANGE) / (RANGE * 2);
+        {/* The scale is what makes the sliders mean something: without it a
+            handle is a decoration, with it the same handle is −4.5 dB. */}
+        <div className="eq-scale" aria-hidden="true">
+          <span className="mono">+{RANGE}</span>
+          <span className="mono">0</span>
+          <span className="mono">−{RANGE}</span>
+        </div>
 
-          return (
-            <div className="eq-band" key={hz}>
-              <div
-                className={dragging === index ? "eq-track is-dragging" : "eq-track"}
-                onPointerDown={(event) => {
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  setDragging(index);
-                  setBand(index, pointerToGain(event, event.currentTarget));
-                }}
-                onPointerMove={(event) => {
-                  if (dragging !== index) return;
-                  setBand(index, pointerToGain(event, event.currentTarget));
-                }}
-                onPointerUp={() => setDragging(null)}
-                onPointerCancel={() => setDragging(null)}
-              >
-                <span className="eq-fill" style={{ transform: `scaleY(${scale})` }} />
-                <span className="eq-zero" />
+        <div className="eq-bands">
+          {FREQS.map((hz, index) => {
+            const db = gains[index];
+            const scale = (db + RANGE) / (RANGE * 2);
+            const busy = dragging === index || hovered === index;
+
+            return (
+              <div className="eq-band" key={hz}>
+                <div
+                  className={dragging === index ? "eq-track is-dragging" : "eq-track"}
+                  onPointerDown={(event) => {
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setDragging(index);
+                    setBand(index, pointerToGain(event, event.currentTarget));
+                  }}
+                  onPointerMove={(event) => {
+                    if (dragging !== index) return;
+                    setBand(index, pointerToGain(event, event.currentTarget));
+                  }}
+                  onPointerUp={() => setDragging(null)}
+                  onPointerCancel={() => setDragging(null)}
+                  onPointerEnter={() => setHovered(index)}
+                  onPointerLeave={() => setHovered((current) => (current === index ? null : current))}
+                >
+                  {/* Bipolar: the fill runs from the 0 dB line to the handle, so
+                      a cut reads as a cut instead of as a shorter boost. */}
+                  <span
+                    className={db < 0 ? "eq-fill is-cut" : "eq-fill"}
+                    style={{ height: `${Math.abs(scale - 0.5) * 100}%` }}
+                  />
+                  <span className="eq-zero" />
+                  <span className="eq-thumb" style={{ bottom: `${scale * 100}%` }} />
+                  <span className={busy ? "mono eq-read is-on" : "mono eq-read"}>{signed(db)}</span>
+                </div>
+
+                <input
+                  className="visually-hidden"
+                  type="range"
+                  min={-RANGE}
+                  max={RANGE}
+                  step={0.5}
+                  value={db}
+                  onChange={(event) => setBand(index, Number(event.target.value))}
+                  onFocus={() => setHovered(index)}
+                  onBlur={() => setHovered((current) => (current === index ? null : current))}
+                  aria-label={`${hz} hertz band, ${db} decibels`}
+                />
+
+                <span className="mono eq-hz">{hz}</span>
               </div>
-
-              <input
-                className="visually-hidden"
-                type="range"
-                min={-RANGE}
-                max={RANGE}
-                step={0.5}
-                value={db}
-                onChange={(event) => setBand(index, Number(event.target.value))}
-                aria-label={`${hz} hertz band, ${db} decibels`}
-              />
-
-              <span className="mono eq-hz">{hz}</span>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       <div className="eq-presets">

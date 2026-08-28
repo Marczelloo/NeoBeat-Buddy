@@ -5,23 +5,92 @@
   padding: 0 var(--gutter) 0;
 }
 
-/* Near-black speaker cone behind the opening. Measured peak luminance 25/255,
-   so the white lede and the cyan caret stay well clear of it. */
-.landing::before {
-  content: "";
+/* The brand plate behind the opening — the avatar's ring and waveform drawn at
+   page scale. It replaced a photograph: vector, deterministic, and actually
+   about this product rather than about speakers. */
+.hero-plate {
   position: absolute;
   inset: 0 0 auto;
   height: min(760px, 96vh);
-  background: url("/art/hero-ground.webp") 50% 32% / cover no-repeat;
-  /* Alpha ramp, not colour: a mask uses only the alpha channel, so the black
-     in these stops is ignored by the compositor. The image fades out before
-     the response canvas so nothing competes with the content over it. */
-  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
   pointer-events: none;
   transform: translate3d(0, var(--ground-shift, 0px), 0);
   will-change: transform;
   z-index: 0;
+}
+
+.herofield {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Only sixteen bars breathe, and the playhead is one node. The other eighty
+   bars are static geometry — a hero that animates everything is a hero that
+   drops frames. */
+.hf-bar.is-live {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hf-breathe 3.4s var(--ease) infinite alternate;
+}
+
+@keyframes hf-breathe {
+  from {
+    transform: scaleY(0.62);
+  }
+  to {
+    transform: scaleY(1.12);
+  }
+}
+
+.hf-ring-lit {
+  animation: hf-ring 9s ease-in-out infinite alternate;
+}
+
+@keyframes hf-ring {
+  from {
+    opacity: 0.18;
+  }
+  to {
+    opacity: 0.44;
+  }
+}
+
+.hf-ring-ticks {
+  animation: hf-ticks 26s linear infinite;
+}
+
+@keyframes hf-ticks {
+  to {
+    stroke-dashoffset: -144;
+  }
+}
+
+.hf-head {
+  animation: hf-sweep 11s linear infinite;
+}
+
+@keyframes hf-sweep {
+  from {
+    transform: translateX(-160px);
+  }
+  to {
+    transform: translateX(1440px);
+  }
+}
+
+/* The lower page is a long dark run, and flat black reads as unfinished. Three
+   very wide washes give it a room to sit in. Nothing here passes 5% alpha, so
+   the ground stays achromatic at any point you actually look at. */
+.landing::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(70% 26% at 12% 34%, rgba(255, 255, 255, 0.03), transparent 64%),
+    radial-gradient(64% 22% at 92% 58%, rgba(167, 139, 250, 0.035), transparent 62%),
+    radial-gradient(90% 30% at 50% 98%, rgba(103, 227, 244, 0.05), transparent 64%);
 }
 
 .landing > .wrap {
@@ -698,7 +767,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-bottom: 12px;
 }
 
 .dj-role {
@@ -707,43 +776,290 @@
   color: var(--muted);
 }
 
-/* equalizer */
-
-.eq {
+/* Two cards side by side: what a skip looks like, and who is allowed to make
+   one. The pair is what fills the panel — a lone vote bar left it half empty. */
+.dj-grid {
   display: grid;
-  grid-template-columns: repeat(15, minmax(0, 1fr));
-  gap: 6px;
-  padding: 14px 12px;
+  flex: 1;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.dj-grid .vote {
+  display: flex;
+  flex-direction: column;
+}
+
+.dj-props {
+  margin-top: 16px;
+}
+
+.dj-props-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dj-prop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  outline: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dj-prop-track b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.dj-prop-track small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dj-prop-acts {
+  display: flex;
+  flex: none;
+  gap: 10px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dj-prop-yes {
+  color: var(--accent);
+}
+
+.dj-mode-line {
+  margin-top: auto;
+  padding-top: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.dj-blocked {
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.dj-blocked .mono {
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.dj-gate {
+  display: flex;
+  flex-direction: column;
+  padding: 15px 16px;
   border-radius: 12px;
   background: var(--raised);
   outline: 1px solid var(--line);
 }
 
-.eq-band {
-  display: grid;
-  justify-items: center;
-  gap: 7px;
+.dj-gate-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.eq-db {
-  font-size: 10px;
+.dj-gate-head h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.dj-strict {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  outline: 1px solid var(--line);
+  font: 500 10px var(--mono);
   color: var(--muted);
+  transition: color 0.15s var(--ease), outline-color 0.15s var(--ease);
+}
+
+.dj-strict:hover {
+  color: var(--text);
+  outline-color: var(--line-strong);
+}
+
+.dj-strict.is-on {
+  color: var(--accent);
+  outline-color: rgba(103, 227, 244, 0.4);
+  background: rgba(103, 227, 244, 0.06);
+}
+
+.dj-ladder {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  /* The rungs spread over the card rather than bunching at the top and
+     leaving its foot empty next to the taller card beside it. */
+  justify-content: space-between;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dj-ladder li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  /* Blocked rungs drop to muted, not faint: this is body-sized text and the
+     Faint-Is-Not-Body rule has no "it is only a disabled row" exception. */
+  color: var(--muted);
+}
+
+.dj-ladder li:first-child {
+  border-top: 0;
+}
+
+.dj-ladder li.is-allowed .dj-rung {
+  color: var(--text);
+}
+
+.dj-rung {
+  font-weight: 600;
+}
+
+.dj-rung-note {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.dj-ladder li:not(.is-allowed) .dj-rung-note {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line-strong);
+}
+
+/* equalizer */
+
+/* The equalizer takes the whole remaining panel height. A 90px slider is a
+   diagram of an equalizer; a full-height one is an instrument you can aim at. */
+.eq {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-height: 210px;
+  padding: 22px 14px 12px;
+  border-radius: 12px;
+  background: var(--raised);
+  outline: 1px solid var(--line);
+}
+
+/* Three ticks aligned to the head, centre and foot of the tracks. Without the
+   scale a handle is decoration; with it, the same handle reads as -4.5 dB. */
+.eq-scale {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 20px;
+  /* Pulls the ticks onto the track ends and clears the Hz label row below. */
+  margin-top: -5px;
+  padding-bottom: 17px;
+  font-size: 9.5px;
+  line-height: 1;
+  text-align: right;
+  color: var(--muted);
+}
+
+.eq-bands {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.eq-band {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  gap: 7px;
+  min-height: 0;
 }
 
 .eq-track {
   position: relative;
-  display: flex;
-  align-items: flex-end;
   width: 5px;
-  height: 92px;
+  height: 100%;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
 }
 
 .eq-fill {
+  position: absolute;
+  bottom: 50%;
+  left: 0;
   width: 100%;
   border-radius: 999px;
   background: var(--white-btn);
+}
+
+.eq-fill.is-cut {
+  bottom: auto;
+  top: 50%;
+  background: var(--muted);
+}
+
+/* The handle. It is the thing you reach for, so it is the brightest object in
+   the panel and it is bigger than the track it rides. */
+.eq-thumb {
+  position: absolute;
+  left: 50%;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  border-radius: 999px;
+  background: var(--white-btn);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  transform: translateY(50%);
+  pointer-events: none;
+}
+
+.eq-read {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  margin-bottom: 7px;
+  font-size: 9.5px;
+  line-height: 1;
+  color: var(--muted-strong);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 0.12s var(--ease);
+  pointer-events: none;
+}
+
+.eq-read.is-on {
+  opacity: 1;
 }
 
 .eq-zero {
@@ -810,21 +1126,95 @@
 }
 
 @media (max-width: 860px) {
+  /* Folded to two rows of eight, the sliders stop being one continuous scale,
+     so the shared dB axis goes and each row gets a fixed, sane height. Left to
+     stretch, they grew to 400px each and read as a bar chart. */
   .eq {
+    flex: none;
+    min-height: 0;
+  }
+
+  .eq-scale {
+    display: none;
+  }
+
+  .eq-bands {
     grid-template-columns: repeat(8, minmax(0, 1fr));
-    row-gap: 14px;
+    grid-auto-rows: 116px;
+    row-gap: 18px;
   }
 
   .dj-role {
     margin-left: 0;
     width: 100%;
   }
+
+  .dj-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked, the two cards make this the tallest response, and every other
+     response inherits the difference as void. The proposal strip is the part
+     the mode switcher does not need to make its point, so it goes first. */
+  .dj-props {
+    display: none;
+  }
+
+  .dj-ladder li {
+    padding: 6px 0;
+  }
+
+  .dj-mode-line {
+    padding-top: 12px;
+  }
+}
+
+/* Section break, drawn in the hero's vocabulary. It is a rule, so it stays out
+   of the vertical rhythm the sections already set — the margins here replace
+   part of each section's own top margin rather than adding to it. */
+/* A rule, so it rides inside the gap the sections already leave rather than
+   adding a gap of its own: its own top margin opens the space, and the section
+   below keeps its larger margin through normal collapsing. */
+.secrule {
+  display: block;
+  width: 100%;
+  height: 34px;
+  margin: clamp(44px, 6vw, 70px) 0 0;
+  pointer-events: none;
 }
 
 /* ---------- feature ledger ---------- */
 
 .ledger {
+  position: relative;
   margin-top: clamp(56px, 8vw, 92px);
+}
+
+.ledger-ring {
+  position: absolute;
+  top: -60px;
+  right: -14%;
+  width: min(880px, 92%);
+  height: 520px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.ringfield {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The ring hangs past the gutter on wide screens on purpose. On narrow ones
+   that overhang is clipped content, not composition, so it comes back inside. */
+@media (max-width: 720px) {
+  .ledger-ring {
+    top: -30px;
+    right: 0;
+    width: 100%;
+    height: 360px;
+  }
 }
 
 .ledger h2 {
@@ -964,8 +1354,19 @@
   background: #fff;
 }
 
-.eq-track.is-dragging .eq-fill {
-  transition: none;
+.eq-track.is-dragging .eq-fill.is-cut,
+.eq-track:hover .eq-fill.is-cut {
+  background: var(--muted-strong);
+}
+
+.eq-track.is-dragging .eq-thumb,
+.eq-track:hover .eq-thumb {
+  background: #fff;
+  transform: translateY(50%) scale(1.18);
+}
+
+.eq-thumb {
+  transition: transform 0.12s var(--ease);
 }
 
 .eq-band:focus-within .eq-track {

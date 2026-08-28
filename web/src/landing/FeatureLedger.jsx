@@ -1,4 +1,5 @@
 import LedgerVisual from "./LedgerVisual.jsx";
+import RingField from "./RingField.jsx";
 
 /* Every entry here is verifiable in the repository. No metrics attached. */
 const LEDGER = [
@@ -43,6 +44,11 @@ const LEDGER = [
 export default function FeatureLedger() {
   return (
     <section className="ledger" aria-labelledby="ledger-heading">
+      {/* The hero's ring, closing the document at the other end. */}
+      <div className="ledger-ring" aria-hidden="true">
+        <RingField />
+      </div>
+
       <h2 id="ledger-heading">Everything is in the box.</h2>
       <p className="ledger-lead">
         There is no premium tier, because there is no tier. What the bot can do, your deployment

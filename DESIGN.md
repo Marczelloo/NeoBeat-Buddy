@@ -309,7 +309,7 @@ Fifteen tokens, four of which are the ground. The palette is achromatic until so
 
 Both surfaces run a single centred measure on a full-bleed near-black ground; neither uses a visible grid or a container border.
 
-**Landing.** One 1060px column inside a `clamp(20px, 5vw, 56px)` gutter. The order is fixed by the thesis: a 68px top bar, the lede, the command line, the response canvas, the command index, then the pitch. Nothing stacks above the command line. The response canvas reserves `min-height: 322px` so switching commands never reflows the page under the pointer. The index is a full-width three-track row grid (`minmax(150px,210px) / 1fr / auto`) that collapses to a two-line stack at 860px, where the blurb wraps to its own row. Vertical rhythm is fluid: `clamp(34px, 5vw, 52px)` within a region, `clamp(72px, 11vw, 128px)` between regions.
+**Landing.** One 1060px column inside a `clamp(20px, 5vw, 56px)` gutter. The order is fixed by the thesis: a 68px top bar, the lede, the command line, the response canvas, the command index, then the pitch. Nothing stacks above the command line. The response canvas mounts every response stacked in one grid cell, so it is always as tall as its tallest member and switching commands never reflows the page under the pointer. Each layer carries `min-width: 0`, because a grid item defaults to `min-width: auto` and the shared cell would otherwise stretch to the widest layer's max-content. The index is a full-width three-track row grid (`minmax(150px,210px) / 1fr / auto`) that collapses to a two-line stack at 860px, where the blurb wraps to its own row. Vertical rhythm is fluid: `clamp(34px, 5vw, 52px)` within a region, `clamp(72px, 11vw, 128px)` between regions.
 
 **Dashboard.** A three-track application grid — `68px / clamp(190px, 20vw, 236px) / 1fr` with a 14px gutter — under a 64px account bar, filling the viewport with the settings column as the only scroller. At 900px the grid collapses to one column: the rail becomes a horizontal scroller (its active marker rotating to the tile's bottom edge), the section list becomes a two-up grid, and the panel releases its internal scroll to the page.
 
@@ -318,7 +318,7 @@ Both surfaces run a single centred measure on a full-bleed near-black ground; ne
 **Spacing rhythm.** Small values are dense and even (4 / 6 / 8 / 10 / 14); region-scale values are fluid clamps. There is no 4px-multiple dogma: the build uses half-steps (2.5px signal-bar gaps, 13px padding) where optical alignment beat arithmetic.
 
 ### Named Rules
-**The Reserved-Canvas Rule.** Any region whose content swaps in place reserves its height. The response canvas holds 322px whether it is showing a queue or a code block.
+**The Reserved-Canvas Rule.** Any region whose content swaps in place reserves its height. The response canvas is sized by its tallest member, which makes that member everyone's floor: when the filter response ran to 1074px on mobile, every other response inherited 500px of void. Keeping the tallest response honest is part of the rule, not a separate concern.
 
 **The Measure Rule.** Prose is capped at 62-68ch and display at 19ch. A full-width paragraph at 1060px is a defect, not a layout.
 
@@ -385,10 +385,27 @@ The landing page's list of commands, doubling as its navigation and its call to 
 Writes land immediately; there is no dirty state and no submit button. The save bar at the foot of the settings column always carries a resting line ("Changes save as you make them") so the column always says where changes go, and moves through a spinner to a check as the write reaches the bot. The confirmation the user actually reads is on the field itself: a cyan uppercase mono "Saved" mark beside the label, entering on a 0.22s 3px settle.
 
 ### Response Canvas & Cover Art
-The canvas renders a real command response — queue rows, a DJ vote, a ten-band equalizer, a deploy block — from one shared row vocabulary (40px artwork, two-line meta, mono duration, source tag). Cover artwork is authored SVG on a 48x48 viewBox, drawn per track and achromatic by rule, using only greys between `#0b0e13` and `#c3cbd7`. Icons are drawn SVG at 12-16px in bold weight, inline with their label.
+The canvas renders a real command response — queue rows, a DJ vote, a fifteen-band equalizer, a deploy block — from one shared row vocabulary (40px artwork, two-line meta, mono duration, source tag). Cover artwork is real album art on the landing and authored SVG on a 48x48 viewBox elsewhere, drawn per track and achromatic by rule, using only greys between `#0b0e13` and `#c3cbd7`. Icons are drawn SVG at 12-16px in bold weight, inline with their label.
+
+Every response body is a column that stretches to the shared canvas height, with its closing fact pinned to the foot. Two responses fill that height with an instrument rather than with padding:
+
+- **Equalizer.** Fifteen full-height 5px tracks under a three-tick dB axis (`+6 / 0 / -6`), each carrying an 11px white handle and a bipolar fill that runs from the zero line to the handle, so a cut reads as a cut. The gain readout appears above the track on hover, drag or keyboard focus, in a fixed position that never moves with the handle. Below 860px the row folds to two rows of eight at a fixed 116px height and the shared axis is dropped, because folded sliders are no longer one scale.
+- **DJ.** A mode switcher over a two-card grid: the skip on the left (vote bar, threshold, voters, and the proposal a non-DJ's `/play` actually becomes), the permission ladder on the right, spread to the card. Both cards answer to the same two controls, so the panel is a model of the setting rather than a picture of one.
+
+### Exhibit (signature component)
+The screenshot section is a twelve-column grid with deliberately uneven spans — 12, then 7+5, then 5+7, then a prose-and-frame close. Frames take their natural height (`align-items: start`); a uniform tile grid says every frame matters equally, which is never true, and stretching the short one pads its foot with dead panel. Each frame opens with a **plate**: mono index, name, and a right-aligned mono surface tag, built on the same left-signature / right-note shape as the canvas head. The narrow column carries one extra mono line of fact, which closes part of the height it gives up. The lead frame's media is its own positioning context so the voice-channel status can overlap its corner — where it sits in Discord — without ever landing on caption text.
+
+### Drawn Plates
+The landing's artwork is drawn, not photographed. Three components share one geometry, lifted from the Discord avatar: a thin ring and a symmetric waveform on near-black.
+
+- **`HeroField`** — the opening plate. A 96-bar waveform under a cosine envelope, two ring ellipses, and fourteen sparks, on a 1440x620 viewBox at `preserveAspectRatio="slice"`. The page ground is painted back over it in a vertical ramp rather than masked, so the copy above it only ever sits on a darker surface.
+- **`SectionRule`** — the same waveform at rule scale (150 bars, 34px tall), breaking the lower page into sections in the hero's own vocabulary rather than a second visual language. Three seeds, so no two rules repeat.
+- **`RingField`** — the hero's ring again behind the feature ledger, closing the document on the shape that opened it.
+
+Every value is deterministic: a fixed-seed hash, never `Math.random`, so the silhouette is identical on every render and reload. Colour follows the split in the avatar — magenta left, white centre, cyan right — carried on 1-2.2px bars at 0.26-0.45 group alpha, which is the hairline range the Colour-At-The-Edges Rule already allows. These are marks at scale, not coloured surfaces; nothing here is a fill or a glow.
 
 ### Motion
-One easing curve for the entire system (`cubic-bezier(0.32, 0.72, 0, 1)`), at 0.12-0.18s for state and 0.22s for entrances. Looping motion exists only where something is genuinely live: the wordmark's three signal bars, the equalizer chip, the caret blink, the save spinner. `prefers-reduced-motion: reduce` collapses every animation and transition to 0.01ms globally.
+One easing curve for the entire system (`cubic-bezier(0.32, 0.72, 0, 1)`), at 0.12-0.18s for state and 0.22s for entrances. Looping motion exists only where something is genuinely live: the wordmark's three signal bars, the equalizer chip, the caret blink, the save spinner, and — in the hero plate — sixteen breathing bars, the ring's opacity swell, its travelling ticks and one playhead sweep. The plate animates sixteen of its ninety-six bars on purpose: a hero that animates everything is a hero that drops frames. `prefers-reduced-motion: reduce` collapses every animation and transition to 0.01ms globally.
 
 ## Do's and Don'ts
 

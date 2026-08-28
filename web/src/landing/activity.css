@@ -1,49 +1,97 @@
 /* Screenshots of the running Activity, plus the response vocabulary the
    command palette shares with them. */
 
-/* ---------- framed screenshots ---------- */
+/* ---------- the exhibit ---------- */
 
-.shot-lead {
-  margin: 30px 0 0;
-  border-radius: 14px;
-  background: var(--surface);
-  outline: 1px solid var(--line-strong);
-  box-shadow: var(--panel-shadow);
-  overflow: hidden;
-}
-
-.shot-lead img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-/* Two up, so four panels land as a balanced pair of rows rather than
-   three-and-an-orphan. */
-.shots {
+/* Twelve columns, uneven spans. The pattern is 12 / 7+5 / 5+7 / close, so the
+   eye is never handed two frames of equal weight in a row. */
+.exhibit {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 12px;
-}
-
-.shots.is-pair {
+  margin-top: 30px;
+  /* Frames take their own height. Stretching them to the row would pad the
+     shorter one with dead panel below its caption, and cropping a UI capture
+     to force a flush bottom cuts through text. The tops align and the plates
+     line up; ragged feet are what an uneven grid is supposed to look like. */
   align-items: start;
 }
 
-.shot {
+.ex-lead {
+  position: relative;
+  grid-column: span 12;
+  margin: 0;
+}
+
+.ex-panel {
+  margin: 0;
+}
+
+.ex-panel.is-wide {
+  grid-column: span 7;
+}
+
+.ex-panel.is-narrow {
+  grid-column: span 5;
+}
+
+.ex-lead,
+.ex-panel,
+.ex-embed {
   display: flex;
   flex-direction: column;
-  margin: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface);
   outline: 1px solid var(--line);
   overflow: hidden;
 }
 
+.ex-lead {
+  outline-color: var(--line-strong);
+  box-shadow: var(--panel-shadow);
+  /* The channel-status inset hangs outside the frame, so this one cannot clip. */
+  overflow: visible;
+  border-radius: 14px;
+}
+
+/* The plate. Number, name, surface — the same left-signature / right-note
+   shape the response canvas head already uses, so an exhibit reads as part of
+   this page rather than as an imported gallery. */
+.plate {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.plate-no {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.plate b {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.plate-tag {
+  margin-left: auto;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.shot-media {
+  position: relative;
+  display: block;
+}
+
 .shot-pad {
   display: block;
-  border-bottom: 1px solid var(--line);
+  overflow: hidden;
 }
 
 .shot-pad img {
@@ -56,6 +104,7 @@
    ground instead of turning soft. */
 .shot-pad.is-small {
   display: grid;
+  flex: 1;
   place-items: center;
   padding: 26px 18px;
   background: var(--bg);
@@ -67,27 +116,110 @@
   border-radius: 8px;
 }
 
-.shot figcaption {
-  padding: 13px 15px;
-}
-
-.shot figcaption b {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.shot figcaption span {
-  display: block;
-  margin-top: 4px;
+figure figcaption {
+  padding: 12px 14px 14px;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--muted);
 }
 
+/* The narrow column carries a line the wide one does not. It closes some of
+   the height the smaller frame gives up, and it is a fact rather than filler. */
+.plate-detail {
+  display: block;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ex-lead figcaption {
+  max-width: 66ch;
+  padding: 14px 16px 16px;
+  font-size: 13px;
+}
+
+/* The voice-channel status overlaps the player's corner because that is where
+   it sits in Discord — under the surface it describes. */
+.ex-inset {
+  position: absolute;
+  right: -22px;
+  bottom: -18px;
+  z-index: 2;
+  margin: 0;
+  padding: 10px 10px 8px;
+  border-radius: 12px;
+  background: var(--raised);
+  outline: 1px solid var(--line-strong);
+  box-shadow: var(--panel-shadow);
+}
+
+.ex-inset img {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  border-radius: 7px;
+}
+
+.ex-inset figcaption {
+  padding: 7px 2px 0;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The closing frame turns to prose, so the run of images ends on a sentence
+   rather than trailing off into another tile. */
+.ex-close {
+  display: grid;
+  grid-column: span 12;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-top: 10px;
+}
+
+.ex-close-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 22px 24px;
+  border-radius: 14px;
+  background: var(--surface);
+  outline: 1px solid var(--line);
+}
+
+.ex-close-text h3 {
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.ex-close-text p {
+  margin-top: 12px;
+  max-width: 44ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.ex-close-note {
+  margin-top: 18px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.ex-embed {
+  margin: 0;
+}
+
 .stage-note {
-  margin-top: 14px;
+  margin-top: 16px;
   font-size: 11px;
   color: var(--muted);
 }
@@ -274,9 +406,25 @@
   color: var(--accent);
 }
 
-@media (max-width: 720px) {
-  .shots {
+@media (max-width: 860px) {
+  .ex-panel.is-wide,
+  .ex-panel.is-narrow {
+    grid-column: span 12;
+  }
+
+  .ex-close {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ex-inset {
+    position: static;
+    right: auto;
+    margin: -1px 14px 14px;
+    box-shadow: none;
+  }
+
+  .ex-inset img {
+    max-width: 100%;
   }
 }
 
@@ -286,8 +434,33 @@
   }
 }
 
+.filters-active {
+  display: none;
+}
+
+/* One column of thirteen four-line tiles made this the tallest response on the
+   page, and the shared canvas is sized by its tallest member — so every other
+   response inherited 500px of void. Two columns of names, and the selected
+   filter's description moves below the grid. */
 @media (max-width: 520px) {
   .filters {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .ftile {
+    padding: 9px 11px;
+  }
+
+  .ftile small {
+    display: none;
+  }
+
+  .filters-active {
+    display: block;
+    margin-top: 14px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--muted);
   }
 }

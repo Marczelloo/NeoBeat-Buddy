@@ -2,82 +2,133 @@ import { useState } from "react";
 import "./activity.css";
 
 /**
- * The Activity, shown as it actually renders. These are screenshots of the
- * running surface rather than a reconstruction — the page argues by showing
- * the product. Every frame removes itself if its file is missing, so the
- * section stays correct when an asset has not been captured yet.
+ * The Activity, shown as it actually renders — screenshots of the running
+ * surface, not a reconstruction.
+ *
+ * Laid out as an exhibit rather than a tile grid: the spans are deliberately
+ * uneven, the lead carries the channel status overlapping its own corner the
+ * way the product does, and the closing frame turns to prose. A gallery where
+ * every cell is the same size tells you every frame matters the same amount,
+ * which is never true.
+ *
+ * Each frame removes itself if its file is missing, so the section stays
+ * correct when an asset has not been captured yet.
  */
+
 const LEAD = {
   file: "player.png",
+  index: "01",
+  title: "The player",
+  tag: "activity",
   alt: "The MewBit Activity: library, now playing, transport and the shared queue",
+  caption:
+    "One cockpit in the voice channel. Everyone works from the same queue, the same artwork and the same transport — there is no host who sees more than the rest.",
+};
+
+const INSET = {
+  file: "voicechannel.png",
+  alt: "The Discord voice channel status naming the current track",
 };
 
 const PANELS = [
   {
     file: "search.png",
+    index: "02",
     title: "Search",
+    tag: "activity",
+    span: "is-wide",
     caption: "Every provider answers at once, and each result keeps the source it resolved from.",
   },
   {
     file: "lyrics.png",
+    index: "03",
     title: "Lyrics",
+    tag: "activity",
+    span: "is-narrow",
     caption: "Synced line by line, with a per-user timing offset when a source runs early.",
+    detail: "Deezer → LRC Library → Genius",
   },
   {
     file: "filters.png",
+    index: "04",
     title: "Effects",
+    tag: "activity",
+    span: "is-narrow",
     caption: "Thirteen one-click Lavalink filters, applied to the live player.",
+    detail: "stacks on top of the equalizer",
   },
   {
     file: "equalizer.png",
+    index: "05",
     title: "Equalizer",
+    tag: "activity",
+    span: "is-wide",
     caption: "Fifteen bands from 25 Hz to 16 kHz, with presets saved per user.",
   },
 ];
 
-const FALLBACKS = [
-  {
-    file: "embed.png",
-    title: "The text channel still works",
-    caption:
-      "Not everyone opens the Activity. The message embed carries the same transport, the same provenance and the same state.",
-  },
-  {
-    file: "voicechannel.png",
-    title: "The channel says what is on",
-    caption: "The voice channel status names the current track, so people know before they join.",
-    small: true,
-  },
-];
+const EMBED = {
+  file: "embed.png",
+  index: "06",
+  title: "The message embed",
+  tag: "text channel",
+  small: true,
+};
 
-function Frame({ shot, className }) {
+function Plate({ shot }) {
+  return (
+    <div className="plate">
+      <span className="mono plate-no">{shot.index}</span>
+      <b>{shot.title}</b>
+      <span className="mono plate-tag">{shot.tag}</span>
+    </div>
+  );
+}
+
+function Frame({ shot, className, children }) {
   const [failed, setFailed] = useState(false);
   if (failed) return null;
 
   return (
     <figure className={className}>
-      <span className={shot.small ? "shot-pad is-small" : "shot-pad"}>
-        <img
-          src={`/shots/${shot.file}`}
-          alt={shot.alt || `MewBit — ${shot.title}`}
-          loading="lazy"
-          decoding="async"
-          onError={() => setFailed(true)}
-        />
+      <Plate shot={shot} />
+      {/* The media is its own positioning context, so anything layered over it
+          lands on the capture and never over the caption text. */}
+      <span className="shot-media">
+        <span className={shot.small ? "shot-pad is-small" : "shot-pad"}>
+          <img
+            src={`/shots/${shot.file}`}
+            alt={shot.alt || `MewBit — ${shot.title}`}
+            loading="lazy"
+            decoding="async"
+            onError={() => setFailed(true)}
+          />
+        </span>
+        {children}
       </span>
-      {shot.title ? (
+      {shot.caption ? (
         <figcaption>
-          <b>{shot.title}</b>
-          <span>{shot.caption}</span>
+          {shot.caption}
+          {shot.detail ? <span className="mono plate-detail">{shot.detail}</span> : null}
         </figcaption>
       ) : null}
     </figure>
   );
 }
 
-export default function ActivityShowcase() {
-  const [leadFailed, setLeadFailed] = useState(false);
+function Inset() {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
 
+  return (
+    <figure className="ex-inset">
+      <img src={`/shots/${INSET.file}`} alt={INSET.alt} loading="lazy" onError={() => setFailed(true)} />
+      <figcaption className="mono">the channel says what is on</figcaption>
+    </figure>
+  );
+}
+
+export default function ActivityShowcase() {
   return (
     <section className="showcase" aria-labelledby="showcase-heading">
       <div className="showcase-head">
@@ -88,28 +139,27 @@ export default function ActivityShowcase() {
         </p>
       </div>
 
-      {leadFailed ? null : (
-        <figure className="shot-lead">
-          <img
-            src={`/shots/${LEAD.file}`}
-            alt={LEAD.alt}
-            loading="lazy"
-            decoding="async"
-            onError={() => setLeadFailed(true)}
-          />
-        </figure>
-      )}
+      <div className="exhibit">
+        <Frame shot={LEAD} className="ex-lead">
+          <Inset />
+        </Frame>
 
-      <div className="shots">
         {PANELS.map((shot) => (
-          <Frame key={shot.file} shot={shot} className="shot" />
+          <Frame key={shot.file} shot={shot} className={`ex-panel ${shot.span}`} />
         ))}
-      </div>
 
-      <div className="shots is-pair">
-        {FALLBACKS.map((shot) => (
-          <Frame key={shot.file} shot={shot} className="shot" />
-        ))}
+        <div className="ex-close">
+          <div className="ex-close-text">
+            <h3>Not everyone opens the Activity.</h3>
+            <p>
+              The message embed carries the same transport, the same provenance and the same state.
+              Nothing about the bot depends on the visual surface being open — it is the better view,
+              not the only one.
+            </p>
+            <p className="mono ex-close-note">Same queue · same filters · same DJ rules.</p>
+          </div>
+          <Frame shot={EMBED} className="ex-embed" />
+        </div>
       </div>
 
       <p className="stage-note">
