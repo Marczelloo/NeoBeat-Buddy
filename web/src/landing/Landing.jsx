@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { repoUrl } from "../api.js";
+import ActivityShowcase from "./ActivityShowcase.jsx";
 import CommandLine from "./CommandLine.jsx";
 import FeatureLedger from "./FeatureLedger.jsx";
 import LiveStats from "./LiveStats.jsx";
@@ -112,6 +113,7 @@ export default function Landing() {
         </p>
 
         <LiveStats />
+        <ActivityShowcase />
         <FeatureLedger />
         <SiteFooter />
       </div>

@@ -42,6 +42,7 @@ export default function DjResponse() {
         <span className="mode">Vote</span>
         <span className="dj-role">DJ role · @Selector</span>
       </div>
+      <p className="resp-foot mono">Votes reset on every track. The server owner keeps control whatever the mode says.</p>
     </div>
   );
 }

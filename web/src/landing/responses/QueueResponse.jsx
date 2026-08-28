@@ -1,4 +1,3 @@
-import { motion } from "motion/react";
 import CoverArt from "../CoverArt.jsx";
 
 const QUEUE = [
@@ -16,13 +15,10 @@ export default function QueueResponse() {
         started.
       </p>
 
-      {QUEUE.map((track, index) => (
-        <motion.div
+      {QUEUE.map((track) => (
+        <div
           className="qrow"
           key={track.title}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, delay: 0.06 + index * 0.05, ease: [0.32, 0.72, 0, 1] }}
         >
           <CoverArt art={track.art} title={track.title} />
           <span className="qmeta">
@@ -43,8 +39,9 @@ export default function QueueResponse() {
               <i />
             </span>
           ) : null}
-        </motion.div>
+        </div>
       ))}
+      <p className="resp-foot mono">Rows reorder by drag in the Activity. When the queue empties, autoplay keeps the room going.</p>
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import { motion } from "motion/react";
 import CoverArt from "../CoverArt.jsx";
 
 const RESULTS = [
@@ -15,13 +14,10 @@ export default function PlayResponse() {
         know what is about to play.
       </p>
 
-      {RESULTS.map((track, index) => (
-        <motion.div
+      {RESULTS.map((track) => (
+        <div
           className="qrow"
           key={track.title}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, delay: 0.06 + index * 0.05, ease: [0.32, 0.72, 0, 1] }}
         >
           <CoverArt art={track.art} title={track.title} />
           <span className="qmeta">
@@ -33,8 +29,9 @@ export default function PlayResponse() {
               <span className="qtime">{track.time}</span>
             </span>
           </span>
-        </motion.div>
+        </div>
       ))}
+      <p className="resp-foot mono">Ranked across every provider that answered — title, artist and duration are matched before anything plays.</p>
     </div>
   );
 }
