@@ -305,6 +305,15 @@ module.exports = {
 
   // Export for button handlers
   handleTicketButton,
+
+  // Read and written by the dashboard, the same way logs.js exposes its own
+  // config. The ticket system's stored settings are plain data — a channel, an
+  // optional ping role and an on/off flag — so a dashboard write needs no
+  // Discord side effects and cannot drift from what /ticket admin setup wrote.
+  getGuildConfig,
+  setGuildConfig,
+  getGuildTickets,
+  loadData,
 };
 
 async function handleSetup(interaction) {

@@ -153,7 +153,12 @@ test("a valid write persists and returns the refreshed settings", async () => {
     url(`/api/dashboard/guilds/${GUILD}/settings`)
   );
   assert.equal(response.statusCode, 200);
-  assert.equal(JSON.parse(response.body).settings.source.defaultSource, "spotify");
+  const written = JSON.parse(response.body);
+  assert.equal(written.settings.source.defaultSource, "spotify");
+  // The route carries partial-failure detail back alongside the saved state, so
+  // the UI can report a refused Discord permission without calling the whole
+  // write a failure. A clean save still has to send the empty list.
+  assert.deepEqual(written.warnings, []);
 });
 
 test("an invalid write is rejected with 400", async () => {

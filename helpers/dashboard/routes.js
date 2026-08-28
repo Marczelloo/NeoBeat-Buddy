@@ -218,7 +218,11 @@ function createDashboardRouter(client) {
         assertSameOrigin(request, config);
         enforceRateLimit(request, "write", 60, 60_000);
         const patch = await readJsonBody(request);
-        return sendJson(response, 200, { ok: true, settings: applyGuildSettings(guildId, patch, client) });
+        // A patch can partly succeed: a log access role Discord refused does
+        // not invalidate the settings saved alongside it. Warnings carry that
+        // back so the UI can say what did not land instead of implying all did.
+        const { settings, warnings } = await applyGuildSettings(guildId, patch, client);
+        return sendJson(response, 200, { ok: true, settings, warnings });
       }
 
       throw Object.assign(new Error("Method not allowed."), { statusCode: 405 });

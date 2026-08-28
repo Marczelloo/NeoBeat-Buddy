@@ -150,6 +150,15 @@ This installs a stub API with three fake servers and a full settings payload.
 It lives in `web/src/devMock.js` behind `import.meta.env.DEV`, so it is
 removed entirely from production builds.
 
+The third server, **Test Server**, is deliberately blank: no logging set up, no
+tickets, a flat equalizer and no listening history. The empty states are what
+every new install sees first, so they have to be reachable without waiting for
+a real fresh server.
+
+The stub also refuses what the gateway refuses — turning tickets on with no
+channel, clearing a log channel — because a mock that accepts more than the
+server does teaches the UI a shape it will never be given.
+
 ## What the dashboard can change
 
 Every setting writes through the same store functions the slash commands use
@@ -162,6 +171,8 @@ commands cannot drift apart.
 | Player | Autoplay | `/autoplay` |
 | Player | 24/7 radio | `/247` |
 | Source | Default search source | `/setup source server` |
+| Equalizer | Preset | `/equalizer` |
+| Equalizer | The fifteen bands | `/eqpanel` |
 | DJ | DJ mode on/off | `/dj` |
 | DJ | DJ role | `/dj` |
 | DJ | Skip mode | `/dj` |
@@ -169,6 +180,47 @@ commands cannot drift apart.
 | DJ | Strict mode | `/dj` |
 | Announcements | Channel | `/setup announcements channel` |
 | Announcements | Enabled | `/setup announcements enable` / `disable` |
+| Server logs | Logging on/off | `/logs enable` / `disable` |
+| Server logs | Each of the four categories | `/logs enable <category>` |
+| Server logs | The channel each category writes to | — |
+| Server logs | Which roles may read the logs | `/logs access` |
+| Tickets | System on/off | `/ticket admin setup` / `disable` |
+| Tickets | Notification channel | `/ticket admin setup` |
+| Tickets | Ping role | `/ticket admin setup` |
+
+Statistics is the one read-only section: it reports this server's listening
+history and changes nothing.
+
+### What the dashboard deliberately will not do
+
+- **Create the log channels.** `/logs setup` builds a private category with
+  four channels and needs Manage Channels. That is provisioning, not
+  configuration, so the Server logs section reports that it has not run yet and
+  sends you to the command. Everything else there becomes editable afterwards.
+- **Moderation.** `/mod` is entirely actions — kick, ban, timeout, purge — with
+  no stored per-guild configuration, so there is nothing for a settings page to
+  hold.
+- **Per-member preferences.** `/setup source me` and saved playlists belong to
+  a member, not a server, and this dashboard is scoped to servers you
+  administer.
+
+### Two settings that are not simply stored
+
+Most of the page writes a value and stops. Two do more, because storing alone
+would leave the record disagreeing with reality:
+
+- **Log access roles** edit the Discord permission overwrites on the log
+  category and every channel in it, exactly as `/logs access` does. A role is
+  recorded only once its overwrite actually landed; if Discord refuses, the
+  save reports it and the role is not listed as having access.
+- **The equalizer** is persisted as the server's stored filters *and* pushed to
+  a running player when there is one. The stored copy is what `playback.js`
+  restores on the next player, so a change made while nothing is playing is
+  still the change that takes effect.
+
+A write that partly succeeds returns warnings alongside the saved settings, and
+the panel shows them under the section heading rather than claiming a clean
+save.
 
 ## Access control
 

@@ -259,6 +259,377 @@
   color: var(--danger);
 }
 
+/* ---------- section groups ---------- */
+
+/* Eight sections need structure. The label is a quiet index mark, not a
+   heading competing with the panel title. */
+.section-group + .section-group {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.section-group-label {
+  margin: 0 0 6px 10px;
+  font: 700 9.5px var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ---------- wide fields ---------- */
+
+/* Fifteen band sliders or four switch rows have no business inside the 320px
+   gutter a select sits in, so the control drops below the copy and runs full
+   width instead of being squeezed into the second column. */
+.field.is-wide {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 780px;
+}
+
+.field.is-wide .field-control {
+  grid-column: 1;
+  grid-row: auto;
+  justify-self: stretch;
+  max-width: none;
+  margin-top: 14px;
+}
+
+/* ---------- warnings ---------- */
+
+/* A patch can partly land: settings saved, one Discord permission refused.
+   That is neither an error nor a clean save, so it reads as its own thing. */
+.panel-warning {
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  border-radius: 11px;
+  outline: 1px solid rgba(255, 196, 106, 0.38);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted-strong);
+}
+
+/* ---------- notice ---------- */
+
+/* Shown where a section cannot act yet — logging that Discord has not
+   provisioned, a server with no listening history. */
+.notice {
+  padding: 20px 22px;
+  border-radius: 13px;
+  background: var(--raised);
+  outline: 1px solid var(--line);
+  max-width: 66ch;
+}
+
+.notice b {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.notice p {
+  margin-top: 9px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+code.mono {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.92em;
+  color: var(--muted-strong);
+}
+
+/* ---------- toggle rows ---------- */
+
+.rows {
+  display: grid;
+  gap: 1px;
+  border-radius: 12px;
+  background: var(--line);
+  outline: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 13px 15px;
+  background: var(--raised);
+}
+
+.row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The base toggle fills the 320px control column of an ordinary field. Inside a
+   row it must not: at full width it eats the flex line and collapses the label
+   it belongs to down to nothing. */
+.row .toggle {
+  flex: none;
+  width: auto;
+}
+
+.row-text b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.row-text small {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.row.is-off .row-text b {
+  color: var(--muted);
+}
+
+/* ---------- role checklist ---------- */
+
+.checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.chip {
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--raised);
+  outline: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+  transition: color 0.15s var(--ease), outline-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+
+.chip:hover:not(:disabled) {
+  color: var(--text);
+  outline-color: var(--line-strong);
+}
+
+.chip.is-on {
+  background: rgba(103, 227, 244, 0.06);
+  outline-color: rgba(103, 227, 244, 0.4);
+  color: var(--accent);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+}
+
+.checklist-empty {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- equalizer bands ---------- */
+
+.bands {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(46px, 1fr));
+  gap: 4px;
+  padding: 16px 14px;
+  border-radius: 13px;
+  background: var(--raised);
+  outline: 1px solid var(--line);
+}
+
+.band {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.band-freq {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* Vertical sliders: a horizontal equalizer is not an equalizer. */
+.band-input {
+  appearance: slider-vertical;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 20px;
+  height: 116px;
+  accent-color: var(--accent);
+  cursor: ns-resize;
+}
+
+.band-input:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.band-value {
+  font-size: 9.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.band-value.is-set {
+  color: var(--muted-strong);
+}
+
+/* ---------- readouts and statistics ---------- */
+
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 26px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.readout-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.readout-item b {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.readout-item span,
+.readout-note {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.readout-note {
+  flex-basis: 100%;
+}
+
+.statgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 10px;
+}
+
+.statcard {
+  display: grid;
+  gap: 6px;
+  padding: 15px 16px;
+  border-radius: 12px;
+  background: var(--raised);
+  outline: 1px solid var(--line);
+}
+
+.statcard-label {
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.statcard-value {
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.statblock {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.statblock h3 {
+  margin-bottom: 15px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.statblock-note {
+  margin-top: 16px;
+  max-width: 62ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.bars {
+  display: grid;
+  gap: 9px;
+  max-width: 520px;
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 12px;
+}
+
+.bar-name {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bar-track {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.bar-value {
+  font-size: 11px;
+  color: var(--muted-strong);
+  text-align: right;
+}
+
+.deflist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 0;
+  max-width: 560px;
+}
+
+.deflist dt {
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.deflist dd {
+  margin: 5px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 900px) {
@@ -296,9 +667,23 @@
     margin-bottom: 12px;
   }
 
+  /* Two columns of links, but grouped — letting the groups themselves become
+     the two columns puts Music beside Server and strands Insight underneath,
+     with a separator rule cutting across the middle of it. */
   .sections {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .section-group {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
+  }
+
+  .section-group-label {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
   }
 
   .section-link small {
@@ -309,6 +694,28 @@
 
   .panel-scroll {
     overflow-y: visible;
+  }
+
+  /* A wrapped equalizer is not an equalizer — three rows of five bands reads as
+     a grid of unrelated sliders. Keep the single run and let it scroll. */
+  .bands {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 44px;
+    overflow-x: auto;
+  }
+
+  .field.is-wide,
+  .field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .field-control {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: stretch;
+    max-width: none;
+    margin-top: 12px;
   }
 }
 

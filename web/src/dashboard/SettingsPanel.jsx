@@ -1,21 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSettings, patchSettings } from "../api.js";
 import SaveState from "./SaveState.jsx";
-import Field from "./controls/Field.jsx";
-import { Select, Slider, Toggle } from "./controls/Inputs.jsx";
-
-const SOURCE_OPTIONS = [
-  { value: "deezer", label: "Deezer — FLAC quality" },
-  { value: "youtube", label: "YouTube — widest catalogue" },
-  { value: "spotify", label: "Spotify — resolved through other sources" },
-  { value: "soundcloud", label: "SoundCloud — independent uploads" },
-];
-
-const SKIP_OPTIONS = [
-  { value: "dj", label: "DJ only — only the DJ role can skip" },
-  { value: "vote", label: "Vote — listeners vote to skip" },
-  { value: "hybrid", label: "Hybrid — DJ skips outright, others vote" },
-];
+import EqualizerSection from "./sections/EqualizerSection.jsx";
+import LogsSection from "./sections/LogsSection.jsx";
+import { AnnouncementsSection, DjSection, PlayerSection, SourceSection } from "./sections/MusicSections.jsx";
+import StatsSection from "./sections/StatsSection.jsx";
+import TicketsSection from "./sections/TicketsSection.jsx";
 
 const SECTION_COPY = {
   player: {
@@ -26,6 +16,10 @@ const SECTION_COPY = {
     title: "Source",
     lead: "Which provider a bare search resolves against. Members can override this for themselves.",
   },
+  equalizer: {
+    title: "Equalizer",
+    lead: "The sound shaping this server keeps. It is restored every time MewBit starts playing.",
+  },
   dj: {
     title: "DJ",
     lead: "Who is allowed to change playback for everyone else.",
@@ -34,11 +28,35 @@ const SECTION_COPY = {
     title: "Announcements",
     lead: "Where MewBit posts update notes when the bot version changes.",
   },
+  logs: {
+    title: "Server logs",
+    lead: "What MewBit records about this server, and which roles are allowed to read it.",
+  },
+  tickets: {
+    title: "Tickets",
+    lead: "How members report bugs, request features, and send feedback.",
+  },
+  stats: {
+    title: "Statistics",
+    lead: "What this server has listened to. Nothing here can be changed.",
+  },
+};
+
+const SECTION_COMPONENTS = {
+  player: PlayerSection,
+  source: SourceSection,
+  equalizer: EqualizerSection,
+  dj: DjSection,
+  announcements: AnnouncementsSection,
+  logs: LogsSection,
+  tickets: TicketsSection,
+  stats: StatsSection,
 };
 
 export default function SettingsPanel({ guildId, section, sectionLabel, guildName }) {
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState(null);
+  const [warnings, setWarnings] = useState([]);
   const [saveState, setSaveState] = useState("idle");
   const [savedField, setSavedField] = useState(null);
   const savedTimer = useRef(null);
@@ -47,6 +65,7 @@ export default function SettingsPanel({ guildId, section, sectionLabel, guildNam
     let cancelled = false;
     setSettings(null);
     setError(null);
+    setWarnings([]);
 
     getSettings(guildId)
       .then((payload) => {
@@ -66,7 +85,7 @@ export default function SettingsPanel({ guildId, section, sectionLabel, guildNam
   const commit = useCallback(
     async (patch, fieldKey) => {
       const previous = settings;
-      // Optimistic: merge the patch into local state so the control responds now.
+      // Optimistic, one level deep into each group so a control responds now.
       setSettings((current) => {
         const next = { ...current };
         for (const [group, values] of Object.entries(patch)) {
@@ -76,11 +95,16 @@ export default function SettingsPanel({ guildId, section, sectionLabel, guildNam
       });
       setSaveState("saving");
       setError(null);
+      setWarnings([]);
 
       try {
         const payload = await patchSettings(guildId, patch);
-        // Replace wholesale: a slash command may have changed something else.
+        // Replace wholesale: a slash command may have changed something else,
+        // and a nested group like logs.categories cannot be merged shallowly.
         setSettings(payload.settings);
+        // A patch can partly succeed — a log role Discord refused, say — so a
+        // warning is shown alongside the save rather than instead of it.
+        setWarnings(payload.warnings || []);
         setSaveState("saved");
         setSavedField(fieldKey);
         clearTimeout(savedTimer.current);
@@ -121,6 +145,7 @@ export default function SettingsPanel({ guildId, section, sectionLabel, guildNam
   }
 
   const copy = SECTION_COPY[section];
+  const Section = SECTION_COMPONENTS[section];
   const channelOptions = settings.options.channels.map((channel) => ({
     value: channel.id,
     label: `#${channel.name}`,
@@ -129,11 +154,6 @@ export default function SettingsPanel({ guildId, section, sectionLabel, guildNam
     value: role.id,
     label: `@${role.name}`,
   }));
-
-  const dj = settings.dj;
-  const djOff = !dj.enabled;
-  const strictWithoutRole = dj.enabled && dj.strictMode && !dj.roleId;
-  const thresholdUnused = dj.enabled && dj.skipMode === "dj";
 
   return (
     <section className="panel">
@@ -144,184 +164,19 @@ export default function SettingsPanel({ guildId, section, sectionLabel, guildNam
         </div>
 
         {error ? <p className="panel-error">{error}</p> : null}
+        {warnings.map((warning) => (
+          <p className="panel-warning" key={warning}>
+            {warning}
+          </p>
+        ))}
 
-        {section === "player" ? (
-          <>
-            <Field
-              label="Player channel"
-              describe="MewBit posts its player message here, and the Activity opens against this channel."
-              saved={savedField === "playerChannel"}
-            >
-              <Select
-                value={settings.player.playerChannel}
-                onChange={(value) => commit({ player: { playerChannel: value } }, "playerChannel")}
-                options={channelOptions}
-                placeholder="Not set — posts wherever the command was used"
-              />
-            </Field>
-
-            <Field
-              label="Autoplay"
-              describe="When the queue empties, MewBit keeps playing with tracks it picks from what you have been listening to."
-              saved={savedField === "autoplay"}
-            >
-              <Toggle
-                checked={settings.player.autoplay}
-                onChange={(value) => commit({ player: { autoplay: value } }, "autoplay")}
-              />
-            </Field>
-
-            <Field
-              label="24/7 radio"
-              describe="MewBit stays in the voice channel when everyone leaves instead of disconnecting after the idle timeout."
-              saved={savedField === "radio247"}
-            >
-              <Toggle
-                checked={settings.player.radio247}
-                onChange={(value) => commit({ player: { radio247: value } }, "radio247")}
-              />
-            </Field>
-          </>
-        ) : null}
-
-        {section === "source" ? (
-          <Field
-            label="Default search source"
-            describe="Where a plain /play query resolves first. A member who sets their own preference overrides this."
-            saved={savedField === "defaultSource"}
-          >
-            <Select
-              value={settings.source.defaultSource}
-              onChange={(value) => commit({ source: { defaultSource: value } }, "defaultSource")}
-              options={SOURCE_OPTIONS}
-            />
-          </Field>
-        ) : null}
-
-        {section === "dj" ? (
-          <>
-            <Field
-              label="DJ mode"
-              describe="With DJ mode off, anyone in the voice channel can skip, stop, and reorder the queue."
-              saved={savedField === "enabled"}
-            >
-              <Toggle
-                checked={dj.enabled}
-                onChange={(value) => commit({ dj: { enabled: value } }, "enabled")}
-              />
-            </Field>
-
-            <Field
-              label="DJ role"
-              describe="Members with this role always control playback. The server owner always can."
-              note={djOff ? "DJ mode is off — everyone can control playback." : null}
-              saved={savedField === "roleId"}
-            >
-              <Select
-                value={dj.roleId}
-                disabled={djOff}
-                onChange={(value) => commit({ dj: { roleId: value } }, "roleId")}
-                options={roleOptions}
-                placeholder="No role — administrators only"
-              />
-            </Field>
-
-            <Field
-              label="Skip mode"
-              describe="How a track gets skipped when someone who is not a DJ asks for it."
-              note={djOff ? "DJ mode is off — everyone can control playback." : null}
-              saved={savedField === "skipMode"}
-            >
-              <Select
-                value={dj.skipMode}
-                disabled={djOff}
-                onChange={(value) => commit({ dj: { skipMode: value } }, "skipMode")}
-                options={SKIP_OPTIONS}
-              />
-            </Field>
-
-            <Field
-              label="Vote threshold"
-              describe="The share of listeners in the voice channel who must vote before a track is skipped."
-              note={
-                djOff
-                  ? "DJ mode is off — everyone can control playback."
-                  : thresholdUnused
-                    ? "Skip mode is DJ-only, so the vote threshold is unused."
-                    : null
-              }
-              saved={savedField === "voteThreshold"}
-            >
-              <Slider
-                value={dj.voteThreshold}
-                disabled={djOff || thresholdUnused}
-                min={0.1}
-                max={1}
-                step={0.05}
-                format={(value) => `${Math.round(value * 100)}%`}
-                onChange={(value) => commit({ dj: { voteThreshold: value } }, "voteThreshold")}
-              />
-            </Field>
-
-            <Field
-              label="Strict mode"
-              describe="Only the DJ role and the server owner control playback. Administrators lose the implicit pass."
-              note={
-                djOff
-                  ? "DJ mode is off — everyone can control playback."
-                  : strictWithoutRole
-                    ? "Strict mode does nothing until a DJ role is set. Only the server owner can control playback right now."
-                    : null
-              }
-              tone={strictWithoutRole ? "danger" : "muted"}
-              saved={savedField === "strictMode"}
-            >
-              <Toggle
-                checked={dj.strictMode}
-                disabled={djOff}
-                onChange={(value) => commit({ dj: { strictMode: value } }, "strictMode")}
-              />
-            </Field>
-          </>
-        ) : null}
-
-        {section === "announcements" ? (
-          <>
-            <Field
-              label="Announcements"
-              describe="MewBit posts a short note when the bot updates to a new version."
-              saved={savedField === "announcementsEnabled"}
-            >
-              <Toggle
-                checked={settings.announcements.announcementsEnabled}
-                onChange={(value) =>
-                  commit({ announcements: { announcementsEnabled: value } }, "announcementsEnabled")
-                }
-              />
-            </Field>
-
-            <Field
-              label="Announcement channel"
-              describe="Where those update notes are posted."
-              note={
-                settings.announcements.announcementsEnabled
-                  ? null
-                  : "Announcements are off, so nothing will be posted here."
-              }
-              saved={savedField === "announcementChannel"}
-            >
-              <Select
-                value={settings.announcements.announcementChannel}
-                disabled={!settings.announcements.announcementsEnabled}
-                onChange={(value) =>
-                  commit({ announcements: { announcementChannel: value } }, "announcementChannel")
-                }
-                options={channelOptions}
-                placeholder="Not set — no update notes are posted"
-              />
-            </Field>
-          </>
-        ) : null}
+        <Section
+          settings={settings}
+          commit={commit}
+          savedField={savedField}
+          channelOptions={channelOptions}
+          roleOptions={roleOptions}
+        />
       </div>
 
       <SaveState state={saveState} guildName={guildName} />

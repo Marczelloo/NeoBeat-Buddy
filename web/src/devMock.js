@@ -23,12 +23,116 @@ const ROLES = [
   { id: "200000000000000002", name: "Moderator" },
 ];
 
-function freshSettings() {
+const FREQUENCIES = [
+  "25 Hz", "40 Hz", "63 Hz", "100 Hz", "160 Hz", "250 Hz", "400 Hz", "630 Hz",
+  "1 kHz", "1.6 kHz", "2.5 kHz", "4 kHz", "6.3 kHz", "10 kHz", "16 kHz",
+];
+
+const PRESETS = [
+  "flat", "acoustic", "bass", "bassboost", "classical", "dance", "deep", "electronic",
+  "edm", "hiphop", "jazz", "latin", "lofi", "nightcore", "piano", "podcast", "pop",
+  "rnb", "rock", "smallspeakers", "treble", "vocal",
+];
+
+function freshSettings(blank = false) {
+  if (blank) return blankSettings();
+
   return {
     player: { playerChannel: "100000000000000001", autoplay: true, radio247: false },
     source: { defaultSource: "deezer" },
     announcements: { announcementChannel: "100000000000000002", announcementsEnabled: true },
     dj: { enabled: true, roleId: "200000000000000001", skipMode: "hybrid", voteThreshold: 0.6, strictMode: false },
+    logs: {
+      configured: true,
+      enabled: true,
+      categoryId: "900000000000000001",
+      categories: { message: true, voice: true, server: true, bot: false },
+      channels: {
+        message: "100000000000000001",
+        voice: "100000000000000002",
+        server: "100000000000000003",
+        bot: "100000000000000003",
+      },
+      accessRoles: ["200000000000000002"],
+    },
+    tickets: {
+      enabled: true,
+      channelId: "100000000000000002",
+      roleId: "200000000000000002",
+      openCount: 3,
+      totalCount: 17,
+    },
+    equalizer: {
+      preset: "bassboost",
+      bands: [0.14, 0.14, 0.14, 0.14, 0.14, 0.09, 0.04, 0, 0, 0, 0, 0, 0.03, 0.06, 0.06],
+      presets: PRESETS,
+      frequencies: FREQUENCIES,
+      minGain: -0.2,
+      maxGain: 0.14,
+    },
+    stats: {
+      hasData: true,
+      songsPlayed: 1284,
+      msPlayed: 291_400_000,
+      songsSkipped: 213,
+      streamsPlayed: 4,
+      playlistsAdded: 11,
+      totalSessions: 168,
+      peakListeners: 7,
+      uniqueListeners: 19,
+      averageSessionMs: 1_734_000,
+      firstPlayedAt: "2025-11-02T18:40:00.000Z",
+      lastPlayedAt: "2026-08-27T23:12:00.000Z",
+      topSources: [
+        { source: "deezer", count: 701 },
+        { source: "youtube", count: 388 },
+        { source: "spotify", count: 195 },
+      ],
+      mostActiveHour: { hour: 22, count: 214 },
+    },
+    options: { channels: CHANNELS, roles: ROLES },
+  };
+}
+
+function blankSettings() {
+  return {
+    player: { playerChannel: null, autoplay: false, radio247: false },
+    source: { defaultSource: "deezer" },
+    announcements: { announcementChannel: null, announcementsEnabled: true },
+    dj: { enabled: false, roleId: null, skipMode: "hybrid", voteThreshold: 0.5, strictMode: false },
+    logs: {
+      configured: false,
+      enabled: false,
+      categoryId: null,
+      categories: { message: false, voice: false, server: false, bot: false },
+      channels: { message: null, voice: null, server: null, bot: null },
+      accessRoles: [],
+    },
+    tickets: { enabled: false, channelId: null, roleId: null, openCount: 0, totalCount: 0 },
+    equalizer: {
+      preset: "flat",
+      bands: new Array(15).fill(0),
+      presets: PRESETS,
+      frequencies: FREQUENCIES,
+      minGain: -0.2,
+      maxGain: 0.14,
+    },
+    stats: {
+      hasData: false,
+      songsPlayed: 0,
+      msPlayed: 0,
+      songsSkipped: 0,
+      streamsPlayed: 0,
+      playlistsAdded: 0,
+      totalSessions: 0,
+      peakListeners: 0,
+      uniqueListeners: 0,
+      averageSessionMs: 0,
+      firstPlayedAt: null,
+      lastPlayedAt: null,
+      topSources: [],
+      mostActiveHour: null,
+    },
     options: { channels: CHANNELS, roles: ROLES },
   };
 }
@@ -40,8 +144,21 @@ export function installDevMock() {
   const store = new Map();
   const realFetch = window.fetch;
 
-  const json = (body) =>
-    new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  const json = (body, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+  /* The gateway refuses a few states outright. The mock has to refuse them too:
+     a stub that accepts what the real server rejects teaches the UI a shape it
+     will never actually be given. */
+  function reject(patch, current) {
+    const tickets = { ...current.tickets, ...(patch.tickets || {}) };
+    if (tickets.enabled && !tickets.channelId) return "Choose a channel before turning the ticket system on.";
+
+    for (const [key, value] of Object.entries(patch.logs?.channels || {})) {
+      if (!value) return `A channel is required for ${key} logs.`;
+    }
+    return null;
+  }
 
   window.fetch = async (input, init = {}) => {
     const url = String(input);
@@ -79,18 +196,41 @@ export function installDevMock() {
     const settingsMatch = /\/api\/dashboard\/guilds\/(\d+)\/settings/.exec(url);
     if (settingsMatch) {
       const guildId = settingsMatch[1];
-      if (!store.has(guildId)) store.set(guildId, freshSettings());
+      // "Test Server" stands in for a server nobody has set anything up in.
+      // The empty states are what every new install sees first, so they have to
+      // be reachable in the mock rather than only in production.
+      if (!store.has(guildId)) store.set(guildId, freshSettings(guildId === GUILDS[2].id));
 
       if (init.method === "PATCH") {
         const patch = JSON.parse(init.body);
         const current = store.get(guildId);
-        for (const [group, values] of Object.entries(patch)) {
-          current[group] = { ...current[group], ...values };
+
+        const refusal = reject(patch, current);
+        if (refusal) {
+          await new Promise((resolve) => setTimeout(resolve, 240));
+          return json({ ok: false, error: refusal }, 400);
         }
+
+        for (const [group, values] of Object.entries(patch)) {
+          // logs.categories and logs.channels are a level deeper than the rest,
+          // so a shallow merge here would drop the three keys not being changed
+          // and the mock would disagree with the real gateway.
+          const merged = { ...current[group] };
+          for (const [key, value] of Object.entries(values)) {
+            merged[key] =
+              value && typeof value === "object" && !Array.isArray(value)
+                ? { ...merged[key], ...value }
+                : value;
+          }
+          current[group] = merged;
+        }
+        // Mirror the gateway's rule rather than letting the mock drift from it.
+        if (current.logs && !Object.values(current.logs.categories).some(Boolean)) current.logs.enabled = false;
+        if (current.equalizer && patch.equalizer?.bands) current.equalizer.preset = "custom";
         await new Promise((resolve) => setTimeout(resolve, 240));
       }
 
-      return json({ ok: true, settings: store.get(guildId) });
+      return json({ ok: true, settings: store.get(guildId), warnings: [] });
     }
 
     return realFetch(input, init);

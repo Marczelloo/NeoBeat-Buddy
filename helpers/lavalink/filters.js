@@ -71,23 +71,27 @@ async function applyFilters(guildId, player, nextFilters, reason) {
   return { status: "ok", filters: nextFilters };
 }
 
-async function lavalinkSetEqualizer(guildId, presetOrBands) {
-  const player = getPlayer(guildId);
-
-  if (!player) return { status: "no_player" };
-
+/**
+ * Folds a preset name or a raw band array into the next filter object.
+ *
+ * Pure, and separate from the player, because the dashboard sets a server's
+ * stored equalizer while the bot may be idle. Both callers have to produce a
+ * byte-identical result — a second implementation of the preamp rule is how
+ * the panel and the dashboard would quietly start disagreeing about loudness.
+ *
+ * Returns `null` for an unknown preset name.
+ */
+function buildEqualizerFilters(currentFilters, presetOrBands) {
   const isBandArray = Array.isArray(presetOrBands);
   const presetName = isBandArray && presetOrBands.length ? "custom" : String(presetOrBands || "flat").trim().toLowerCase();
   const bands = isBandArray
     ? normalizeEqualizerBands(presetOrBands)
     : normalizeEqualizerBands(EQUALIZER_PRESETS[presetName] ?? []);
 
-  if (!bands.length && !isBandArray && presetName !== "flat" && !EQUALIZER_PRESETS[presetName])
-    return { status: "invalid_preset" };
+  if (!bands.length && !isBandArray && presetName !== "flat" && !EQUALIZER_PRESETS[presetName]) return null;
 
-  const current = getStoredFilters(guildId, player);
   const nextFilters = {
-    ...current,
+    ...(currentFilters || {}),
     equalizer: bands,
     preset: isBandArray && bands.length ? "custom" : presetName,
   };
@@ -99,6 +103,17 @@ async function lavalinkSetEqualizer(guildId, presetOrBands) {
     delete nextFilters.volume;
     delete nextFilters.eqPreamp;
   }
+
+  return nextFilters;
+}
+
+async function lavalinkSetEqualizer(guildId, presetOrBands) {
+  const player = getPlayer(guildId);
+
+  if (!player) return { status: "no_player" };
+
+  const nextFilters = buildEqualizerFilters(getStoredFilters(guildId, player), presetOrBands);
+  if (!nextFilters) return { status: "invalid_preset" };
 
   return applyFilters(guildId, player, nextFilters, "setEqualizer");
 }
@@ -157,6 +172,7 @@ module.exports = {
   SAFE_EQ_MAX_GAIN,
   normalizeEqualizerBands,
   getEqualizerPreamp,
+  buildEqualizerFilters,
   getCurrentFilterName,
   lavalinkSetEqualizer,
   lavalinkSetFilterPreset,
