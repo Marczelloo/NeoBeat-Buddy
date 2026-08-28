@@ -362,19 +362,19 @@ function scoreCandidateV3(candidate, context) {
   const sameArtist = candidateArtist && candidateArtist === context.referenceArtist;
   const sameAlbum = candidateAlbum && candidateAlbum === context.referenceAlbum;
   const similarity = Number(candidate.similarity) || 0;
-  const relation = sources.has("lastfm_similar")
-    ? 40 + Math.round(similarity * 10)
-    : sources.has("same_album")
-      ? 44
-      : sources.has("deezer_recommendations")
-        ? 34 + Math.round(similarity * 10)
-      : sources.has("youtube_mix")
-        ? 30
-        : sources.has("deezer_chart")
-          ? 18
-            + Math.round(Math.max(0, Math.min(100, Number(candidate.popularity) || 0)) / 10)
-            + Math.max(0, 10 - Math.min(10, Number(candidate.chartPosition) || 10))
-          : 0;
+  const chartRelation = 18
+    + Math.round(Math.max(0, Math.min(100, Number(candidate.popularity) || 0)) / 10)
+    + Math.max(0, 10 - Math.min(10, Number(candidate.chartPosition) || 10));
+  // A flat priority ladder, highest-confidence lane first. Written as one
+  // chain rather than a nested-looking one: the indentation used to imply
+  // deezer_chart sat under youtube_mix, which is not how this parses.
+  const relation =
+    sources.has("lastfm_similar") ? 40 + Math.round(similarity * 10)
+    : sources.has("same_album") ? 44
+    : sources.has("deezer_recommendations") ? 34 + Math.round(similarity * 10)
+    : sources.has("youtube_mix") ? 30
+    : sources.has("deezer_chart") ? chartRelation
+    : 0;
 
   // The current transition matters more than the session-opening manual
   // anchor, which may be hours stale by now.

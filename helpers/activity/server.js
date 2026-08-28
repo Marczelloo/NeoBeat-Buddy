@@ -1048,9 +1048,11 @@ async function runTrackedActivityAction({ guildId, identity, action, payload = {
   // socket handoff grace. Hold the Activity ownership through that work so
   // trackStartUI never falls back to the legacy command-channel player.
   const releaseActivityAction = beginActivityAction(guildId);
-  const player = getPlayer(guildId);
-  const beforeTrack = resolveActivityPlayback(playbackState.get(guildId)?.currentTrack, player?.currentTrack).track;
   try {
+    const player = getPlayer(guildId);
+    // Read before the action runs: the lease is already held, so nothing
+    // between here and the release can escape the `finally` and strand it.
+    const beforeTrack = resolveActivityPlayback(playbackState.get(guildId)?.currentTrack, player?.currentTrack).track;
     const result = await runActivityAction({ guildId, identity, action, payload });
     if (result !== false && result?.success !== false) {
       recordActivityAction(guildId, identity, action, payload, serializeTrack(beforeTrack), result);

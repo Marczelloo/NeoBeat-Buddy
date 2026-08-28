@@ -97,4 +97,55 @@ test.describe("Lavalink autoplay queueing", () => {
     assert.deepEqual(replacementOptions.blockedTracks, [rejectedTrack]);
     assert.equal(replacementOptions.selectionIntent.mode, "replace");
   });
+
+  test("leaves the queue alone when the rejected pick moves while a replacement is resolving", async () => {
+    const modulePath = require.resolve("../../../helpers/lavalink/autoplay");
+    const rejectedTrack = {
+      track: "old-encoded",
+      info: { title: "Rejected Pick", author: "Artist", length: 120000, autoplayed: true },
+      userData: { autoplay: true, activityQueueId: "queued-auto" },
+    };
+    const survivingTrack = {
+      track: "manual-encoded",
+      info: { title: "Manual Pick", author: "Someone" },
+      userData: { activityQueueId: "queued-manual" },
+    };
+    const player = {
+      guildId: "guild-stale",
+      currentTrack: { info: { title: "Current", author: "Anchor" } },
+      queue: [rejectedTrack],
+    };
+
+    require.cache[require.resolve("../../../helpers/lavalink/autoplayV3")] = {
+      id: require.resolve("../../../helpers/lavalink/autoplayV3"),
+      filename: require.resolve("../../../helpers/lavalink/autoplayV3"),
+      loaded: true,
+      exports: {
+        // The track is skipped, or someone clears the queue, while the
+        // provider request is still open. The replacement must not land on
+        // whatever now occupies that index.
+        fetchAutoplayV3Track: async () => {
+          player.queue = [survivingTrack];
+          return { track: "new-encoded", info: { title: "Next Song", author: "Artist" }, userData: {} };
+        },
+      },
+    };
+    require.cache[require.resolve("../../../helpers/lavalink/autoplayExposure")] = {
+      id: require.resolve("../../../helpers/lavalink/autoplayExposure"),
+      filename: require.resolve("../../../helpers/lavalink/autoplayExposure"),
+      loaded: true,
+      exports: { recordAutoplayExposure: async () => {} },
+    };
+    delete require.cache[modulePath];
+
+    const { replaceQueuedAutoplayTrack } = require(modulePath);
+    const result = await replaceQueuedAutoplayTrack(player, {
+      rejectedTrack,
+      expectedQueueItemId: "queued-auto",
+    });
+
+    assert.equal(result.success, false);
+    assert.equal(result.stale, true);
+    assert.deepEqual(player.queue, [survivingTrack]);
+  });
 });
