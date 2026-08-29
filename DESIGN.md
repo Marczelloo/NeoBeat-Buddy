@@ -130,6 +130,10 @@ spacing:
   xl: "26px"
   xxl: "30px"
   gutter: "clamp(20px, 5vw, 56px)"
+  gap-lede: "20px"
+  gap-head: "clamp(32px, 3.6vw, 46px)"
+  gutter-panel: "clamp(14px, 1.7vw, 22px)"
+  pad-panel: "clamp(18px, 2vw, 24px)"
 components:
   button-primary:
     backgroundColor: "{colors.white-btn}"
@@ -315,12 +319,14 @@ Both surfaces run a single centred measure on a full-bleed near-black ground; ne
 
 **Settings measure.** Fields are a two-track grid (`1fr / max 320px`) capped at 780px, control right-aligned, description and consequence copy capped at 62ch. Below 700px the field linearises in a deliberate order — label, description, control, note — so the consequence still reads as the result of the control above it.
 
-**Spacing rhythm.** Small values are dense and even (4 / 6 / 8 / 10 / 14); region-scale values are fluid clamps. There is no 4px-multiple dogma: the build uses half-steps (2.5px signal-bar gaps, 13px padding) where optical alignment beat arithmetic.
+**Spacing rhythm.** Small values are dense and even (4 / 6 / 8 / 10 / 14); region-scale values are fluid clamps. There is no 4px-multiple dogma: the build uses half-steps (2.5px signal-bar gaps, 13px padding) where optical alignment beat arithmetic. Between the dense end and the region clamps sit four role-keyed steps, declared on `.landing` so the interior of a region stops drifting back to one default: `--gap-lede` (20px) under a section heading, `--gap-head` (`clamp(32px, 3.6vw, 46px)`) from a head block to the body it introduces, `--gutter-panel` (`clamp(14px, 1.7vw, 22px)`) between panels in a grid, and `--pad-panel` (`clamp(18px, 2vw, 24px)`) inside a top-level panel.
 
 ### Named Rules
 **The Reserved-Canvas Rule.** Any region whose content swaps in place reserves its height. The response canvas is sized by its tallest member, which makes that member everyone's floor: when the filter response ran to 1074px on mobile, every other response inherited 500px of void. Keeping the tallest response honest is part of the rule, not a separate concern.
 
 **The Measure Rule.** Prose is capped at 62-68ch and display at 19ch. A full-width paragraph at 1060px is a defect, not a layout.
+
+**The Gap-Ranks-It Rule.** A gap is sized by what it separates, never by one house step. The landing shipped 14px under a 40px section heading, between two lines of a caption, under a 10px mono label, and between a panel and its own head — four jobs, one value, so nothing inside a region was ranked and the page read as one dense mat despite a generous 92px rhythm between regions. Region rhythm is not a cure for a flat interior, and a 12px gutter between two half-page panels is a gutter for chips.
 
 ## Elevation & Depth
 

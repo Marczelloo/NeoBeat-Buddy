@@ -8,8 +8,8 @@
 .exhibit {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 30px;
+  gap: var(--gutter-panel);
+  margin-top: var(--gap-head);
   /* Frames take their own height. Stretching them to the row would pad the
      shorter one with dead panel below its caption, and cropping a UI capture
      to force a flush bottom cuts through text. The tops align and the plates
@@ -61,7 +61,7 @@
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 11px 14px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -112,7 +112,7 @@
 }
 
 figure figcaption {
-  padding: 12px 14px 14px;
+  padding: 14px 16px 16px;
   font-size: 12px;
   line-height: 1.55;
   color: var(--muted);
@@ -133,7 +133,7 @@ figure figcaption {
 
 .ex-lead figcaption {
   max-width: 66ch;
-  padding: 14px 16px 16px;
+  padding: 16px 18px 18px;
   font-size: 13px;
 }
 
@@ -174,16 +174,16 @@ figure figcaption {
   display: grid;
   grid-column: span 12;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 12px;
+  gap: var(--gutter-panel);
   align-items: stretch;
-  margin-top: 10px;
+  margin-top: var(--gutter-panel);
 }
 
 .ex-close-text {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 22px 24px;
+  padding: clamp(24px, 3vw, 34px);
   border-radius: 14px;
   background: var(--surface);
   outline: 1px solid var(--line);
@@ -195,7 +195,7 @@ figure figcaption {
 }
 
 .ex-close-text p {
-  margin-top: 12px;
+  margin-top: 16px;
   max-width: 44ch;
   font-size: 13.5px;
   line-height: 1.6;
@@ -203,7 +203,7 @@ figure figcaption {
 }
 
 .ex-close-note {
-  margin-top: 18px;
+  margin-top: 22px;
   font-size: 11px;
   letter-spacing: 0.02em;
   color: var(--muted);
@@ -214,7 +214,7 @@ figure figcaption {
 }
 
 .stage-note {
-  margin-top: 16px;
+  margin-top: 20px;
   font-size: 11px;
   color: var(--muted);
 }
@@ -222,7 +222,7 @@ figure figcaption {
 /* ---------- queue panel, used by the /queue response ---------- */
 
 .qpanel {
-  padding: 14px;
+  padding: 16px;
   border-radius: 12px;
   background: var(--raised);
   outline: 1px solid var(--line);
@@ -232,7 +232,7 @@ figure figcaption {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   color: var(--muted);
 }
 
@@ -300,7 +300,7 @@ figure figcaption {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .find-ico {
@@ -361,11 +361,11 @@ figure figcaption {
 .filters {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .ftile {
-  padding: 11px 13px;
+  padding: 12px 14px;
   border-radius: 11px;
   background: var(--raised);
   outline: 1px solid var(--line);

@@ -1,5 +1,16 @@
 .landing {
   --gutter: clamp(20px, 5vw, 56px);
+
+  /* Vertical rhythm inside a region, keyed to what each gap separates. One
+     14px step used to do every one of these jobs — the distance under a 40px
+     heading was the same as the distance between two lines of a caption — so
+     nothing inside a region was ranked, and a page with a generous 92px
+     region rhythm still read as one dense mat. Region-scale spacing is
+     unchanged; only the inside of a region moves. */
+  --gap-lede: 20px;
+  --gap-head: clamp(32px, 3.6vw, 46px);
+  --gutter-panel: clamp(14px, 1.7vw, 22px);
+  --pad-panel: clamp(18px, 2vw, 24px);
   position: relative;
   min-height: 100vh;
   padding: 0 var(--gutter) 0;
@@ -180,7 +191,7 @@
 /* ---------- lede ---------- */
 
 .lede {
-  padding: clamp(30px, 5vw, 54px) 0 clamp(20px, 3vw, 30px);
+  padding: clamp(38px, 5.4vw, 62px) 0 clamp(24px, 3.2vw, 36px);
   max-width: 19ch;
   font-size: clamp(34px, 4.6vw, 52px);
   line-height: 1.04;
@@ -312,7 +323,7 @@
 /* ---------- canvas ---------- */
 
 .canvas-slot {
-  margin-top: 14px;
+  margin-top: 18px;
 }
 
 /* All responses share one grid cell, so the panel keeps the height of the
@@ -323,7 +334,7 @@
   background: var(--surface);
   outline: 1px solid var(--line);
   box-shadow: var(--panel-shadow);
-  padding: 18px;
+  padding: var(--pad-panel);
 }
 
 .canvas-layer {
@@ -349,7 +360,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 
 .canvas-sig {
@@ -371,14 +382,14 @@
   grid-template-columns: 40px minmax(0, 1fr) auto;
   gap: 11px;
   align-items: center;
-  padding: 7px 8px;
+  padding: 9px 10px;
   border-radius: 11px;
   background: var(--raised);
   outline: 1px solid var(--line);
 }
 
 .qrow + .qrow {
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .qart {
@@ -511,7 +522,7 @@
 /* ---------- command index ---------- */
 
 .index {
-  margin-top: 30px;
+  margin-top: var(--gap-head);
   border-top: 1px solid var(--line);
 }
 
@@ -521,7 +532,7 @@
   gap: 18px;
   align-items: center;
   width: 100%;
-  padding: 14px 12px;
+  padding: 17px 14px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   transition: background 0.12s var(--ease), color 0.12s var(--ease);
@@ -573,7 +584,7 @@
 /* The primary action, inline as the last command. Separated from the list so
    it does not read as another selected row. */
 .index-row.is-cta {
-  margin-top: 18px;
+  margin-top: 22px;
   border-bottom: 0;
   border-radius: 11px;
   background: var(--white-btn);
@@ -606,7 +617,7 @@
 }
 
 .pitch {
-  margin-top: clamp(28px, 4vw, 40px);
+  margin-top: var(--gap-head);
   max-width: 68ch;
   font-size: 15px;
   line-height: 1.62;
@@ -636,8 +647,8 @@
 
   .index-row {
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px 12px;
-    padding: 13px 8px;
+    gap: 5px 12px;
+    padding: 15px 10px;
   }
 
   .index-sig {
@@ -659,7 +670,7 @@
 /* ---------- response internals ---------- */
 
 .resp-lead {
-  margin-bottom: 14px;
+  margin-bottom: 18px;
   max-width: 68ch;
   font-size: 13px;
   line-height: 1.6;
@@ -1087,7 +1098,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 18px;
 }
 
 .eq-more {
@@ -1101,7 +1112,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px 16px;
-  margin-top: 14px;
+  margin-top: 18px;
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1229,7 +1240,7 @@
 }
 
 .ledger-lead {
-  margin-top: 14px;
+  margin-top: var(--gap-lede);
   max-width: 64ch;
   font-size: 15px;
   line-height: 1.6;
@@ -1239,14 +1250,14 @@
 /* Four groups, so the track minimum is set to let all four share one row
    rather than orphaning the last onto its own. */
 .ledger-rows {
-  margin: 34px 0 0;
+  margin: var(--gap-head) 0 0;
 }
 
 .ledger-block {
   display: grid;
   grid-template-columns: minmax(0, 210px) minmax(0, 1fr);
   gap: clamp(20px, 4vw, 52px);
-  padding: 26px 0;
+  padding: clamp(28px, 3vw, 36px) 0;
   border-top: 1px solid var(--line-strong);
 }
 
@@ -1277,7 +1288,7 @@
   display: grid;
   grid-template-columns: minmax(0, 170px) minmax(0, 1fr);
   gap: 4px 28px;
-  padding: 11px 0;
+  padding: 13px 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1335,7 +1346,7 @@
 }
 
 .showcase-head p {
-  margin-top: 14px;
+  margin-top: var(--gap-lede);
   max-width: 66ch;
   font-size: 15px;
   line-height: 1.6;

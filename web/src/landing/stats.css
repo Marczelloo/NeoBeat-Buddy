@@ -1,6 +1,6 @@
 .statline {
   margin-top: clamp(44px, 6vw, 72px);
-  padding-top: 26px;
+  padding-top: 30px;
   border-top: 1px solid var(--line);
 }
 
@@ -10,7 +10,7 @@
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 22px;
+  margin-bottom: 26px;
 }
 
 .statline-head h2 {
@@ -35,7 +35,7 @@
 }
 
 .statcell {
-  padding: 15px 16px;
+  padding: 18px;
   background: var(--surface);
 }
 
@@ -56,7 +56,7 @@
 }
 
 .statsources {
-  margin-top: 16px;
+  margin-top: 20px;
 }
 
 .statsources-label {
@@ -113,7 +113,7 @@
 }
 
 .statline-note {
-  margin-top: 14px;
+  margin-top: 18px;
   max-width: 64ch;
   font-size: 12px;
   line-height: 1.55;
