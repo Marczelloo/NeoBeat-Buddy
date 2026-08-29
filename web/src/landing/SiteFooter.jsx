@@ -7,7 +7,7 @@ import "./footer.css";
 const PRODUCT = [
   ["Discord Activity", "A shared visual player inside the voice channel"],
   ["Player embed", "Full transport in the text channel"],
-  ["Server dashboard", "Per-server settings, for administrators"],
+  ["Server dashboard", "Per-server settings, for the owner and whoever they trust"],
 ];
 
 const SOURCES = ["Deezer", "Spotify", "SoundCloud", "YouTube"];

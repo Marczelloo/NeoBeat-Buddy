@@ -21,7 +21,7 @@ export function SignedOut() {
   return (
     <StateScreen
       title="Sign in to configure MewBit."
-      body="You'll need Administrator permission on a server MewBit is already in."
+      body="You'll need to own a server MewBit is in — or have been added as an operator by the person who does."
     >
       <a className="btn-white" href={loginUrl}>
         Continue with Discord
@@ -34,7 +34,7 @@ export function NoServers() {
   return (
     <StateScreen
       title="No servers to configure."
-      body="You administer no servers that MewBit has been added to. Invite the bot to a server you administer, then come back."
+      body="This lists the servers you own, plus any where the owner has added you as an operator. Invite MewBit to a server you own, or ask its owner to add you."
     >
       <Link className="btn-ghost" to="/">
         Back to home
