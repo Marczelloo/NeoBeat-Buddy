@@ -1,4 +1,78 @@
 {
+  "1.4.0": {
+    "version": "1.4.0",
+    "date": "2026-08-29",
+    "title": "The Web Surface",
+    "features": [
+      "MewBit now has a website: a landing page, a searchable command reference, and this changelog — all served from your own instance, so the numbers and the command list are yours, not a marketing page's",
+      "A per-server dashboard for everything the bot remembers: player channel, default source, DJ mode, server logs, tickets, the equalizer, and per-server statistics",
+      "Dashboard access starts with the server owner alone. The owner can then name specific people as operators — Discord's Administrator permission no longer grants anything, because it is handed out far more widely than the power to change how the bot behaves for everyone",
+      "Every dashboard change is recorded: who made it, when, and what it went from and to",
+      "An embed composer with a live preview, so you can see the message before it is sent instead of guessing inside a Discord modal",
+      "Server playlists can be renamed and removed from the dashboard, including ones whose creator has left the server",
+      "Instance diagnostics: uptime, memory, event-loop lag, Lavalink connection and restart counters"
+    ],
+    "fixes": [
+      "Rate limits now count each visitor separately behind a reverse proxy. They previously shared one bucket, so a single visitor could lock everyone else out",
+      "The sign-in screen no longer promises access to anyone holding Administrator, a rule that stopped being true when access became owner-first",
+      "Authenticated dashboard reads are now rate limited at all; they were unbounded",
+      "A malformed session cookie is ignored instead of failing the request",
+      "The session cap now evicts expired sessions before live ones, instead of signing out whoever had been working longest",
+      "The Activity no longer strands its ownership lease when a lookup throws"
+    ],
+    "changes": [
+      "The OAuth redirect URI derives from one variable, and the bot prints the exact value to register at startup",
+      "The Activity moved to its own hostname, so the public domain belongs to the website"
+    ]
+  },
+  "1.3.0": {
+    "version": "1.3.0",
+    "date": "2026-08-21",
+    "title": "Autoplay V3 and the AI DJ",
+    "features": [
+      "Autoplay V3 scores candidates on musical fit — artist relation, album, chart position and provider agreement — instead of taking whatever a provider returned first",
+      "Optional AI DJ: an OpenAI model plans the next few transitions, and every proposal is verified against a real provider catalogue entry before it can play",
+      "Autoplay stays inside the vibe of what people actually queued by hand, rather than drifting genre by genre until it is somewhere else entirely",
+      "Artist and album streak limits, so one artist cannot quietly take over the room",
+      "Autoplay picks stay marked in the queue, so nobody wonders where a track came from",
+      "24/7 radio mode keeps a room playing continuously"
+    ],
+    "fixes": [
+      "Spotify mirrors are verified against a playable source before being used as a fallback",
+      "Stalled queue transitions now recover instead of leaving the player stuck",
+      "YouTube TV playback restored after upstream signature changes",
+      "Autoplay no longer repeats a recording that was skipped moments earlier"
+    ],
+    "changes": [
+      "Added an autoplay soak and replay simulator: hundreds of decisions can be exercised without joining a voice channel (pnpm test:autoplay:soak)",
+      "AI DJ web search is off by default, because it costs money per lookup",
+      "Autoplay scoring no longer depends on Spotify being configured"
+    ]
+  },
+  "1.2.0": {
+    "version": "1.2.0",
+    "date": "2026-08-14",
+    "title": "The Discord Activity",
+    "features": [
+      "A shared visual player that opens inside the voice channel. Everyone works from the same queue, the same artwork and the same transport — there is no host who sees more than the rest",
+      "Search every provider from the Activity and play or queue without leaving the channel",
+      "Synced lyrics, line by line, with a per-user timing offset for when a source runs early",
+      "The fifteen-band equalizer and thirteen one-click effects, applied to the live player",
+      "Browse, create and edit playlists from the Activity",
+      "A compact view that keeps the transport reachable while the Activity is minimised",
+      "The voice channel status names whatever is currently playing"
+    ],
+    "fixes": [
+      "The Activity's OAuth handshake is guarded against a partial launch",
+      "Player state reconciles with the live player instead of drifting after a reconnect",
+      "Sliders stay stable while a state update arrives mid-drag",
+      "Volume is restored correctly after unmuting"
+    ],
+    "changes": [
+      "The Activity is served as static files with the gateway proxied under /api, so it can sit behind any reverse proxy",
+      "Views are lazy-loaded, so the first paint does not wait for the whole app"
+    ]
+  },
   "1.1.4": {
     "version": "1.1.4",
     "date": "2026-08-07",
@@ -289,7 +363,9 @@
       "Faster and more reliable recommendations"
     ],
     "fixes": [],
-    "changes": ["Spotify credentials now optional"]
+    "changes": [
+      "Spotify credentials now optional"
+    ]
   },
   "1.0.6": {
     "version": "1.0.6",
@@ -301,7 +377,9 @@
       "Fixed previous button not updating track info correctly",
       "Fixed player synchronization issues"
     ],
-    "changes": ["SeekTo now accepts multiple formats: seconds, MM:SS, or H:MM:SS"]
+    "changes": [
+      "SeekTo now accepts multiple formats: seconds, MM:SS, or H:MM:SS"
+    ]
   },
   "1.0.5": {
     "version": "1.0.5",
@@ -334,7 +412,10 @@
       "Fixed bot disconnecting on voice region changes",
       "Fixed various command errors"
     ],
-    "changes": ["Better autoplay algorithm with smarter scoring", "Faster EQ panel updates"]
+    "changes": [
+      "Better autoplay algorithm with smarter scoring",
+      "Faster EQ panel updates"
+    ]
   },
   "1.0.3": {
     "version": "1.0.3",
@@ -348,7 +429,10 @@
       "Custom EQ presets (up to 10 per user)",
       "Real-time visual feedback in EQ panel"
     ],
-    "fixes": ["Fixed EQ panel errors and positioning issues", "Fixed autoplay looping same tracks"],
+    "fixes": [
+      "Fixed EQ panel errors and positioning issues",
+      "Fixed autoplay looping same tracks"
+    ],
     "changes": [
       "Better autoplay with audio feature analysis",
       "EQ panel auto-cleanup after inactivity",
@@ -365,7 +449,11 @@
       "Statistics tracking via /stats command",
       "Tracks listening hours, users, and activity patterns"
     ],
-    "fixes": ["Fixed session calculations", "Fixed requester info display", "Fixed duplicate messages on Raspberry Pi"],
+    "fixes": [
+      "Fixed session calculations",
+      "Fixed requester info display",
+      "Fixed duplicate messages on Raspberry Pi"
+    ],
     "changes": []
   },
   "1.0.1": {
@@ -384,7 +472,10 @@
       "Fixed seekTo command problems",
       "Fixed age-restricted content handling"
     ],
-    "changes": ["Better recommendations from multiple sources", "Automatic filtering of non-music content"]
+    "changes": [
+      "Better recommendations from multiple sources",
+      "Automatic filtering of non-music content"
+    ]
   },
   "1.0.0": {
     "version": "1.0.0",

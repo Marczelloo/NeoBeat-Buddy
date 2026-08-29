@@ -1,5 +1,7 @@
 const { randomBytes } = require("node:crypto");
 const { version: packageVersion } = require("../../package.json");
+const { getAllVersions, getPatchNotes, getCurrentVersion } = require("../announcements/announcer");
+const { CATEGORIES, DEFAULT_CATEGORY } = require("../help/categories");
 const Log = require("../logs/log");
 const health = require("../monitoring/health");
 const { consumeRateLimit } = require("../security/rateLimit");
@@ -36,6 +38,61 @@ const EMBED_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/embed$/;
 const PLAYLISTS_PATTERN = /^\/api\/dashboard\/guilds\/(\d{5,25})\/playlists(?:\/([A-Za-z0-9_-]{1,64}))?$/;
 const STATE_TTL_MS = 10 * 60 * 1000;
 const SESSION_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The command reference, as the bot itself knows it.
+ *
+ * `/help` and the website answer from this one array, because a second copy of
+ * seventy-eight commands would start drifting the day after it was written.
+ * The shape is passed through almost unchanged; only the category key is added,
+ * so a page can link to a category without matching on its label.
+ */
+function describeCommands() {
+  return Object.entries(CATEGORIES).map(([key, category]) => ({
+    key,
+    label: category.label,
+    emoji: category.emoji || null,
+    description: category.description || "",
+    /* Kept structured. These are the guide sections — "Music Source Selection"
+       and the like — carrying titles, bullet lists and inline markup. Flattened
+       to a string they render as [object Object], which is exactly what the
+       first draft of the website did. */
+    notes: Array.isArray(category.notes)
+      ? category.notes
+          .map((note) => ({ name: String(note?.name || "").trim(), value: String(note?.value || "").trim() }))
+          .filter((note) => note.value)
+      : [],
+    /* Trimmed on the way out. Six of these carry a multi-line usage block and
+       two of those open with a newline, which a page would render as a blank
+       first line. */
+    commands: (category.commands || []).map((command) => ({
+      name: command.name,
+      description: String(command.description || "").trim(),
+      usage: String(command.usage || "").trim() || `/${command.name}`,
+      notes: command.notes ? String(command.notes).trim() : null,
+    })),
+  }));
+}
+
+/**
+ * Release history, newest first. The same JSON `/changelog` reads in Discord.
+ */
+function describeChangelog() {
+  return getAllVersions()
+    .map((version) => {
+      const notes = getPatchNotes(version);
+      if (!notes) return null;
+      return {
+        version: notes.version || version,
+        date: notes.date || null,
+        title: notes.title || "",
+        features: Array.isArray(notes.features) ? notes.features : [],
+        fixes: Array.isArray(notes.fixes) ? notes.fixes : [],
+        changes: Array.isArray(notes.changes) ? notes.changes : [],
+      };
+    })
+    .filter(Boolean);
+}
 
 function sendJson(response, statusCode, payload, extraHeaders = {}) {
   response.writeHead(statusCode, {
@@ -324,6 +381,30 @@ function createDashboardRouter(client) {
           uptimeMs: Math.floor(process.uptime() * 1000),
           version: packageVersion,
         },
+      });
+    }
+
+    /* Both of these are already public: every Discord user can read them with
+       /help and /changelog. They are served here so the website shows what this
+       instance actually runs rather than what its build once assumed, and they
+       share the public bucket so an unauthenticated crawler cannot use them to
+       exhaust anything. */
+    if (request.method === "GET" && url.pathname === `${PREFIX}/public/commands`) {
+      enforceRateLimit(request, "stats", 120, 60_000);
+      return sendJson(response, 200, {
+        ok: true,
+        defaultCategory: DEFAULT_CATEGORY,
+        categories: describeCommands(),
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === `${PREFIX}/public/changelog`) {
+      enforceRateLimit(request, "stats", 120, 60_000);
+      const releases = describeChangelog();
+      return sendJson(response, 200, {
+        ok: true,
+        current: getCurrentVersion(),
+        releases,
       });
     }
 

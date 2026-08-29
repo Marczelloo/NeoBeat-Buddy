@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { repoUrl } from "../api.js";
 import ActivityShowcase from "./ActivityShowcase.jsx";
 import CommandLine from "./CommandLine.jsx";
 import FeatureLedger from "./FeatureLedger.jsx";
 import HeroField from "./HeroField.jsx";
 import LiveStats from "./LiveStats.jsx";
-import Mark from "./Mark.jsx";
 import ResponseCanvas from "./ResponseCanvas.jsx";
 import SectionRule from "./SectionRule.jsx";
 import SiteFooter from "./SiteFooter.jsx";
+import TopBar from "../site/TopBar.jsx";
 import useAutotype from "./autotype.js";
 import { COMMANDS, DEFAULT_COMMAND_ID, filterCommands, findCommand } from "./commands.js";
 import "./landing.css";
@@ -126,21 +125,7 @@ export default function Landing() {
       </div>
 
       <div className="wrap">
-        <header className="topbar">
-          <span className="mark">
-            <Mark size={26} animated />
-            MewBit
-          </span>
-
-          <nav className="topbar-links">
-            <Link className="toplink" to="/dashboard">
-              Dashboard
-            </Link>
-            <a className="toplink" href={repoUrl} target="_blank" rel="noreferrer noopener">
-              GitHub
-            </a>
-          </nav>
-        </header>
+        <TopBar animated />
 
         {/* The offer in one line, then straight into the palette — the page's
             thesis is the command line, so nothing stacks above it. */}

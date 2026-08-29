@@ -4,10 +4,12 @@ process.env.DISCORD_CLIENT_SECRET = "secret";
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const { init: initAnnouncer } = require("../../../helpers/announcements/announcer");
 const accessStore = require("../../../helpers/dashboard/access");
 const { createDashboardRouter } = require("../../../helpers/dashboard/routes");
 const { createSession, resetSessions, SESSION_COOKIE } = require("../../../helpers/dashboard/sessions");
 const { resetGuildState } = require("../../../helpers/guildState");
+const { CATEGORIES, DEFAULT_CATEGORY } = require("../../../helpers/help/categories");
 
 const GUILD = "900000000000000009";
 
@@ -230,6 +232,83 @@ test("public stats survive an unavailable stats store", async () => {
   await router.handle(request(), response, url("/api/dashboard/public/stats"));
   assert.equal(response.statusCode, 200);
   assert.equal(JSON.parse(response.body).instance.servers, 0);
+});
+
+/* --------------------------------------------- public reference surfaces --- */
+
+test("the command reference is public, and is the bot's own, not a copy", async () => {
+  const router = createDashboardRouter(fakeClient());
+  const response = fakeResponse();
+  await router.handle(request(), response, url("/api/dashboard/public/commands"));
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.defaultCategory, DEFAULT_CATEGORY);
+
+  // The point of serving it rather than duplicating it: if someone adds a
+  // command to the bot and not to the website, there is no website copy to
+  // forget. This asserts the two cannot diverge.
+  const served = payload.categories.flatMap((category) => category.commands.map((c) => c.name)).sort();
+  const source = Object.values(CATEGORIES).flatMap((category) => category.commands.map((c) => c.name)).sort();
+  assert.deepEqual(served, source);
+  assert.ok(source.length > 50, `expected the full catalogue, got ${source.length}`);
+});
+
+test("every served command carries something to show", async () => {
+  const router = createDashboardRouter(fakeClient());
+  const response = fakeResponse();
+  await router.handle(request(), response, url("/api/dashboard/public/commands"));
+
+  for (const category of JSON.parse(response.body).categories) {
+    assert.ok(category.key && category.label, "a category needs a key and a label");
+    for (const command of category.commands) {
+      assert.ok(command.name, "a command needs a name");
+      assert.ok(command.description, `${command.name} has no description`);
+      // Never blank: the route falls back to /name when a usage line is absent.
+      assert.match(command.usage, /^\//, `${command.name} has no usage line`);
+    }
+  }
+});
+
+test("the changelog is public, newest first, and names the running version", async () => {
+  await initAnnouncer();
+  const router = createDashboardRouter(fakeClient());
+  const response = fakeResponse();
+  await router.handle(request(), response, url("/api/dashboard/public/changelog"));
+
+  assert.equal(response.statusCode, 200);
+  const payload = JSON.parse(response.body);
+  assert.ok(payload.releases.length > 1);
+  assert.equal(payload.releases[0].version, payload.current);
+
+  const rank = (v) => v.split(".").map(Number);
+  for (let i = 1; i < payload.releases.length; i += 1) {
+    const [a, b] = [rank(payload.releases[i - 1].version), rank(payload.releases[i].version)];
+    const newer = a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+    assert.ok(newer > 0, `${payload.releases[i - 1].version} should sort above ${payload.releases[i].version}`);
+  }
+});
+
+test("a release always has the three lists, so a page never renders undefined", async () => {
+  await initAnnouncer();
+  const router = createDashboardRouter(fakeClient());
+  const response = fakeResponse();
+  await router.handle(request(), response, url("/api/dashboard/public/changelog"));
+
+  for (const release of JSON.parse(response.body).releases) {
+    assert.ok(release.title, `${release.version} has no title`);
+    assert.ok(Array.isArray(release.features) && Array.isArray(release.fixes) && Array.isArray(release.changes));
+  }
+});
+
+test("neither reference surface needs a session", async () => {
+  resetSessions();
+  const router = createDashboardRouter(fakeClient());
+  for (const path of ["/api/dashboard/public/commands", "/api/dashboard/public/changelog"]) {
+    const response = fakeResponse();
+    await router.handle(request({ cookie: "" }), response, url(path));
+    assert.equal(response.statusCode, 200, `${path} should not require a session`);
+  }
 });
 
 /* ------------------------------------------------------- rate limiting --- */

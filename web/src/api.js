@@ -44,6 +44,8 @@ export const deleteServerPlaylist = (guildId, playlistId) =>
   call(`/api/dashboard/guilds/${guildId}/playlists/${playlistId}`, { method: "DELETE" });
 export const getInstance = () => call("/api/dashboard/instance");
 export const getPublicStats = () => call("/api/dashboard/public/stats");
+export const getCommands = () => call("/api/dashboard/public/commands");
+export const getChangelog = () => call("/api/dashboard/public/changelog");
 export const logout = () => call("/api/dashboard/logout", { method: "POST" });
 
 export const loginUrl = "/api/dashboard/login";

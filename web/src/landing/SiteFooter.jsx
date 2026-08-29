@@ -115,6 +115,8 @@ export default function SiteFooter() {
       <div className="foot-base">
         <span className="mono">© {new Date().getFullYear()} Marczelloo</span>
         <span className="mono foot-links">
+          <Link to="/help">Commands</Link>
+          <Link to="/changelog">Changelog</Link>
           <a href={repoUrl} target="_blank" rel="noreferrer noopener">
             GitHub
           </a>

@@ -1,0 +1,52 @@
+/* Chrome shared by every page that is not the landing page. */
+
+/* The page opener. It takes the landing lede's voice one step down: same
+   family and tracking, smaller, and it is allowed to wrap where the display
+   cap would not let the lede. */
+.page-head {
+  padding: clamp(38px, 5.4vw, 62px) 0 0;
+}
+
+.page-head h1 {
+  max-width: 22ch;
+  font-size: clamp(26px, 3.6vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+.page-head p {
+  margin-top: var(--gap-lede);
+  max-width: 68ch;
+  font-size: 15px;
+  line-height: 1.62;
+  color: var(--muted);
+}
+
+/* The current page is named, not decorated: full text on a wash, the same
+   step the section list uses. Cyan marks the server on the rail, not a link. */
+.toplink.is-here {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Four links plus the brand do not fit a phone on one line, and dropping a
+   link to make them fit loses a page. The bar wraps instead. */
+@media (max-width: 600px) {
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 14px 0 10px;
+    gap: 10px;
+  }
+
+  .topbar-links {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: -8px;
+  }
+
+  .toplink {
+    padding: 7px 8px;
+  }
+}

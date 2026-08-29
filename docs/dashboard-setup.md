@@ -1,3 +1,7 @@
+<!-- Part of the MewBit documentation set. -->
+
+[← Back to the README](../README.md)
+
 # MewBit web — landing page and dashboard setup
 
 The `web/` app serves two surfaces:
