@@ -23,7 +23,11 @@ async function readJsonResponse(response, context) {
   try {
     return body ? JSON.parse(body) : {};
   } catch {
-    throw new Error(`${context} returned non-JSON data (${response.status}). Use the production Activity mapping at https://mewbit.marczelloo.dev.`);
+    // Names the host actually serving this build. It used to name one
+    // deployment's domain, which sent people to the wrong place the moment
+    // the Activity moved hosts.
+    const origin = typeof window === "undefined" ? "the Activity host" : window.location.origin;
+    throw new Error(`${context} returned non-JSON data (${response.status}). ${origin} is serving HTML where the gateway should answer — check the Activity URL mapping and the reverse proxy.`);
   }
 }
 

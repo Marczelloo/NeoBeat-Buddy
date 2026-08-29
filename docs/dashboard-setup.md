@@ -50,9 +50,39 @@ DASHBOARD_SESSION_TTL_MS=604800000
 DASHBOARD_TRUST_PROXY=0
 ```
 
-In production set `DASHBOARD_TRUST_PROXY` to the number of proxies in front of
-the gateway — `1` behind a single Cloudflare tunnel. See **Access control**
-below for why.
+In production set `DASHBOARD_TRUST_PROXY` to the number of entries the gateway
+can trust at the end of `X-Forwarded-For`. See **Access control** below for why
+it matters.
+
+**Count the header, do not count the boxes.** A Cloudflare tunnel is not one
+proxy hop as far as this header is concerned: `cloudflared` does not put the
+visitor into `X-Forwarded-For` at all. The visitor arrives only in
+`CF-Connecting-IP`, and the reverse proxy behind the tunnel then writes *its
+own* peer — `127.0.0.1` — into `X-Forwarded-For`. Measured on the MewBit
+deployment, the gateway received:
+
+```text
+Cf-Connecting-Ip: <the visitor>
+X-Forwarded-For:  127.0.0.1
+```
+
+At any setting of `DASHBOARD_TRUST_PROXY`, that buckets every visitor together
+— the exact failure the setting exists to prevent. The proxy has to carry the
+real address across. In Caddy:
+
+```caddyfile
+handle @api {
+  reverse_proxy 127.0.0.1:8788 {
+    header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+  }
+}
+```
+
+Now `X-Forwarded-For` holds one entry, the visitor, and `DASHBOARD_TRUST_PROXY=1`
+is correct. Cloudflare overwrites `CF-Connecting-IP` at its edge and nothing but
+`cloudflared` can reach the listener, so the header cannot be spoofed from
+outside. Verify with a request that echoes the headers rather than by counting
+hops on a diagram — the answer is deployment-specific.
 
 `DASHBOARD_OAUTH_REDIRECT_URI` is intentionally absent: it derives from
 `DASHBOARD_PUBLIC_URL`. Local and production then differ by that one
