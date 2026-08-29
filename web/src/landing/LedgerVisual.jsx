@@ -5,34 +5,79 @@
  */
 
 const LINE = "rgba(255,255,255,0.14)";
+const LINE_STRONG = "rgba(255,255,255,0.28)";
 const INK = "#8b95a4";
 const BRIGHT = "#c3cbd7";
 const CYAN = "#67e3f4";
 const VIOLET = "#a78bfa";
 
+/* Five band handles. The response curve is generated from this same array
+   rather than written out beside it: as two independent literals the curve
+   drifted off its own handles, passing through two of the five. */
+const EQ_BANDS = [
+  [16, 50],
+  [44, 22],
+  [72, 45],
+  [100, 33],
+  [128, 30],
+];
+
+const round = (value) => Math.round(value * 100) / 100;
+
+/**
+ * A Catmull-Rom spline through `points`, emitted as cubic Béziers. The end
+ * points are duplicated so the curve starts and ends on a handle rather than
+ * running off past the outermost band.
+ */
+function smoothPath(points) {
+  const segments = [`M${points[0][0]} ${points[0][1]}`];
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const [x0, y0] = points[i - 1] || points[i];
+    const [x1, y1] = points[i];
+    const [x2, y2] = points[i + 1];
+    const [x3, y3] = points[i + 2] || points[i + 1];
+
+    const c1x = round(x1 + (x2 - x0) / 6);
+    const c1y = round(y1 + (y2 - y0) / 6);
+    const c2x = round(x2 - (x3 - x1) / 6);
+    const c2y = round(y2 - (y3 - y1) / 6);
+
+    segments.push(`C${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`);
+  }
+
+  return segments.join(" ");
+}
+
 const FIGURES = {
-  /* Four providers converge into one resolved track. */
+  /* Four providers searched together, converging on one queue. */
   Playback: (
     <>
       {["Deezer", "Spotify", "SoundCloud", "YouTube"].map((name, i) => (
         <g key={name}>
-          <rect x="2" y={6 + i * 22} width="60" height="16" rx="5" fill="none" stroke={LINE} />
+          <rect x="2" y={6 + i * 22} width="68" height="16" rx="5" fill="none" stroke={LINE} />
           <text x="10" y={17 + i * 22} fill={INK} fontSize="8" fontFamily="monospace">
-            {name.slice(0, 9)}
+            {name}
           </text>
           <path
-            d={`M64 ${14 + i * 22} C 84 ${14 + i * 22}, 84 47, 104 47`}
+            d={`M72 ${14 + i * 22} C 90 ${14 + i * 22}, 90 47, 104 47`}
             fill="none"
             stroke={LINE}
           />
         </g>
       ))}
-      <rect x="106" y="34" width="52" height="26" rx="7" fill="none" stroke={CYAN} opacity="0.5" />
-      <text x="116" y="45" fill={BRIGHT} fontSize="8" fontFamily="monospace">
+      {/* The mark sits on Deezer, not on the result: it is the only provider
+          that answers in FLAC, so labelling the convergence FLAC claimed
+          something about the other three that is not true. */}
+      <text x="48" y="17" fill={CYAN} fontSize="8" fontFamily="monospace">
+        flac
+      </text>
+      <rect x="106" y="34" width="52" height="26" rx="7" fill="none" stroke={LINE_STRONG} />
+      <text x="114" y="45" fill={INK} fontSize="8" fontFamily="monospace">
         one
       </text>
-      <text x="116" y="55" fill={CYAN} fontSize="8" fontFamily="monospace">
-        FLAC
+      <text x="114" y="55" fill={BRIGHT} fontSize="8" fontFamily="monospace">
+        queue
       </text>
     </>
   ),
@@ -60,19 +105,8 @@ const FIGURES = {
   /* A curve you shape, behind a gate not everyone passes. */
   Control: (
     <>
-      <path
-        d="M4 58 C 22 58, 26 22, 44 22 S 68 50, 86 40 S 112 26, 130 30"
-        fill="none"
-        stroke={BRIGHT}
-        strokeWidth="1.6"
-      />
-      {[
-        [16, 50],
-        [44, 22],
-        [72, 45],
-        [100, 33],
-        [128, 30],
-      ].map(([x, y]) => (
+      <path d={smoothPath(EQ_BANDS)} fill="none" stroke={BRIGHT} strokeWidth="1.6" strokeLinecap="round" />
+      {EQ_BANDS.map(([x, y]) => (
         <g key={x}>
           <line x1={x} y1="14" x2={x} y2="66" stroke={LINE} />
           <circle cx={x} cy={y} r="3" fill={BRIGHT} />
