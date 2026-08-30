@@ -45,6 +45,7 @@ const { skipWithLearning } = require("../lavalink/skipLearning");
 const { cloneTrack, getLyricsState, playbackState, setLyricsState } = require("../lavalink/state");
 const { fetchFreestyleSurpriseTrack, selectSurpriseSeed } = require("../lavalink/surpriseMe");
 const Log = require("../logs/log");
+const health = require("../monitoring/health");
 const { importPlaylistFromUrl } = require("../playlists/import");
 const playlistStore = require("../playlists/store");
 const { consumeRateLimit } = require("../security/rateLimit");
@@ -511,6 +512,7 @@ function buildActivityState(client, guildId, userId) {
   const playing = Boolean(playback.track && !paused && (livePlaybackState?.currentTrack || player?.isPlaying));
   const position = getActivityPosition(player, livePlaybackState, playback.durationMs, Date.now());
   const botStatus = client?.user?.presence?.activities?.find((activity) => activity.type === 2)?.name || null;
+  const lavalinkMetrics = health.getMetrics?.()?.lavalink || {};
 
   const generatedAt = Date.now();
   const userLyricsOffset = userPreferences.getUserPreferences(userId)?.lyricsSyncOffsetMs;
@@ -550,6 +552,13 @@ function buildActivityState(client, guildId, userId) {
       filters: serializeFilters(filters),
       lyrics,
       updatedAt: generatedAt,
+    },
+    /* Every note this surface can play goes through Lavalink. With the node
+       down the Activity still renders a full transport and still looks able to
+       play, so the state has to say otherwise. */
+    lavalink: {
+      connected: Boolean(lavalinkMetrics.connected),
+      latencyMs: Number.isFinite(lavalinkMetrics.latency) ? Math.round(lavalinkMetrics.latency) : null,
     },
     playlists: getSerializedPlaylists(userId, guildId),
     likedTrackIds: [...new Set((likedSongs.tracks || []).flatMap((track) => playlistStore.getTrackIdentityKeys(track)))],

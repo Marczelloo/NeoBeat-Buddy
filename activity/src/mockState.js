@@ -57,6 +57,7 @@ export function createMockState({ idle = false } = {}) {
       },
       updatedAt: Date.now(),
     },
+    lavalink: { connected: true, latencyMs: 24 },
     playlists: [
       { id: "liked", name: "Liked Songs", type: "user", description: "Your saved tracks", trackCount: 42, thumbnail: artwork, public: false, collaborative: false, isDefault: true },
       { id: "night-drive", name: "Night Drive.exe", type: "user", description: "Blue lights, no skips", trackCount: 18, thumbnail: artwork, public: true, collaborative: true, isDefault: false },
@@ -98,6 +99,7 @@ export function createEmptyState() {
       filters: { preset: "off", effectPreset: "off", equalizer: [] },
       lyrics: null,
     },
+    lavalink: { connected: true, latencyMs: 24 },
     playlists: [],
     likedTrackIds: [],
     equalizerPresets: [],

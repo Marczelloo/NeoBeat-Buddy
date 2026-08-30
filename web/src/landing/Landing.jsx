@@ -9,6 +9,7 @@ import ResponseCanvas from "./ResponseCanvas.jsx";
 import SectionRule from "./SectionRule.jsx";
 import SiteFooter from "./SiteFooter.jsx";
 import TopBar from "../site/TopBar.jsx";
+import usePageMeta from "../site/usePageMeta.js";
 import useAutotype from "./autotype.js";
 import { COMMANDS, DEFAULT_COMMAND_ID, filterCommands, findCommand } from "./commands.js";
 import "./landing.css";
@@ -16,6 +17,11 @@ import "./landing.css";
 export default function Landing() {
   const groundRef = useRef(null);
   const [query, setQuery] = useState("");
+
+  /* The landing page takes the site defaults — but it has to *ask* for them.
+     Without this call it simply kept whatever the previous route had set, so
+     arriving here from the command reference left the tab reading "Commands". */
+  usePageMeta();
 
   // The hero art drifts a little slower than the page. Cheap, capped, and
   // skipped entirely under reduced motion.

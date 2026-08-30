@@ -7,8 +7,17 @@ const isDevPreview = import.meta.env.DEV && String(import.meta.env.VITE_ACTIVITY
 const ACTIVITY_SCOPE = "rpc.activities.write";
 
 function readGuildId(sdk) {
+  return resolveGuild(sdk).guildId;
+}
+
+/* A DM or group DM has no guild at all, and the fallback below quietly turned
+   that into the string "demo" — so the gateway answered "the bot is not
+   connected to this Discord server", which is true of a server that does not
+   exist but tells the person nothing. `inGuild` keeps the two apart. */
+function resolveGuild(sdk) {
   const query = new URLSearchParams(window.location.search);
-  return sdk?.guildId || query.get("guild_id") || query.get("guildId") || devGuildId;
+  const real = sdk?.guildId || query.get("guild_id") || query.get("guildId") || null;
+  return { guildId: real || devGuildId, inGuild: Boolean(real) };
 }
 
 function withTimeout(promise, timeoutMs) {
@@ -40,6 +49,7 @@ export async function setupDiscord() {
     return {
       mode: "local",
       guildId: devGuildId,
+      inGuild: true,
       accessToken: null,
       user: { id: "local-user", username: "Local Listener" },
       sdk: null,
@@ -73,9 +83,12 @@ export async function setupDiscord() {
   const auth = await sdk.commands.authenticate({ access_token: tokenPayload.access_token });
   if (!auth) throw new Error("Discord Activity authentication failed.");
 
+  const guild = resolveGuild(sdk);
+
   return {
     mode: "discord",
-    guildId: readGuildId(sdk),
+    guildId: guild.guildId,
+    inGuild: guild.inGuild,
     accessToken: tokenPayload.access_token,
     user: auth.user || { id: "discord-user", username: "Discord user" },
     sdk,

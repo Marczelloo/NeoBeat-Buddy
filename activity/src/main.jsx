@@ -14,9 +14,24 @@ const embedded = window.self !== window.top;
 const standalone = !import.meta.env.DEV && !embedded;
 const isRoot = ["/", "/index.html"].includes(window.location.pathname);
 
+/* Dev-only, the same shape as the ?mock=1 preview: the in-room states are
+   otherwise reachable only by breaking something, which makes them the least
+   reviewed screens in the app. A production build compiles import.meta.env.DEV
+   to false and drops this branch entirely. */
+const gatePreview = import.meta.env.DEV
+  ? new URLSearchParams(window.location.search).get("gate")
+  : null;
+
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    {standalone ? (
+    {gatePreview ? (
+      <ActivityGate
+        variant={gatePreview}
+        path={window.location.pathname}
+        detail={gatePreview === "error" ? "The bot is not connected to this Discord server." : null}
+        onRetry={gatePreview === "error" ? () => window.location.reload() : null}
+      />
+    ) : standalone ? (
       <ActivityGate variant={isRoot ? "outside" : "notfound"} path={window.location.pathname} />
     ) : (
       <App />

@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { clampLyricsSyncOffset } = require("../../../helpers/activity/server");
+const { clampLyricsSyncOffset, buildActivityState } = require("../../../helpers/activity/server");
+const health = require("../../../helpers/monitoring/health");
 const { serializeFilters, serializeLyrics, serializePlaylistDetails, serializeTrack } = require("../../../helpers/activity/state");
 
 test.describe("Activity state serialization", () => {
@@ -111,5 +112,23 @@ test.describe("Activity state serialization", () => {
     assert.equal(playlist.tracks[0].source, "soundcloud");
     assert.equal(playlist.tracks[0].artworkUrl, "https://i1.sndcdn.com/art.jpg");
     assert.equal(playlist.tracks[0].addedAt, 1700000000000);
+  });
+});
+
+test.describe("Activity state, playability", () => {
+  const client = { guilds: { cache: new Map() }, user: { presence: { activities: [] } } };
+
+  test("the state says whether the audio node is reachable", () => {
+    // The surface renders a full transport whether or not Lavalink is up. With
+    // nothing in the payload to say otherwise it looks able to play, so this
+    // field is the only thing standing between a listener and a dead button.
+    health.updateLavalinkStatus(true, 24);
+    const up = buildActivityState(client, "1", "u1");
+    assert.equal(up.lavalink.connected, true);
+    assert.equal(typeof up.lavalink.latencyMs, "number");
+
+    health.updateLavalinkStatus(false);
+    const down = buildActivityState(client, "1", "u1");
+    assert.equal(down.lavalink.connected, false);
   });
 });

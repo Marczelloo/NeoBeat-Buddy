@@ -1,4 +1,4 @@
-import { ArrowUpRight, Waveform } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowUpRight, Waveform } from "@phosphor-icons/react";
 
 /* The site's address is a deployment fact, not a build constant — this one
    moved hosts once already. It is offered only when a deployment names it; the
@@ -8,51 +8,78 @@ const repoUrl = "https://github.com/Marczelloo/NeoBeat-Buddy";
 
 const COPY = {
   outside: {
+    kicker: "MEWBIT LINK",
     title: "This player opens inside Discord.",
     body:
       "The MewBit Activity runs in a voice channel, where everyone in the room shares one queue, one set of artwork and one transport. Opened on its own it has no room to join — start it from the voice channel's activity shelf instead.",
   },
   notfound: {
+    kicker: "MEWBIT LINK",
     title: "There is no page here.",
     body:
       "The Activity is a single surface; it has no other addresses. If you were looking for what MewBit is, how to run it, or the command reference, that lives on the website.",
   },
+  dm: {
+    kicker: "NO SERVER",
+    title: "MewBit plays in a server.",
+    body:
+      "This conversation has no voice channel for a room to form in, so there is no queue to share and nothing to play into. Open the Activity from a voice channel in a server MewBit has been invited to.",
+  },
+  error: {
+    kicker: "NOT CONNECTED",
+    title: "MewBit did not answer.",
+    body:
+      "The Activity reached Discord but could not reach the bot behind it. That usually means the bot is restarting, is offline, or is not in this server — it is rarely anything you did.",
+  },
 };
 
 /**
- * What a person sees when they reach the Activity outside Discord.
+ * Every terminal state this surface can land in.
  *
- * Until now they got the full cockpit with nothing in it — a search field that
- * returns nothing and a transport that controls nothing — which reads as a
- * broken product rather than as the wrong door. It is built from the loader's
- * own parts (the ambient wash, the kicker) because it is the same world, but it
- * holds still: this is a destination, not a wait.
+ * Before this, all of them ended the same way: the full cockpit rendered with
+ * nothing in it — a search field that returns nothing, a transport that
+ * controls nothing — and a toast that had already faded by the time anyone
+ * read it. That reads as a broken product rather than as a room that was never
+ * joined. It is built from the loader's own parts because it is the same world,
+ * but it holds still: these are destinations, not waits.
  */
-export default function ActivityGate({ variant = "outside", path = "/" }) {
+export default function ActivityGate({ variant = "outside", path = "/", detail = null, onRetry = null }) {
   const copy = COPY[variant] || COPY.outside;
 
   return (
-    <section className="activity-gate" role="status">
+    <section className="activity-gate" role="alert">
       <div className="loader-ambient loader-ambient-cyan" aria-hidden="true" />
       <div className="loader-ambient loader-ambient-magenta" aria-hidden="true" />
 
       <div className="gate-content">
         <span className="loader-kicker">
-          <i /> MEWBIT LINK
+          <i /> {copy.kicker}
         </span>
 
         <h1>{copy.title}</h1>
         <p>{copy.body}</p>
 
+        {/* The reason, verbatim. It is what makes the difference between "try
+            again later" and "the bot is not in this server". */}
+        {detail ? <p className="gate-detail">{detail}</p> : null}
+
         <div className="gate-actions">
+          {onRetry ? (
+            <button type="button" className="gate-btn is-primary" onClick={onRetry}>
+              <ArrowClockwise size={14} weight="bold" aria-hidden="true" />
+              Try again
+            </button>
+          ) : null}
+
           {variant === "notfound" ? (
             <a className="gate-btn is-primary" href="/">
               Open the Activity
             </a>
           ) : null}
+
           {siteUrl ? (
             <a
-              className={variant === "notfound" ? "gate-btn" : "gate-btn is-primary"}
+              className={onRetry || variant === "notfound" ? "gate-btn" : "gate-btn is-primary"}
               href={siteUrl}
               target="_blank"
               rel="noreferrer noopener"
@@ -61,6 +88,7 @@ export default function ActivityGate({ variant = "outside", path = "/" }) {
               <ArrowUpRight size={14} weight="bold" aria-hidden="true" />
             </a>
           ) : null}
+
           <a className="gate-btn" href={repoUrl} target="_blank" rel="noreferrer noopener">
             Run your own
             <ArrowUpRight size={14} weight="bold" aria-hidden="true" />

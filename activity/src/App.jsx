@@ -49,6 +49,8 @@ import { parseMusicLink } from "./musicLink.js";
 import { createMockState, createEmptyState, mockSearchResults } from "./mockState.js";
 import { clamp, usePlayerPosition } from "./hooks/usePlayerPosition.js";
 
+import ActivityGate from "./views/ActivityGate.jsx";
+
 const LazyFiltersPanel = lazy(() => import("./views/FiltersPanel.jsx"));
 const LazyHomePanel = lazy(() => import("./views/HomePanel.jsx"));
 const LazyLyricsPanel = lazy(() => import("./views/LyricsPanel.jsx"));
@@ -1978,6 +1980,15 @@ function App() {
         if (!alive) return;
         setContext(nextContext);
 
+        /* Launched from a DM or a group DM there is no guild, so there is no
+           room, no queue and nothing to play into. Reconciling anyway would
+           make the gateway answer about a server that was never involved. */
+        if (nextContext.mode === "discord" && nextContext.inGuild === false) {
+          setConnection({ status: "no-guild", message: "This conversation has no voice channel." });
+          finishHydration();
+          return;
+        }
+
         const connectLocalPreview = nextContext.mode === "local" && import.meta.env.VITE_ACTIVITY_CONNECT_LOCAL === "true";
         if (nextContext.mode === "local" && !connectLocalPreview) {
           setConnection({ status: "preview", message: nextContext.reason || "Local Activity preview" });
@@ -2348,9 +2359,40 @@ function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [goToView, onAction, state.player.currentTrack]);
 
+  /* Terminal states: the room cannot be joined at all, so the cockpit would be
+     a set of controls wired to nothing. */
+  const gate = connection.status === "no-guild" ? "dm" : connection.status === "error" ? "error" : null;
+
+  /* Not terminal: everything still renders and the queue still reads, but
+     nothing can play or be searched, so this warns without taking the surface
+     away. Absent on older payloads, hence the explicit false. */
+  const lavalinkDown = state.lavalink ? state.lavalink.connected === false : false;
+  const showAlert = lavalinkDown && !gate && !showLoader && !isCompact;
+
   return (
-    <main className={`activity-app ${isCompact ? "is-compact" : ""} ${isHydrating ? "is-hydrating" : ""}`}>
-      {showLoader ? <ActivityLoader message={connection.message} leaving={!isHydrating} /> : null}
+    <main
+      className={`activity-app ${isCompact ? "is-compact" : ""} ${isHydrating ? "is-hydrating" : ""} ${
+        showAlert ? "has-alert" : ""
+      }`}
+    >
+      {showAlert ? (
+        <div className="activity-alert" role="status">
+          <WarningCircle size={16} weight="bold" aria-hidden="true" />
+          <span>
+            <b>The audio node is offline.</b> Playback and search are unavailable until it reconnects. The queue and
+            everything already saved are untouched.
+          </span>
+        </div>
+      ) : null}
+      {gate ? (
+        <ActivityGate
+          variant={gate}
+          path={typeof window === "undefined" ? "/" : window.location.pathname}
+          detail={gate === "error" ? connection.message : null}
+          onRetry={gate === "error" ? () => window.location.reload() : null}
+        />
+      ) : null}
+      {showLoader && !gate ? <ActivityLoader message={connection.message} leaving={!isHydrating} /> : null}
       <div className="activity-content" aria-hidden={showLoader ? "true" : undefined} inert={showLoader || undefined}>
       {isCompact ? <CompactPlayer state={state} /> : <>
         <div ref={appShellRef} className={`app-shell ${leftSidebarOpen ? "left-open" : "left-closed"} ${rightSidebarOpen ? "right-open" : "right-closed"}`}>
