@@ -1,7 +1,8 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import ChangelogPage from "./changelog/ChangelogPage.jsx";
 import Dashboard from "./dashboard/Dashboard.jsx";
 import HelpPage from "./help/HelpPage.jsx";
+import NotFound from "./site/NotFound.jsx";
 import Landing from "./landing/Landing.jsx";
 
 export default function App() {
@@ -14,7 +15,9 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/dashboard/:guildId" element={<Dashboard />} />
         <Route path="/dashboard/:guildId/:section" element={<Dashboard />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* A bad address says so. Silently redirecting home threw the typo
+            away, so nobody found out what they had got wrong. */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

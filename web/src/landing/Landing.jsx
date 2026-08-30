@@ -119,6 +119,10 @@ export default function Landing() {
 
   return (
     <main className="landing" ref={groundRef}>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
+
       {/* Drawn brand plate, not a photograph — see HeroField. */}
       <div className="hero-plate" aria-hidden="true">
         <HeroField />
@@ -129,7 +133,7 @@ export default function Landing() {
 
         {/* The offer in one line, then straight into the palette — the page's
             thesis is the command line, so nothing stacks above it. */}
-        <h1 className="lede">
+        <h1 className="lede" id="main">
           A Discord music bot <em>you</em> run yourself.
         </h1>
 

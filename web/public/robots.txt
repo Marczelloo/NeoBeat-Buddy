@@ -1,0 +1,9 @@
+# MewBit — self-hosted Discord music.
+# The dashboard is behind a Discord sign-in and has nothing to index; the API
+# returns JSON. The reference pages are the part worth finding.
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /api/
+
+Sitemap: https://mewbit.marczelloo.dev/sitemap.xml

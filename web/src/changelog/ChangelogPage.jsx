@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getChangelog } from "../api.js";
 import PageShell from "../site/PageShell.jsx";
+import usePageMeta from "../site/usePageMeta.js";
 import "../help/reference.css";
 
 const GROUPS = [
@@ -19,6 +20,8 @@ function formatDate(value) {
 export default function ChangelogPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+
+  usePageMeta("Changelog", "Every MewBit release, what changed in it, and which version this instance is running.");
 
   useEffect(() => {
     let cancelled = false;

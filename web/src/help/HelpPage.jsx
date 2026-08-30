@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getCommands } from "../api.js";
 import PageShell from "../site/PageShell.jsx";
+import usePageMeta from "../site/usePageMeta.js";
 import "./reference.css";
 
 /* A command's notes arrive as one string of bullet lines, because that is what
@@ -125,6 +126,8 @@ export default function HelpPage() {
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const searchRef = useRef(null);
+
+  usePageMeta("Commands", "Every MewBit slash command, searchable — playback, playlists, queue, equalizer, DJ, moderation and tickets.");
 
   useEffect(() => {
     let cancelled = false;

@@ -4,6 +4,7 @@ import { ApiError, getMe, logout } from "../api.js";
 import Mark from "../landing/Mark.jsx";
 import SectionList, { DEFAULT_SECTION, SECTIONS, isSection } from "./SectionList.jsx";
 import ServerRail from "./ServerRail.jsx";
+import usePageMeta from "../site/usePageMeta.js";
 import SettingsPanel from "./SettingsPanel.jsx";
 import { GatewayDown, GuildGone, Loading, NoServers, SignedOut } from "./states/StateScreen.jsx";
 import "./dashboard.css";
@@ -12,6 +13,8 @@ export default function Dashboard() {
   const { guildId, section } = useParams();
   const navigate = useNavigate();
   const [state, setState] = useState({ status: "loading", user: null, guilds: [] });
+
+  usePageMeta("Dashboard", "Per-server MewBit settings for the server owner and the operators they name.");
 
   const load = useCallback(() => {
     setState((current) => ({ ...current, status: "loading" }));

@@ -8,6 +8,9 @@ activity/dist
 /logs
 helpers/lavalink/youtube-cookies.txt
 *.txt
+# The blanket *.txt above exists to keep cookie and token dumps out. This
+# one is a published file the site needs, so it is named back in.
+!web/public/robots.txt
 data
 helpers/data/*
 !helpers/data/patchNotes.json

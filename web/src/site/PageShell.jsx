@@ -14,10 +14,13 @@ import TopBar from "./TopBar.jsx";
 export default function PageShell({ title, lead, children }) {
   return (
     <main className="landing">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <div className="wrap">
         <TopBar />
 
-        <header className="page-head">
+        <header className="page-head" id="main">
           <h1>{title}</h1>
           {lead ? <p>{lead}</p> : null}
         </header>

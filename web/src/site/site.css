@@ -50,3 +50,130 @@
     padding: 7px 8px;
   }
 }
+
+/* ---------- not found ---------- */
+
+/* The bad path, echoed back the way the response canvas echoes a command:
+   prompt, what you asked for, what it returned. */
+.nf-echo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: var(--gap-head);
+  padding: 0 16px;
+  height: 52px;
+  border-radius: 11px;
+  background: var(--raised);
+  outline: 1px solid var(--line-strong);
+  font-size: 13px;
+  overflow-x: auto;
+}
+
+.nf-echo-prompt {
+  flex: none;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.nf-echo-path {
+  min-width: 0;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Rose, because this is the one place on the site reporting a dead end. Text
+   and nothing else — a filled banner would make a typo look like an incident. */
+.nf-echo-verdict {
+  flex: none;
+  margin-left: auto;
+  padding-left: 14px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--danger);
+}
+
+.nf-pages {
+  margin-top: 26px;
+  border-top: 1px solid var(--line);
+}
+
+.nf-page {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: baseline;
+  padding: 15px 12px;
+  border-bottom: 1px solid var(--line);
+  transition: background 0.12s var(--ease);
+}
+
+.nf-page:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.nf-page-path {
+  font-size: 12.5px;
+  color: var(--muted-strong);
+}
+
+.nf-page-text b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.nf-page-text small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.nf-note {
+  margin-top: var(--gap-lede);
+  max-width: 64ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.nf-note a {
+  color: var(--muted-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-strong);
+}
+
+.nf-note a:hover {
+  color: var(--text);
+  text-decoration-color: var(--accent);
+}
+
+/* Keyboard users should not have to tab through the whole nav to reach the
+   page. Off-screen until focused, then it lands in the normal flow. */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 50;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--white-btn);
+  color: var(--on-white);
+  font-size: 13px;
+  font-weight: 700;
+  transition: top 0.15s var(--ease);
+}
+
+.skip-link:focus-visible {
+  top: 12px;
+}
+
+@media (max-width: 600px) {
+  .nf-page {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
